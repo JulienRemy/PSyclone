@@ -4,7 +4,7 @@
 
 # Introduction #
 
-Welcome to PSyclone `autodiff` fork, a prototype implementation of reverse-mode automatic differentation in PSyclone.   
+Welcome to PSyclone `autodiff` fork, a prototype implementation of reverse-mode automatic differentation in PSyclone.  
 For PSyclone itself, see [GitHub](https://github.com/stfc/PSyclone) and [ReadTheDocs](http://psyclone.readthedocs.io).  
 
 # Description #
