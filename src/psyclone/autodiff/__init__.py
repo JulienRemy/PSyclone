@@ -64,8 +64,12 @@ from psyclone.autodiff.utils import (
     div,
     exp,
     sign,
-    own_routine_symbol,
+    own_routine_symbol
 )
+from psyclone.autodiff.simplify import simplify_node
+from psyclone.autodiff.subroutine_generator import SubroutineGenerator
+from psyclone.autodiff.comparator_generator import ComparatorGenerator
+from psyclone.autodiff.numerical_comparator import NumericalComparator
 
 __all__ = [
     "ADReversalSchedule",
@@ -92,5 +96,9 @@ __all__ = [
     "datanode",
     "div",
     "exp",
-    "sign"
+    "sign",
+    "simplify_node",
+    "ComparatorGenerator",
+    "NumericalComparator",
+    "SubroutineGenerator"
 ]

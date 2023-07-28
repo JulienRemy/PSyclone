@@ -36,10 +36,11 @@
 """PSyclone automatic differentiation transformations module.
 """
 
+from psyclone.autodiff.transformations.ad_trans import ADTrans
 from psyclone.autodiff.transformations.ad_container_trans import ADContainerTrans
 from psyclone.autodiff.transformations.ad_schedule_trans import ADScheduleTrans
 from psyclone.autodiff.transformations.ad_routine_trans import ADRoutineTrans
-from psyclone.autodiff.transformations.ad_trans import ADTrans
+from psyclone.autodiff.transformations.ad_element_trans import ADElementTrans
 from psyclone.autodiff.transformations.ad_assignment_trans import ADAssignmentTrans
 from psyclone.autodiff.transformations.ad_operation_trans import ADOperationTrans
 from psyclone.autodiff.transformations.ad_call_trans import ADCallTrans
@@ -49,10 +50,11 @@ from psyclone.autodiff.transformations.ad_call_trans import ADCallTrans
 # The entities in the __all__ list are made available to import directly from
 # this package e.g. 'from psyclone.autodiff.transformations import ADContainerTrans'
 __all__ = [
+    "ADTrans",
     "ADContainerTrans",
     "ADScheduleTrans",
     "ADRoutineTrans",
-    "ADTrans",
+    "ADElementTrans",
     "ADAssignmentTrans",
     "ADOperationTrans",
     "ADCallTrans",

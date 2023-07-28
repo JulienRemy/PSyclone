@@ -308,6 +308,10 @@ class ADRoutineTrans(ADScheduleTrans):
             routine definition. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
             transformations. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+            rules to BinaryOperation nodes. Defaults to 5.
+        - bool 'inline_operation_adjoints': True to inline all possible \
+            operation adjoints definitions. Defaults to True.
 
         :param routine: routine Node to the transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
@@ -384,10 +388,8 @@ class ADRoutineTrans(ADScheduleTrans):
         for transformed in self.transformed:
             self.container_trans.container.addchild(transformed)
 
-        jacobian = False
-        if options is not None:
-            if "jacobian" in options:
-                jacobian = options["jacobian"]
+        jacobian = self.unpack_option("jacobian", options)
+
         if jacobian:
             jacobian_routine = self.jacobian_routine(
                 dependent_vars, independent_vars, options
@@ -893,10 +895,8 @@ class ADRoutineTrans(ADScheduleTrans):
         # Verbose description writes the dependent variables (columns),
         # the independent variables (rows), the other arguments to specify,
         # and the derivatives of the jacobian matrix as d_/d_
-        verbose = False
-        if options is not None:
-            if "verbose" in options:
-                verbose = options["verbose"]
+        verbose = self.unpack_option("verbose", options)
+
         if verbose:
             jacobian_routine.preceding_comment = (
                 f"Independent variables as columns: {independent_vars}.\n! "

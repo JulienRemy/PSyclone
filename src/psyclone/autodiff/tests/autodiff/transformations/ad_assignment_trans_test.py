@@ -318,12 +318,15 @@ def test_ad_assignment_trans_apply(fortran_writer):
     #######################
     # Call assignment is not implemented yet
 
+if __name__ == "__main__":
+    print("Testing ADAssignmentTrans")
+    from psyclone.psyir.backend.fortran import FortranWriter
 
-from psyclone.psyir.backend.fortran import FortranWriter
+    fwriter = FortranWriter()
 
-fwriter = FortranWriter()
+    test_ad_assignment_trans_initialization()
+    test_ad_assignment_trans_validate()
+    test_ad_assignment_trans_is_iterative()
+    test_ad_assignment_trans_apply(fwriter)
 
-test_ad_assignment_trans_initialization()
-test_ad_assignment_trans_validate()
-test_ad_assignment_trans_is_iterative()
-test_ad_assignment_trans_apply(fwriter)
+    print("passed")

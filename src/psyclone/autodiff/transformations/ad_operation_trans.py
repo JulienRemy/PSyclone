@@ -49,7 +49,7 @@ from psyclone.psyir.nodes import (
 from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE
 from psyclone.psyir.transformations import TransformationError
 
-from psyclone.autodiff.transformations import ADTrans
+from psyclone.autodiff.transformations import ADElementTrans
 from psyclone.autodiff import (
     one,
     minus,
@@ -70,7 +70,7 @@ from psyclone.autodiff import (
 )
 
 
-class ADOperationTrans(ADTrans):
+class ADOperationTrans(ADElementTrans):
     """A class for automatic differentation transformations of Operation nodes.
     Requires an ADRoutineTrans instance as context, where the adjoint symbols \
     can be found.
@@ -103,6 +103,8 @@ class ADOperationTrans(ADTrans):
         :raises TransformationError: if parent_adj is not found among the \
             adjoint symbols of the context ADRoutineTrans.
         """
+        super().validate(operation, options)
+
         if not isinstance(operation, Operation):
             raise TransformationError(
                 f"'operation' argument in ADOperationTrans should be a "
@@ -179,13 +181,8 @@ class ADOperationTrans(ADTrans):
         """
         self.validate(operation, parent_adj, options)
 
-        # TODO: typecheck options in validate method
-        # TODO: unpack options using a method
         # verbose option adds comments to the first and last returning statements
-        verbose = False
-        if options is not None:
-            if "verbose" in options.keys():
-                verbose = options["verbose"]
+        verbose = self.unpack_option("verbose", options)
 
         # List of Node corresponding to the returning motion
         returning = []
