@@ -108,6 +108,8 @@ def test_ad_trans_unpack_option():
     assert ad_trans.unpack_option('other_key', None) == 2
 
 if __name__ == "__main__":
+    print("Testing ADTrans")
     test_ad_trans_typecheck_options()
     test_ad_trans_unpack_option_errors()
     test_ad_trans_unpack_option()
+    print("passed")
