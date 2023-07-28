@@ -40,10 +40,10 @@ from psyclone.psyir.nodes import Literal, Assignment, Reference, Operation
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff import assign_zero, assign, increment
-from psyclone.autodiff.transformations import ADTrans
+from psyclone.autodiff.transformations import ADElementTrans
 
 
-class ADAssignmentTrans(ADTrans):
+class ADAssignmentTrans(ADElementTrans):
     """A class for automatic differentation transformations of Assignment nodes.
     Requires an ADRoutineTrans instance as context, where the adjoint symbols \
     can be found.
@@ -68,6 +68,8 @@ class ADAssignmentTrans(ADTrans):
 
         :raises TransformationError: if assignment is of the wrong type.
         """
+        super().validate(assignment, options)
+        
         if not isinstance(assignment, Assignment):
             raise TransformationError(
                 f"'assignment' argument in ADAssignmentTrans.apply should be a "
@@ -75,7 +77,6 @@ class ADAssignmentTrans(ADTrans):
             )
 
     # TODO: iterative assignments should deal with EQUIVALENCE once implemented
-    # TODO: force_assignment_temporaries could be a list of names
     def apply(self, assignment, options=None):
         """Applies the transformation, generating the recording and returning \
         motions associated to this Assignment.
@@ -113,13 +114,8 @@ class ADAssignmentTrans(ADTrans):
         """
         self.validate(assignment, options)
 
-        # TODO: typecheck options in validate method
-        # TODO: unpack options using a method
         # verbose option adds comments to the first and last returning statements
-        verbose = False
-        if options is not None:
-            if "verbose" in options.keys():
-                verbose = options["verbose"]
+        verbose = self.unpack_option("verbose", options)
         verbose_comment = ""
 
         # DataNodes on both sides
@@ -185,7 +181,7 @@ class ADAssignmentTrans(ADTrans):
                         verbose_comment += ", this is self-assignment"
 
             else:  # isinstance(rhs, Operation)
-                # Apply the ADTransOperation to all children of the operation
+                # Apply the ADElementTransOperation to all children of the operation
                 # with parent_adj being the LHS adjoint
 
                 (

@@ -550,15 +550,18 @@ def test_arguments(applied_ad_call_trans):
 # arguments
 # temp and adjoint assignments?
 
-from psyclone.psyir.backend.fortran import FortranWriter
+if __name__ == "__main__":
+    print("Testing ADCallTrans")
+    from psyclone.psyir.backend.fortran import FortranWriter
 
-fwriter = FortranWriter()
+    fwriter = FortranWriter()
 
-test_ad_call_trans_initialization()
-test_ad_call_trans_validate()
-test_ad_call_trans_transform_literal_argument()
-test_ad_call_trans_transform_reference_argument()
-test_ad_call_trans_transform_operation_argument()
-test_ad_call_trans_transform_call_arguments()
-test_ad_call_trans_transform_called_routine()
-test_ad_call_trans_apply()
+    test_ad_call_trans_initialization()
+    test_ad_call_trans_validate()
+    test_ad_call_trans_transform_literal_argument()
+    test_ad_call_trans_transform_reference_argument()
+    test_ad_call_trans_transform_operation_argument()
+    test_ad_call_trans_transform_call_arguments()
+    test_ad_call_trans_transform_called_routine()
+    test_ad_call_trans_apply()
+    print("passed")

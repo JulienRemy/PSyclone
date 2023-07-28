@@ -145,9 +145,9 @@ class ADJointReversalSchedule(ADReversalSchedule):
 class ADLinkReversalSchedule(ADReversalSchedule):
     """Class describing a reversal schedule described by links between \
     parent and child routines for reverse-mode automatic differentiation. 
-    Strong links mean that hildren routines follow the recording or returning \
+    Strong links mean that children routines follow the recording or returning \
     motion of their parents.
-    Weak links that hildren routines advance without recording when their \
+    Weak links that children routines advance without recording when their \
     parent routine is recording and reverse (record then immendiatly return) \
     when their parent routine is returning.
 

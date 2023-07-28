@@ -36,7 +36,6 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Schedule nodes."""
 
-from psyclone.psyGen import Transformation
 from psyclone.psyir.nodes import (
     Routine,
     Assignment,
@@ -56,11 +55,12 @@ from psyclone.psyir.symbols.interfaces import ArgumentInterface
 from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.transformations import TransformationError
 
+from psyclone.autodiff import simplify_node
 from psyclone.autodiff.tapes import ADValueTape
-from psyclone.autodiff.transformations import ADContainerTrans
+from psyclone.autodiff.transformations import ADTrans, ADContainerTrans
 
 
-class ADScheduleTrans(Transformation):
+class ADScheduleTrans(ADTrans):
     """A class for automatic differentation transformations of Schedule nodes.
     Requires an ADContainerTrans instance as context, where the definitions of
     the routines called inside the schedule to be transformed can be found.
@@ -426,6 +426,8 @@ class ADScheduleTrans(Transformation):
             of the wrong type.
         :raises TypeError: if value_tape is of the wrong type.
         """
+        super().validate(schedule, options)
+
         if self._was_applied:
             raise TransformationError(
                 "ADScheduleTrans instance can only be " "applied once."
@@ -488,6 +490,10 @@ class ADScheduleTrans(Transformation):
             routine definition.
         - bool 'simplify': True to apply simplifications after applying AD \
             transformations. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+            rules to BinaryOperation nodes. Defaults to 5.
+        - bool 'inline_operation_adjoints': True to inline all possible \
+            operation adjoints definitions. Defaults to True.
 
         :param schedule: schedule Node to the transformed.
         :type schedule: :py:class:`psyclone.psyir.nodes.Schedule`
@@ -547,11 +553,16 @@ class ADScheduleTrans(Transformation):
         # Transform the statements found in the Schedule
         self.transform_children(options)
 
-        # Simplify the returning schedule
-        simplify = True
-        if options is not None:
-            if "simplify" in options:
-                simplify = options["simplify"]
+        # Inline the operation adjoints definitions
+        # (rhs of Assignment nodes whose LHS is an operation adjoint)
+        inline_operation_adjoints = self.unpack_option('inline_operation_adjoints',
+                                                       options)
+        if inline_operation_adjoints:
+            self.inline_operation_adjoints(options)
+
+        # Simplify the BinaryOperation and Assignment nodes
+        # in the returning schedule
+        simplify = self.unpack_option("simplify", options)
         if simplify:
             self.simplify(options)
 
@@ -1006,6 +1017,7 @@ class ADScheduleTrans(Transformation):
         :param reverse: whether to reverse and add at index 0, \
             defaults to False..
         :type reverse: bool, optional
+
         :raises TypeError: if schedule is of the wrong type.
         :raises TypeError: if children is of the wrong type.
         :raises TypeError: if some child is of the wrong type.
@@ -1049,124 +1061,38 @@ class ADScheduleTrans(Transformation):
             schedule.addchild(child, index)
 
     def simplify(self, options=None):
-        # TODO: this should go in utils, or a dedicated file, or maybe in ADOperationTrans
-        from psyclone.psyir.nodes import UnaryOperation, BinaryOperation, Literal
-        from psyclone.psyir.symbols import INTEGER_TYPE
+        """Apply simplifications to the BinaryOperation and Assignment nodes
+        of the returning schedule.
 
-        # Reverse the walk result to apply from deepest operations to shallowest
-        for binary_operation in self.returning.walk(BinaryOperation)[::-1]:
-            # x * y or x / y
-            if binary_operation.operator in (
-                BinaryOperation.Operator.MUL,
-                BinaryOperation.Operator.DIV,
-            ):
-                # (-x) */ (-y) => x */ y
-                if (
-                    isinstance(binary_operation.children[0], UnaryOperation)
-                    and isinstance(binary_operation.children[1], UnaryOperation)
-                    and (
-                        binary_operation.children[0].operator
-                        == binary_operation.children[1].operator
-                        == UnaryOperation.Operator.MINUS
-                    )
-                ):
-                    new_operands = [
-                        operand.children[0].detach()
-                        for operand in binary_operation.children
-                    ]
-                    new_binary_operation = BinaryOperation.create(
-                        binary_operation.operator, *new_operands
-                    )
-                    binary_operation.replace_with(new_binary_operation)
-
-                # (-x) */ y or x */ (-y) => -(x */ y)
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
+        simplify_n_times = self.unpack_option('simplify_n_times', options)
+        for i in range(simplify_n_times):
+            # Reverse the walk result to apply from deepest operations to shallowest
+            all_nodes = self.returning.walk(Node)[::-1]
+            for i, node in enumerate(all_nodes):
+                simplified_node = simplify_node(node)
+                if simplified_node is None:
+                    node.detach()
+                    all_nodes.pop(i)
                 else:
-                    for i, operand in enumerate(binary_operation.children):
-                        if isinstance(operand, UnaryOperation) and (
-                            operand.operator is UnaryOperation.Operator.MINUS
-                        ):
-                            pass
-                            plus_operand = operand.children[0].detach()
-                            other_operand = binary_operation.children[1 - i].detach()
-                            new_operands = [plus_operand, other_operand]
-                            if i == 1:
-                                new_operands.reverse()
-                            new_binary_operation = BinaryOperation.create(
-                                binary_operation.operator, *new_operands
-                            )
-                            minus_operation = UnaryOperation.create(
-                                UnaryOperation.Operator.MINUS, new_binary_operation
-                            )
-                            binary_operation.replace_with(minus_operation)
+                    if simplified_node is not node:
+                        node.replace_with(simplified_node)
+                        all_nodes[i] = simplified_node
 
-            # x * 1 or 1 * x => x, x * 0 or 0 * x => 0
-            if binary_operation.operator is BinaryOperation.Operator.MUL:
-                for i, operand in enumerate(binary_operation.children):
-                    if isinstance(operand, Literal):
-                        # NOTE: not 1.0
-                        if operand.value == "1":
-                            binary_operation.replace_with(
-                                binary_operation.children[1 - i].detach()
-                            )
-                        elif operand.value in ("0", "0.0", "0."):
-                            binary_operation.replace_with(Literal("0", INTEGER_TYPE))
+    def inline_operation_adjoints(self, options=None):
+        """Inline the definitions of operations adjoints, ie. the RHS of 
+        Assignment nodes with LHS being an operation adjoint, 
+        everywhere it's possible in the returning schedule, ie. except 
+        for those used as Call arguments.
 
-        # Remove self-assignments eg. x = x
-        # _min_occurences = 1
-        all_assignments = self.returning.walk(Assignment)
-        for assignment in all_assignments:
-            if assignment.lhs == assignment.rhs:
-                assignment.detach()
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
 
-        # TODO: Condense successive incrementations
-        # TODO: don't forget calls when checking for next use
-        # only condense up to next use, other than in incrementation
-        # ie. anything but this_adj = this_adj + ...
-        # all_assignments = self.returning.walk(Assignment)
-        # incrementations = []
-        # for assignment in all_assignments:
-        #    if isinstance(assignment.rhs, BinaryOperation) and (assignment.rhs.operator is BinaryOperation.Operator.ADD) and (assignment.rhs.children[0] == assignment.lhs):
-        #        incrementations.append(assignment)
-        # for incrementation in incrementations:
-        #    i = all_assignments.index(incrementation)
-
-        # Inline operation adjoint definitions
-        # NOTE: must NOT be done for independent adjoints...
-        # all_assignments = self.returning.walk(Assignment)
-        # all_calls = self.returning.walk(Call)
-        ## Only assignments to operation adjoints
-        # op_adj_assignments = [assignment for assignment in all_assignments if assignment.lhs.name.startswith(self._operation_adjoint_name)]
-        #
-        #
-        # refs = self.returning.walk(Reference)
-        # for assignment in op_adj_assignments:
-        #    lhs_ref = assignment.lhs
-        #    i = refs.index(lhs_ref)
-        #    next_lhs_index = -2
-        #    for other_assignment in op_adj_assignments[i+1:]:
-        #        if other_assignment.lhs == lhs_ref:
-        #            next_lhs_index = refs.index(other_assignment.lhs)
-        #            break
-        #    rhs_occurences = []
-        #    for ref in refs[i+1:next_lhs_index+1]:
-        #        if (ref == lhs_ref) and ((ref.ancestor(Call) is not None) or (ref.ancestor(Assignment) is not None and lhs_ref in ref.ancestor(Assignment).rhs.walk(Reference))):
-        #            rhs_occurences.append(ref)
-        #            if (not isinstance(assignment.rhs, Reference)) and (len(rhs_occurences) == 1):
-        #                break
-        #
-        #    # If there is only one occurence, or if the assignement rhs is a reference,
-        #    # inline, detach
-        #    # and drop the symbol from the table
-        #    if len(rhs_occurences) != 0:
-        #        substitute = assignment.rhs.detach()
-        #        assignment.detach()
-        #        all_assignments.remove(assignment)
-        #        # TODO: this might not be right for vectors...
-        #        self.returning_table._symbols.pop(assignment.lhs.name)
-        #        for rhs_occurence in rhs_occurences:
-        #            rhs_occurence.replace_with(substitute.copy())
-
-        # Inline operation adjoint definitions
         # NOTE: must NOT be done for independent adjoints...
         all_assignments = self.returning.walk(Assignment)
         all_calls = self.returning.walk(Call)
@@ -1196,27 +1122,11 @@ class ADScheduleTrans(Transformation):
                         # If already 1 occurence, we won't inline unless rhs is a Reference
                         # so stop there
                         if (not isinstance(assignment.rhs, Reference)) and (
-                            len(rhs_occurences) == 1
+                            len(rhs_occurences) == 2
                         ):
                             break
 
-            # Do the same for call arguments
-            # TODO: this should only consider calls after the definition
-            #for call in all_calls:
-            #    refs = []
-            #    for child in call.children:
-            #        refs.extend(child.walk(Reference))
-            #    for ref in refs:
-            #        if ref == assignment.lhs:
-            #            rhs_occurences.append(ref)
-            #            if (not isinstance(assignment.rhs, Reference)) and (
-            #                len(rhs_occurences) == 1
-            #            ):
-            #                break
-            # If there is only one occurence, or if the assignement rhs is a reference,
-            # inline, detach
-            # and drop the symbol from the table
-            if len(rhs_occurences) != 0:
+            if len(rhs_occurences) == 1:
                 substitute = assignment.rhs.detach()
                 assignment.detach()
                 all_assignments.remove(assignment)
@@ -1224,100 +1134,3 @@ class ADScheduleTrans(Transformation):
                 self.returning_table._symbols.pop(assignment.lhs.name)
                 for rhs_occurence in rhs_occurences:
                     rhs_occurence.replace_with(substitute.copy())
-
-        # Now transform additions to multiplications and factorize
-        for binary_operation in self.returning.walk(BinaryOperation)[::-1]:
-            if binary_operation.operator is BinaryOperation.Operator.ADD:
-                # x + x => 2 * x
-                if (
-                    isinstance(binary_operation.children[0], Reference)
-                    and binary_operation.children[0] == binary_operation.children[1]
-                ):
-                    new_mul = BinaryOperation.create(
-                        BinaryOperation.Operator.MUL,
-                        Literal("2", INTEGER_TYPE),
-                        binary_operation.children[0].detach(),
-                    )
-                    binary_operation.replace_with(new_mul)
-                # x + (-y) => x - y
-                # (-x) + y => y - x
-                for i, operand in enumerate(binary_operation.children):
-                    other_operand = binary_operation.children[i - 1]
-                    if isinstance(operand, UnaryOperation) and (
-                        operand.operator is UnaryOperation.Operator.MINUS
-                    ):
-                        new_sub = BinaryOperation.create(
-                            BinaryOperation.Operator.SUB,
-                            other_operand.detach(),
-                            operand.children[0].detach(),
-                        )
-                        binary_operation.replace_with(new_sub)
-
-            # x - x => 0
-            if binary_operation.operator is BinaryOperation.Operator.SUB:
-                if (
-                    isinstance(binary_operation.children[0], Reference)
-                    and binary_operation.children[0] == binary_operation.children[1]
-                ):
-                    binary_operation.replace_with(Literal("0", INTEGER_TYPE))
-
-            if binary_operation.operator in (
-                BinaryOperation.Operator.ADD,
-                BinaryOperation.Operator.SUB,
-            ):
-                # x +- a * x => (1 +- a) * x
-                # a * x +- x => (a +- 1) * x
-                # x +- x * a => x * (1 +- a)
-                # x * a +- x => x * (a +- 1)
-                for i, operand in enumerate(binary_operation.children):
-                    other_operand = binary_operation.children[i - 1]
-                    if (
-                        isinstance(operand, Reference)
-                        and isinstance(other_operand, BinaryOperation)
-                        and (other_operand.operator is BinaryOperation.Operator.MUL)
-                    ):
-                        for j, suboperand in enumerate(other_operand.children):
-                            other_suboperand = other_operand.children[j - 1]
-                            if suboperand == operand:
-                                if isinstance(other_suboperand, Literal):
-                                    (
-                                        whole,
-                                        dot,
-                                        decimal,
-                                    ) = other_suboperand.value.partition(".")
-                                    if (
-                                        binary_operation.operator
-                                        is BinaryOperation.Operator.ADD
-                                    ):
-                                        new_whole = str(int(whole) + 1)
-                                        factor = Literal(
-                                            new_whole + dot + decimal,
-                                            other_suboperand.datatype,
-                                        )
-                                    else:
-                                        if i == 0:
-                                            new_whole = str(1 - int(whole))
-                                        else:
-                                            new_whole = str(int(whole) - 1)
-
-                                        factor = Literal(
-                                            new_whole + dot + decimal,
-                                            other_suboperand.datatype,
-                                        )
-                                else:
-                                    new_suboperands = [
-                                        Literal("1", INTEGER_TYPE),
-                                        other_suboperand.detach(),
-                                    ]
-                                    if i == 1:
-                                        new_suboperands.reverse()
-                                    factor = BinaryOperation.create(
-                                        binary_operation.operator, *new_suboperands
-                                    )
-                                new_operands = [operand.detach(), factor]
-                                if j == 1:
-                                    new_operands.reverse()
-                                new_binary_operation = BinaryOperation.create(
-                                    BinaryOperation.Operator.MUL, *new_operands
-                                )
-                                binary_operation.replace_with(new_binary_operation)

@@ -36,16 +36,16 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Container nodes."""
 
-from psyclone.transformations import Transformation, TransformationError
+from psyclone.transformations import TransformationError
 
 from psyclone.psyir.nodes import Container, Routine
 from psyclone.psyir.symbols import RoutineSymbol
 
 from psyclone.autodiff import own_routine_symbol, ADReversalSchedule
 from psyclone.autodiff.tapes import ADValueTape
+from psyclone.autodiff.transformations import ADTrans
 
-
-class ADContainerTrans(Transformation):
+class ADContainerTrans(ADTrans):
     """A class for automatic differentation transformations of Container nodes.
     This is the transformation to apply on the PSyIR AST generated from a source.
     """
@@ -268,6 +268,8 @@ class ADContainerTrans(Transformation):
         :raises TransformationError: if no Routine named routine_name can \
             be found in the container.
         """
+        super().validate(container, options)
+
         if self._was_applied:
             raise TransformationError(
                 "ADContainerTrans instance can only "
@@ -344,6 +346,10 @@ class ADContainerTrans(Transformation):
             routine definition. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
             transformations. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+            rules to BinaryOperation nodes. Defaults to 5.
+        - bool 'inline_operation_adjoints': True to inline all possible \
+            operation adjoints definitions. Defaults to True.
 
         :param container: Container Node to the transformed.
         :type container: :py:class:`psyclone.psyir.nodes.Container`

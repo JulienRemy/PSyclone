@@ -43,10 +43,10 @@ from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, DataType, ArrayType
 
 
 class ADTape(object, metaclass=ABCMeta):
-    """An abstract class for taping values in reverse-mode \
-    automatic differentiation. \
-    Based on static arrays storing a single type of data rather than a LIFO \
-    stack. \
+    """An abstract class for taping values in reverse-mode 
+    automatic differentiation. 
+    Based on static arrays storing a single type of data rather than a LIFO 
+    stack. 
 
     :param name: name of the value_tape (after a prefix).
     :type object: str
