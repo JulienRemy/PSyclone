@@ -1047,6 +1047,7 @@ def test_simplify_self_assignment():
     assert simplify_self_assignment(assignment) is None
 
 if __name__ == "__main__":
+    print("Testing simplify")
     test__typecheck_binary_operation()
     test__typecheck_add()
     test__typecheck_sub()
@@ -1091,3 +1092,4 @@ if __name__ == "__main__":
     test_simplify_mul_by_one(fortran_writer)
     test_simplify_mul_by_zero(fortran_writer)
     test_simplify_self_assignment()
+    print("passed")
