@@ -53,12 +53,12 @@ from psyclone.psyir.transformations import TransformationError
 from psyclone.psyir.symbols import DataSymbol, RoutineSymbol, INTEGER_TYPE
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff.transformations import ADTrans, ADRoutineTrans
+from psyclone.autodiff.transformations import ADElementTrans, ADRoutineTrans
 from psyclone.autodiff import own_routine_symbol, assign_zero
 from psyclone.autodiff.tapes import ADValueTape
 
 
-class ADCallTrans(ADTrans):
+class ADCallTrans(ADElementTrans):
     """A class for automatic differentation transformations of Call nodes.
     Requires an ADRoutineTrans instance as context, where the adjoint symbols
     can be found.
@@ -233,6 +233,8 @@ class ADCallTrans(ADTrans):
             ie. this is not called as a subroutine.
         :raises NotImplementedError: if the call uses named arguments.
         """
+        super().validate(call, options)
+
         if not isinstance(call, Call):
             raise TransformationError(
                 f"'call' argument in ADCallTrans should be a "
@@ -286,6 +288,10 @@ class ADCallTrans(ADTrans):
             routine definition. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
             transformations. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+            rules to BinaryOperation nodes. Defaults to 5.
+        - bool 'inline_operation_adjoints': True to inline all possible \
+            operation adjoints definitions. Defaults to True.
 
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
@@ -300,18 +306,7 @@ class ADCallTrans(ADTrans):
         """
         self.validate(call, options)
 
-        # TODO: typecheck options in validate method
-        # TODO: unpack options using a method
-        verbose = False
-        if options is not None:
-            if "verbose" in options.keys():
-                verbose = options["verbose"]
-
-        # TODO: useful or not? see in transform_reference_argument below
-        # force_call_temporaries = False
-        # if options is not None:
-        #    if "force_call_temporaries" in options.keys():
-        #        force_call_temporaries = options["force_call_temporaries"]
+        verbose = self.unpack_option("verbose", options)
 
         # List for both motions
         recording = []
@@ -431,37 +426,50 @@ class ADCallTrans(ADTrans):
             returning.append(reversing_call)
 
 
+        ######################################
+        ######################################
+        ######################################
+        ######################################
+        # NOTE: this was wrong. 
+        # adjoints are intent(inout) and only need to be set to 0 inside
+        # the called routine.
+
         # For all written out arguments,
         # set the adjoint to 0 RIGHT AFTER the recording or reverting call,
         # as for assignments
         # Right after since the argument may also be in an operation input
         # (should not be input and output as per Fortran aliasing convention)
-        for index, arg in enumerate(reversing_args):
-            # Only if the argument is a Reference or Call (to a function),
-            # else the adjoint is not important (Literal or Operation)
-            if not isinstance(arg, (Reference, Call)):
-                continue
-            # We only want the non-adjoint arguments to check their interface
-            # in the called routine
-            if arg.symbol in self.routine_trans.adjoint_symbols:
-                continue
-            # Get the symbol of the argument slot in the called reversing routine
-            routine_arg_symbol = self.reversing.symbol_table.argument_list[index]
-            # If the intent is other than intent(in) then the argument is
-            # written out of the subroutine
-            if isinstance(routine_arg_symbol.interface, ArgumentInterface) and (
-                routine_arg_symbol.interface.access is not ArgumentInterface.Access.READ
-            ):
-                # Adjoint symbol to set to 0
-                adjoint_sym = self.routine_trans.data_symbol_adjoint_map[arg.symbol]
-                
-                # Assignment to 0
-                adj_zero = assign_zero(adjoint_sym)
-                if verbose:
-                    adj_zero.preceding_comment = f"{arg.name} is output so overwritten"
+        #for index, arg in enumerate(reversing_args):
+        #    # Only if the argument is a Reference or Call (to a function),
+        #    # else the adjoint is not important (Literal or Operation)
+        #    if not isinstance(arg, (Reference, Call)):
+        #        continue
+        #    # We only want the non-adjoint arguments to check their interface
+        #    # in the called routine
+        #    if arg.symbol in self.routine_trans.adjoint_symbols:
+        #        continue
+        #    # Get the symbol of the argument slot in the called reversing routine
+        #    routine_arg_symbol = self.reversing.symbol_table.argument_list[index]
+        #    # If the intent is other than intent(in) then the argument is
+        #    # written out of the subroutine
+        #    if isinstance(routine_arg_symbol.interface, ArgumentInterface) and (
+        #        routine_arg_symbol.interface.access is not ArgumentInterface.Access.READ
+        #    ):
+        #        # Adjoint symbol to set to 0
+        #        adjoint_sym = self.routine_trans.data_symbol_adjoint_map[arg.symbol]
+        #        
+        #        # Assignment to 0
+        #        adj_zero = assign_zero(adjoint_sym)
+        #        if verbose:
+        #            adj_zero.preceding_comment = f"{arg.name} is output so overwritten"
+        #
+        #        ### Add right after the call, as first adjoint assignment
+        #        adjoint_assignments = [adj_zero] + adjoint_assignments
 
-                ### Add right after the call, as first adjoint assignment
-                adjoint_assignments = [adj_zero] + adjoint_assignments
+        ######################################
+        ######################################
+        ######################################
+        ######################################
 
         # In any case the adjoints assignments go after the call in the returning motion
         returning.extend(adjoint_assignments)
@@ -507,13 +515,9 @@ class ADCallTrans(ADTrans):
                 f"'{type(literal).__name__}'."
             )
         
-        #TODO: get this using a method
-        verbose = False
-        if options is not None:
-            if "verbose" in options.keys():
-                verbose = options["verbose"]
+        verbose = self.unpack_option("verbose", options)
 
-        # We can't just use 0.0 as adjoint because it will call problems
+        # We can't just use 0.0 as adjoint because it will cause problems
         #    with intent(inout) of the returning routine
         # So we use a dummy adjoint set to 0.0
         # eg. call foo(x,1.0,f)
@@ -665,11 +669,7 @@ class ADCallTrans(ADTrans):
         # x_adj = x_adj + op_adj * 1
         # y _adj = y_adj + op_adj * 1
 
-        #TODO: method
-        verbose = False
-        if options is not None:
-            if "verbose" in options.keys():
-                verbose = options["verbose"]
+        verbose = self.unpack_option("verbose", options)
 
         # TODO: correct datatype
         # TODO: test this !
