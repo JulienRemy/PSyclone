@@ -36,12 +36,6 @@
 """This file contains various utility functions used to create common
 Operation and Assignment nodes.
 """
-# TODO: most typechecking in these functions could be bunched in a
-# _check_operand helper function.
-# To get correct error messages, pass
-# - the operand,
-# - the operand symbol ('lhs', 'rhs', etc)
-# - the (name of the) calling function
 
 
 from psyclone.psyir.nodes import (
@@ -86,8 +80,8 @@ def own_routine_symbol(routine):
 
 
 def datanode(sym_or_datanode):
-    """This function creates a Reference from a DataSymbol or \
-    copies a DataNode.
+    """This function creates a Reference from a DataSymbol, \
+    copies a DataNode if it's attached or returns it otherwise.
 
     :param sym_or_ref: symbol or datanode.
     :type sym_or_ref: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
@@ -107,6 +101,9 @@ def datanode(sym_or_datanode):
     if isinstance(sym_or_datanode, DataSymbol):
         return Reference(sym_or_datanode)
 
+    if sym_or_datanode.parent is None:
+        return sym_or_datanode
+
     return sym_or_datanode.copy()
 
 
@@ -117,12 +114,12 @@ def assign(variable, value):
     :type variable: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
     :param value: RHS of Assignment
-    :type value: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
+    :type value: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                        :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a Reference or \
         DataSymbol instance
-    :raises TypeError: if the the value argument is not a Reference or \
+    :raises TypeError: if the the value argument is not a DataNode or \
         DataSymbol instance
 
     :return: an Assignement node `variable = value`

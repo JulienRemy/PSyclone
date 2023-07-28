@@ -512,14 +512,16 @@ def test_ad_operation_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
 
+if __name__ == "__main__":
+    print("Testing ADOperationTrans")
+    from psyclone.psyir.backend.fortran import FortranWriter
 
-from psyclone.psyir.backend.fortran import FortranWriter
+    fwriter = FortranWriter()
 
-fwriter = FortranWriter()
-
-test_ad_operation_trans_initialization()
-test_ad_operation_trans_validate()
-test_ad_operation_trans_differentiate()
-test_ad_operation_trans_differentiate_unary(fwriter)
-test_ad_operation_trans_differentiate_binary(fwriter)
-test_ad_operation_trans_apply(fwriter)
+    test_ad_operation_trans_initialization()
+    test_ad_operation_trans_validate()
+    test_ad_operation_trans_differentiate()
+    test_ad_operation_trans_differentiate_unary(fwriter)
+    test_ad_operation_trans_differentiate_binary(fwriter)
+    test_ad_operation_trans_apply(fwriter)
+    print("passed")
