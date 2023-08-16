@@ -34,17 +34,21 @@
 # Authors R. W. Ford, A. R. Porter and S. Siso, STFC Daresbury Lab
 #         I. Kavcic, Met Office
 #         J. Henrichs, Bureau of Meteorology
+#         J. Remy, Inria
 # -----------------------------------------------------------------------------
 
 ''' This module contains the implementation of the Operation class and its
 sub-classes.'''
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from enum import Enum
 import re
 
 from psyclone.errors import GenerationError
 from psyclone.psyir.nodes.datanode import DataNode
+
+from psyclone.psyir.nodes import Literal
+from psyclone.psyir.symbols.datatypes import INTEGER_TYPE, REAL_TYPE, BOOLEAN_TYPE, ScalarType, ArrayType
 
 
 class Operation(DataNode, metaclass=ABCMeta):
@@ -302,6 +306,14 @@ class Operation(DataNode, metaclass=ABCMeta):
         new_copy._argument_names = new_list
 
         return new_copy
+    
+    @property
+    @abstractmethod
+    def datatype(self):
+        """
+        :return: PSyIR datatype of the result of this operation.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        """
 
 
 class UnaryOperation(Operation):
@@ -327,6 +339,56 @@ class UnaryOperation(Operation):
         ])
 
     _non_elemental_ops = []
+
+    @property
+    def datatype(self):
+        """
+        :return: PSyIR datatype of the result of this operation.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        """
+        #if not isinstance(self.children[0].datatype, (ScalarType, ArrayType)):
+        #    raise NotImplementedError(f"Operand of operation '{self.view()}' "
+        #                              f"is of datatype "
+        #                              f"'{type(self.children[0].datatype).__name__}', "
+        #                              f"determining the datatype of this operation "
+        #                              f"is not implemented yet.")
+
+        operand = self.children[0]
+
+        if self.operator in (UnaryOperation.Operator.CEIL, 
+                             UnaryOperation.Operator.FLOOR, 
+                             UnaryOperation.Operator.NINT):
+            scalar_type = INTEGER_TYPE
+
+        elif self.operator is UnaryOperation.Operator.REAL:
+            scalar_type = REAL_TYPE
+
+        elif self.operator is UnaryOperation.Operator.INT:
+            if operand.datatype.intrinsic is ScalarType.Intrinsic.INTEGER:
+                scalar_type = ScalarType(operand.datatype.intrinsic, 
+                                         operand.datatype.precision)
+
+            else:
+                scalar_type = INTEGER_TYPE
+
+        else:
+            scalar_type = ScalarType(operand.datatype.intrinsic, 
+                                     operand.datatype.precision)
+
+        if isinstance(operand, ScalarType):
+            return scalar_type
+        
+        shape = operand.shape
+
+        if self.operator is UnaryOperation.Operator.TRANSPOSE:
+            if len(shape) != 2:
+                raise TypeError(f"Only matrices can be transposed but found "
+                                f"an array with shape attribute of length "
+                                f"{len(shape)}.")
+            shape.reverse()
+
+        return ArrayType(scalar_type, shape)
+            
 
     @staticmethod
     def _validate_child(position, child):
@@ -489,6 +551,187 @@ class BinaryOperation(Operation):
     _text_name = "BinaryOperation"
 
     @staticmethod
+    def _promote_scalar_datatypes(first, second):
+        """Promote the scalar datatypes passed as arguments.
+        Implemented from https://docs.oracle.com/cd/E19957-01/805-4939/z400073a2265/index.html
+        for the PSyIR datatypes currently implemented.
+        NOTE: treats undefined as single precision, which may not always be true (compiler flags)
+
+        :param first: first scalar datatype to promote.
+        :type first: :py:class:`psyclone.psyir.symbols.ScalarType`
+        :param second: second scalar datatype to promote.
+        :type second: :py:class:`psyclone.psyir.symbols.ScalarType`
+
+        :raises TypeError: if first is of the wrong type.
+        :raises TypeError: if second is of the wrong type.
+        :raises NotImplementedError: if first is not in the listed datatypes.
+        :raises NotImplementedError: if second is not in the listed datatypes.
+
+        :return: the promoted scalar datatype.
+        :rtype: :py:class:`psyclone.psyir.symbols.ScalarType`
+        """
+
+        if not isinstance(first, ScalarType):
+            raise TypeError(f"'first' argument should be of type 'ScalarType' "
+                            f"but found '{type(first).__name__}'.")
+        if not isinstance(second, ScalarType):
+            raise TypeError(f"'second' argument should be of type 'ScalarType' "
+                            f"but found '{type(second).__name__}'.")
+
+        # From https://docs.oracle.com/cd/E19957-01/805-4939/z400073a2265/index.html
+        # NOTE: treating undefined as single precision, which may not always be true (compiler flags)
+        datatypes_ranks = {ScalarType(ScalarType.Intrinsic.BOOLEAN, 
+                                      ScalarType.Precision.SINGLE)      : 3,
+                           ScalarType(ScalarType.Intrinsic.BOOLEAN, 
+                                      ScalarType.Precision.UNDEFINED)   : 3,
+                           ScalarType(ScalarType.Intrinsic.INTEGER, 
+                                      ScalarType.Precision.SINGLE)      : 5,
+                           ScalarType(ScalarType.Intrinsic.INTEGER, 
+                                      ScalarType.Precision.UNDEFINED)   : 5,
+                           ScalarType(ScalarType.Intrinsic.INTEGER, 
+                                      ScalarType.Precision.DOUBLE)      : 6,
+                           ScalarType(ScalarType.Intrinsic.BOOLEAN, 
+                                      ScalarType.Precision.DOUBLE)      : 6,
+                           ScalarType(ScalarType.Intrinsic.REAL, 
+                                      ScalarType.Precision.SINGLE)      : 6,
+                           ScalarType(ScalarType.Intrinsic.REAL, 
+                                      ScalarType.Precision.UNDEFINED)   : 6,
+                           ScalarType(ScalarType.Intrinsic.REAL, 
+                                      ScalarType.Precision.DOUBLE)      : 7}
+        
+        if first not in datatypes_ranks:
+            raise NotImplementedError(f"'first' argument is '{first}', whose "
+                                      f"promotion rules are not implemented yet.")
+        if second not in datatypes_ranks:
+            raise NotImplementedError(f"'second' argument is '{second}', whose "
+                                      f"promotion rules are not implemented yet.")
+        
+        if datatypes_ranks[first] > datatypes_ranks[second]:
+            return first
+        return second
+
+    @property
+    def datatype(self):
+        """PSyIR datatype of the result of this operation.
+
+        :raises NotImplementedError: if the operator is CAST and the second \
+            argument is an array.
+        :raises NotImplementedError: if the operator is REAL or INT and the \
+            second argument is not a literal.
+        :raises NotImplementedError: if the operator is REAL or INT and the \
+            second argument is a literal with value different from "4" or "8".
+        :raises NotImplementedError: if the broadcasting rules failed.
+
+        :return: PSyIR datatype of the result of this operation.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        """
+        if self.operator in (BinaryOperation.Operator.SIZE,
+                             BinaryOperation.Operator.LBOUND,
+                             BinaryOperation.Operator.UBOUND):
+            return INTEGER_TYPE
+        
+        if self.operator is BinaryOperation.Operator.CAST:
+            if isinstance(self.children[1].datatype, ScalarType):
+                scalar_type = self.children[1].datatype
+            else:
+                raise NotImplementedError("Arrays as second arguments of "
+                                          "CAST/TRANSFER binary operations "
+                                          "are not implemented yet.")
+            
+        if self.operator is BinaryOperation.Operator.MATMUL:
+            first = ScalarType(self.children[0].datatype.intrinsic, 
+                               self.children[0].datatype.precision)
+            second = ScalarType(self.children[1].datatype.intrinsic, 
+                                self.children[1].datatype.precision)
+            scalar_type = self._promote_scalar_datatypes(first, second)
+            return ArrayType(scalar_type, [self.children[0].shape[0], 
+                                           self.children[1].shape[1]])
+        
+        if self.operator is BinaryOperation.Operator.DOT_PRODUCT:
+            first = ScalarType(self.children[0].datatype.intrinsic, 
+                               self.children[0].datatype.precision)
+            second = ScalarType(self.children[1].datatype.intrinsic, 
+                                self.children[1].datatype.precision)
+            return self._promote_scalar_datatypes(first, second)
+
+        if self.operator in (BinaryOperation.Operator.REAL, 
+                             BinaryOperation.Operator.INT):
+            if not isinstance(self.children[1], Literal):
+                raise NotImplementedError(f"Second argument of operation "
+                                          f"{self.view()} is not a Literal, "
+                                          f"this is not supported yet.")
+            
+            if self.operator is BinaryOperation.Operator.REAL:
+                intrinsic = ScalarType.Intrinsic.REAL
+            else:
+                intrinsic = ScalarType.Intrinsic.INTEGER
+
+            if self.children[1].value == "4":
+                precision = ScalarType.Precision.SINGLE
+            elif self.children[1].value == "8":
+                precision = ScalarType.Precision.DOUBLE
+            else:
+                raise NotImplementedError("This should not have happened.")
+            
+            scalar_type = ScalarType(intrinsic, precision)
+
+        if self.operator in (BinaryOperation.Operator.ADD,
+                             BinaryOperation.Operator.SUB,
+                             BinaryOperation.Operator.MUL,
+                             BinaryOperation.Operator.DIV,
+                             BinaryOperation.Operator.POW):
+            first = ScalarType(self.children[0].datatype.intrinsic, 
+                               self.children[0].datatype.precision)
+            second = ScalarType(self.children[1].datatype.intrinsic, 
+                                self.children[1].datatype.precision)
+            scalar_type = self._promote_scalar_datatypes(first, second)
+        
+        # https://gcc.gnu.org/onlinedocs/gfortran/MOD.html 
+        if self.operator is BinaryOperation.Operator.REM:
+            if (self.children[0].datatype.precision 
+            is ScalarType.Precision.DOUBLE) \
+            or (self.children[0].datatype.precision 
+            is ScalarType.Precision.DOUBLE):
+                precision = ScalarType.Precision.DOUBLE
+            else:
+                precision = self.children[0].datatype.precision
+            
+            scalar_type = ScalarType(self.children[0].datatype.intrisinc, precision)
+
+        if self.operator in (BinaryOperation.Operator.EQ,
+                             BinaryOperation.Operator.NE,
+                             BinaryOperation.Operator.GT,
+                             BinaryOperation.Operator.LT,
+                             BinaryOperation.Operator.GE,
+                             BinaryOperation.Operator.LE,
+                             BinaryOperation.Operator.AND,
+                             BinaryOperation.Operator.OR,
+                             BinaryOperation.Operator.EQV,
+                             BinaryOperation.Operator.NEQV):
+            scalar_type = BOOLEAN_TYPE
+
+        if isinstance(self.children[0].datatype, ScalarType) \
+            and isinstance(self.children[1].datatype, ScalarType):
+                return scalar_type
+            
+        if isinstance(self.children[0].datatype, ArrayType) \
+            and isinstance(self.children[1].datatype, ArrayType):
+            # TODO: should this check whether the shapes are the same?
+            # Fortran broadcasting only seems to apply to scalars?
+            return ArrayType(scalar_type, self.children[0].datatype.shape)
+
+        if isinstance(self.children[0].datatype, ArrayType) \
+            and isinstance(self.children[1].datatype, ScalarType):
+            return ArrayType(scalar_type, self.children[0].datatype.shape)
+        
+        if isinstance(self.children[0].datatype, ScalarType) \
+            and isinstance(self.children[1].datatype, ArrayType):
+            return ArrayType(scalar_type, self.children[1].datatype.shape)
+        
+        raise NotImplementedError("This shouldn't have happened.")
+
+
+    @staticmethod
     def _validate_child(position, child):
         '''
         :param int position: the position to be validated.
@@ -599,6 +842,17 @@ class NaryOperation(Operation):
         'MAX', 'MIN'
         ])
     _non_elemental_ops = []
+
+    @property
+    def datatype(self):
+        """
+        :return: PSyIR datatype of the result of this operation.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        """
+
+        # Type and precision of first argument
+        # https://gcc.gnu.org/onlinedocs/gfortran/MIN.html
+        return self.children[0].datatype
 
     @staticmethod
     def _validate_child(position, child):

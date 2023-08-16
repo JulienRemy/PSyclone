@@ -33,6 +33,7 @@
 # -----------------------------------------------------------------------------
 # Author: A. R. Porter, STFC Daresbury Lab
 # Modified: R. W. Ford, STFC Daresbury Lab
+#           J. Remy, Inria
 # -----------------------------------------------------------------------------
 
 ''' This module contains the IntrinsicCall node implementation.'''
@@ -45,6 +46,8 @@ from psyclone.psyir.nodes.datanode import DataNode
 from psyclone.psyir.nodes.literal import Literal
 from psyclone.psyir.nodes.reference import Reference
 from psyclone.psyir.symbols import IntrinsicSymbol
+
+from psyclone.psyir.symbols.datatypes import ScalarType, ArrayType
 
 
 # pylint: disable=too-many-branches
@@ -132,6 +135,55 @@ class IntrinsicCall(Call):
                 is_pure=(routine in PURE_INTRINSICS)),
             **kwargs)
         self._intrinsic = routine
+
+    @property
+    def datatype(self):
+        """Datatype of the intrinsic call result.
+
+        :raises NotImplementedError: if the intrinsic is ALLOCATE or DEALLOCATE.
+        :raises NotImplementedError: if the intrinsic is MINVAL, MAXVAL or SUM \
+            and the DIM argument is not a literal.
+
+        :return: Datatype of the intrinsic call result.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        """
+        if self.intrinsic in (IntrinsicCall.Intrinsic.ALLOCATE,
+                              IntrinsicCall.Intrinsic.DEALLOCATE):
+            raise NotImplementedError("Datatypes of ALLOCATE and "
+                                      "DEALLOCATE are not implemented yet.")
+        
+        if self.intrinsic in (IntrinsicCall.Intrinsic.RANDOM_NUMBER,
+                              IntrinsicCall.Intrinsic.HUGE,
+                              IntrinsicCall.Intrinsic.TINY):
+            return self.children[0].datatype
+        
+        if self.intrinsic in (IntrinsicCall.Intrinsic.MINVAL,
+                              IntrinsicCall.Intrinsic.MAXVAL,
+                              IntrinsicCall.Intrinsic.SUM):
+            # Array of rank 1 or one argument => scalar
+            if (len(self.children[0].datatype.shape) == 1) \
+                or (len(self.children) == 1):
+                return ScalarType(self.children[0].datatype.intrinsic,
+                                  self.children[0].datatype.precision)
+            
+            # Two or three arguments, the array and DIM and/or MASK
+            # Second argument is DIM if it's scalar
+            if isinstance(self.children[1].datatype, ScalarType):
+                if not isinstance(self.children[1], Literal):
+                    raise NotImplementedError("Calls to MINVAL, MAXVAL or SUM "
+                                                "with a DIM argument other "
+                                                "than a literal are not "
+                                                "implemented yet.")
+                scalar_type = ScalarType(self.children[0].datatype.intrinsic,
+                                            self.children[0].datatype.precision)
+                dim = int(self.children[1].value) # Fortran DIM
+                shape = self.children[0].shape.copy().pop(dim - 1) # Python index
+                return ArrayType(scalar_type, shape)
+
+            # Second argument is MASK
+            else:
+                return ScalarType(self.children[0].datatype.intrinsic,
+                                self.children[0].datatype.precision)
 
     @property
     def intrinsic(self):
