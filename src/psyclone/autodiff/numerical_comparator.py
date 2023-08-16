@@ -109,8 +109,7 @@ class NumericalComparator(object):
                 f"'{output_type}'."
             )
 
-        # independent_vars = list(independent_vars_and_values.keys())
-
+        # Create the comparator subroutine and get the names of the arguments
         comparator, argument_names = ComparatorGenerator.compare(
             tapenade_path,
             file_path,
@@ -122,6 +121,7 @@ class NumericalComparator(object):
             options,
         )
 
+        # Check that the provided arguments match those of the comparator
         if set(argument_names) != set(argument_values.keys()) or (
             len(argument_names) != len(argument_values)
         ):
@@ -131,32 +131,33 @@ class NumericalComparator(object):
                 "of the 'argument_values' argument."
             )
 
+        # Sort the argument values in the correct order for the comparator
         sorted_argument_values = []
         for arg_name in argument_names:
             sorted_argument_values.append(argument_values[arg_name])
 
-        runs_values = []
-        runs_result = []
+        # Lists to store the argument values and results
+        inputs = []
+        outputs = []
+
+        # For each combination of argument values, run the comparator
         for values in product(*sorted_argument_values):
-            runs_values.append(values)
-            runs_result.append(comparator(*values))
+            inputs.append(values)
+            output = comparator(*values)
+            outputs.append(output)
 
-            print(
-                ", ".join(
-                    [f"{arg} = {val}" for arg, val in zip(argument_names, values)]
-                )
-            )
-            print(f"{output_type}:")
-            if output_type == "Jacobians_values":
-                jacobians = comparator(*values)
-                print(f"Autodiff:\n{jacobians[0]}")
-                print(f"Tapenade:\n{jacobians[1]}")
-            else:
-                print(comparator(*values))
-            print("===================")
+            #print(
+            #    ", ".join(
+            #        [f"{arg} = {val}" for arg, val in zip(argument_names, values)]
+            #    )
+            #)
+            #print(f"{output_type}:")
+            #print(output)
+            #print("===================")
 
-        max_error = max(runs_result)
-        associated_values = runs_values[runs_result.index(max_error)]
+        # Largest error
+        max_error = max(outputs)
+        associated_values = inputs[outputs.index(max_error)]
 
         values_string = ", ".join(
             [f"{arg} = {val}" for arg, val in zip(argument_names, associated_values)]
@@ -164,7 +165,8 @@ class NumericalComparator(object):
 
         print(f"Maximum {output_type} was {max_error} for values {values_string}.")
 
-        # print(max(runs_result))
+        return max_error, associated_values
+        # print(max(outputs))
 
 
 """

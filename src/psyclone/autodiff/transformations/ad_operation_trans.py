@@ -46,7 +46,7 @@ from psyclone.psyir.nodes import (
     Operation,
     Call,
 )
-from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE
+from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, REAL_TYPE
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADElementTrans
@@ -345,7 +345,7 @@ class ADOperationTrans(ADElementTrans):
         if operator == UnaryOperation.Operator.LOG:
             return inverse(operand)
         if operator == UnaryOperation.Operator.LOG10:
-            return inverse(mul(operand, log(Literal("10", INTEGER_TYPE))))
+            return inverse(mul(operand, log(Literal("10.0", REAL_TYPE))))
         if operator == UnaryOperation.Operator.COS:
             return minus(sin(operand))
         if operator == UnaryOperation.Operator.SIN:
@@ -361,7 +361,7 @@ class ADOperationTrans(ADElementTrans):
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
             # return div(operand, operation.copy())
-            return sign(one(), operand)
+            return sign(one(operand.datatype), operand)
         # if operator == UnaryOperation.Operator.CEIL:
         #    # 0             if sin(pi * operand) == 0
         #    # undefined     otherwise...

@@ -37,11 +37,18 @@
 transformations by comparing to results obtained using Tapenade.
 NOTE: this is upcoming work and nothing much has been done here."""
 
+from itertools import product
+import numpy as np
+
 from psyclone.autodiff import NumericalComparator, SubroutineGenerator
 
-from psyclone.psyir.nodes import Literal
-from psyclone.psyir.symbols import REAL_DOUBLE_TYPE
+from psyclone.psyir.nodes import Literal, UnaryOperation, BinaryOperation, Reference
+from psyclone.psyir.symbols import REAL_SINGLE_TYPE
 
+from psyclone.autodiff.ad_reversal_schedule import (
+    ADSplitReversalSchedule,
+    ADJointReversalSchedule,
+)
 from psyclone.autodiff.utils import (
     datanode,
     one,
@@ -66,61 +73,167 @@ from psyclone.autodiff.utils import (
     own_routine_symbol,
 )
 
-bar = SubroutineGenerator("bar")
+# TODO: solve datatype problem with abs
+def test_unary():
+    for op in (
+        UnaryOperation.Operator.PLUS,
+        UnaryOperation.Operator.MINUS,
+        UnaryOperation.Operator.SQRT,
+        UnaryOperation.Operator.EXP,
+        UnaryOperation.Operator.LOG,
+        UnaryOperation.Operator.LOG10,
+        UnaryOperation.Operator.COS,
+        UnaryOperation.Operator.SIN,
+        UnaryOperation.Operator.TAN,
+        UnaryOperation.Operator.ACOS,
+        UnaryOperation.Operator.ASIN,
+        UnaryOperation.Operator.ATAN,
+        #UnaryOperation.Operator.ABS, #datatype problem
+    ):
+        print(f"Testing unary operator {op}")
 
-a = bar.new_in_arg("a")
-b = bar.new_inout_arg("b")
-bar.new_assignment(b, add(a, b))
+        foo = SubroutineGenerator("foo")
 
+        x = foo.new_in_arg("x")
+        f = foo.new_out_arg("f")
 
-foo = SubroutineGenerator("foo")
+        for iterative in (True, False):
+            if iterative:
+                print("with an iterative assignment to f")
+                foo.new_assignment(f, x)
+                foo.new_assignment(f, UnaryOperation.create(op, Reference(f)))
+            else:
+                print("without iterative assignment")
+                foo.new_assignment(f, UnaryOperation.create(op, Reference(x)))
 
-x = foo.new_in_arg("x")
-w = foo.new_in_arg("w")
-f = foo.new_inout_arg("f")
-g = foo.new_out_arg("g")
+            with open("foo.f90", "w") as file:
+                file.write(foo.write())
 
-a = foo.new_variable("a")
+            if op in (UnaryOperation.Operator.SQRT, UnaryOperation.Operator.LOG, UnaryOperation.Operator.LOG10):
+                x_val = np.random.uniform(0, 1e2, 100)
+            else:
+                x_val = np.random.uniform(-1e2, 1e2, 100)
 
-foo.new_assignment(f, x)
-foo.new_assignment(a, mul(f, w))
-foo.new_assignment(g, w)
-foo.new_call(bar, [f, g])
-foo.new_assignment(f, add(mul(x, w), w))
-foo.new_call(bar, [f, g])
-foo.new_assignment(f, add(x, w))
-foo.new_assignment(g, power(add(x, w), Literal("1.23456789", REAL_DOUBLE_TYPE)))
-foo.new_assignment(f, add(mul(f, f), div(f, f)))
-foo.new_call(bar, [f, g])
-foo.new_assignment(g, x)
-foo.new_assignment(g, power(g, Literal("3.0", REAL_DOUBLE_TYPE)))
-foo.new_assignment(f, sub(exp(add(f, x)), g))
+            rev_schedule = ADJointReversalSchedule()
+            for inline in (True, False):
+                print(f"with option 'inline_operation_adjoints' = {inline}")
 
-foo.new_call(bar, [f, g])
+                max_error, associated_values = NumericalComparator.compare(
+                "./tapenade_3.16",
+                "foo.f90",
+                "foo",
+                ["f"],
+                ["x"],
+                {"x" : x_val.tolist()},
+                rev_schedule,
+                "Linf_error",
+                {"verbose": True, "inline_operation_adjoints": inline},
+                )
 
+                if max_error != 0:
+                    raise ValueError(f"Test failed, Linf_error = {max_error} for argument values {associated_values}")
+                print("passed")
+                print("-----------------------")
 
-with open("foo.f90", "w") as file:
-    file.write(bar.write())
-    file.write(foo.write())
+        print("===============================\n")
 
-from psyclone.autodiff.ad_reversal_schedule import (
-    ADSplitReversalSchedule,
-    ADJointReversalSchedule,
-)
+def test_binary():
+    for op in (
+        BinaryOperation.Operator.ADD,
+        BinaryOperation.Operator.SUB,
+        BinaryOperation.Operator.MUL,
+        BinaryOperation.Operator.DIV,
+        BinaryOperation.Operator.POW,
+    ):
+        print(f"Testing binary operator {op}")
 
-# schedule = ADJointReversalSchedule()
-schedule = ADSplitReversalSchedule()
-# ComparatorGenerator('./tapenade_3.16/bin/tapenade', 'foo_bar.f90', 'foo', ['f', 'g'], ['x', 'w'], schedule, {'verbose': True})
+        foo = SubroutineGenerator("foo")
 
-argument_values = {"w": [4, 5, 6, 5.1], "x": [1, 2, 3, 5.2], "f": [1]}
-NumericalComparator.compare(
-    "./tapenade_3.16",
-    "foo.f90",
-    "foo",
-    ["f", "g"],
-    ["x", "w"],
-    argument_values,
-    schedule,
-    "Linf_error",
-    {"verbose": True, "inline_operation_adjoints": True},
-)
+        x = foo.new_in_arg("x")
+        y = foo.new_in_arg("y")
+        f = foo.new_out_arg("f")
+
+        for iterative in (True, False):
+            if iterative:
+                print("with an iterative assignment to f")
+                foo.new_assignment(f, x)
+                foo.new_assignment(f, BinaryOperation.create(op, Reference(f), Reference(y)))
+            else:
+                print("without iterative assignment")
+                foo.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
+
+            #foo.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
+
+            with open("foo.f90", "w") as file:
+                file.write(foo.write())
+
+            x_val = np.random.uniform(-1e2, 1e2, 1000)
+            y_val = np.random.uniform(-1e2, 1e2, 1000)
+
+            rev_schedule = ADJointReversalSchedule()
+            for inline in (True, False):
+                print(f"with option 'inline_operation_adjoints' = {inline}")
+
+                max_error, associated_values = NumericalComparator.compare(
+                "./tapenade_3.16",
+                "foo.f90",
+                "foo",
+                ["f"],
+                ["x", "y"],
+                {"x" : x_val.tolist(), "y" : y_val.tolist()},
+                rev_schedule,
+                "Linf_error",
+                {"verbose": True, "inline_operation_adjoints": inline},
+                )
+
+                if max_error != 0:
+                    raise ValueError(f"Test failed, Linf_error = {max_error} for argument values {associated_values}")
+                print("passed")
+
+                print("-----------------------")
+
+        print("===============================\n")
+        
+"""def test_vars():
+    for dep_n in range(1,11):
+        for indep_n in range(1,11):
+            print(f"Testing with {dep_n} dependent variables and {indep_n} independent_variables")
+
+            foo = SubroutineGenerator("foo")
+
+            dep_1 = foo.new_out_arg("dep_1")
+            for j in range(2, dep_n + 1):
+                foo.new_out_arg(f"dep_{j}")
+
+            for i in range(1, indep_n + 1):
+                indep = foo.new_in_arg(f"indep_{i}")
+                foo.new_assignment(dep_1, indep)
+
+            #############################################
+
+            with open("foo.f90", "w") as file:
+                file.write(foo.write())
+
+            rev_schedule = ADJointReversalSchedule()
+            max_error, associated_values = NumericalComparator.compare(
+                "./tapenade_3.16",
+                "foo.f90",
+                "foo",
+                [f"dep_{j}" for j in range(1, dep_n + 1)],
+                [f"indep_{i}" for i in range(1, indep_n + 1)],
+                {f"indep_{i}": [1] for i in range(1, indep_n + 1)},
+                rev_schedule,
+                "Linf_error",
+                {"verbose": True},
+                )
+
+            if max_error != 0:
+                raise ValueError(f"Test failed, Linf_error = {max_error} for argument values {associated_values}")
+            print("passed")
+
+            print("-----------------------")"""
+
+if __name__ == "__main__":
+    test_unary()
+    test_binary()
+    #test_vars()
