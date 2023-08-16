@@ -190,7 +190,7 @@ class SubroutineGenerator(object):
                 f"but found '{type(literal).__name__}'."
             )
 
-    def new_variable(self, name, datatype=None, constant_value=None):
+    def new_variable(self, name, datatype=None, initial_value=None):
         """Create a new variable DataSymbol with the given name, datatype \
         and constant value.
 
@@ -199,8 +199,8 @@ class SubroutineGenerator(object):
         :param datatype: datatype of the new variable, defaults to None.
         :type datatype: Optional[Union[`NoneType`, 
                                        :py:class:`psyclone.psyir.symbols.DataType`]]
-        :param constant_value: constant value of the new variable, defaults to None.
-        :type constant_value: Optional[Union[`NoneType`, 
+        :param initial_value: initial value of the new variable, defaults to None.
+        :type initial_value: Optional[Union[`NoneType`, 
                                        :py:class:`psyclone.psyir.nodes.Literal`]]
 
         :raises TypeError: if name is not a string.
@@ -216,8 +216,8 @@ class SubroutineGenerator(object):
         self._check_symbol_exists(name)
         if datatype is not None:
             self._check_datatype(datatype)
-        if constant_value is not None:
-            self._check_literal(constant_value)
+        if initial_value is not None:
+            self._check_literal(initial_value)
 
         if datatype:
             use_datatype = datatype
@@ -228,7 +228,7 @@ class SubroutineGenerator(object):
             name,
             symbol_type=DataSymbol,
             datatype=use_datatype,
-            constant_value=constant_value,
+            initial_value=initial_value,
         )
 
     def new_arg(self, name, datatype=None, access=ArgumentInterface.Access.UNKNOWN):
