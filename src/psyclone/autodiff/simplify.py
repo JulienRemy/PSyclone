@@ -461,6 +461,7 @@ def simplify_sub_plus_minus(binary_operation):
         binary_operation.children[1].children[0].copy(),
     )
 
+
 def _typecheck_add_sub(binary_operation):
     _typecheck_binary_operation(binary_operation)
     if binary_operation.operator not in (
@@ -475,9 +476,9 @@ def _typecheck_add_sub(binary_operation):
         )
 
 
-# x +- a * x => (1 +- a) * x 
-# a * x +- x => (a +- 1) * x 
-# x +- x * a => x * (1 +- a) 
+# x +- a * x => (1 +- a) * x
+# a * x +- x => (a +- 1) * x
+# x +- x * a => x * (1 +- a)
 # x * a +- x => x * (a +- 1)
 def simplify_add_sub_factorize(binary_operation):
     """Simplifies a binary operation with operator ADD or SUB, one operand (1)
@@ -623,6 +624,18 @@ def simplify_mul_div(binary_operation):
     """
     _typecheck_mul_div(binary_operation)
 
+    # x * 1 or 1 * x => x, x * 0 or 0 * x => 0
+    if (binary_operation.operator is BinaryOperation.Operator.MUL) and (
+        isinstance(binary_operation.children[0], Literal)
+        or isinstance(binary_operation.children[1], Literal)
+    ):
+        for operand in binary_operation.children:
+            if isinstance(operand, Literal):
+                if operand.value == "1":
+                    return simplify_mul_by_one(binary_operation)
+                if operand.value in ("0", "0.0", "0."):
+                    return simplify_mul_by_zero(binary_operation)
+
     # (-x) */ (-y) => x */ y
     if (
         isinstance(binary_operation.children[0], UnaryOperation)
@@ -636,7 +649,7 @@ def simplify_mul_div(binary_operation):
         return simplify_mul_div_minus_minus(binary_operation)
 
     # (-x) */ y or x */ (-y) => -(x */ y)
-    elif (
+    if (
         isinstance(binary_operation.children[0], UnaryOperation)
         and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
     ) ^ (
@@ -644,17 +657,6 @@ def simplify_mul_div(binary_operation):
         and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
     ):
         return simplify_mul_div_plus_minus_or_minus_plus(binary_operation)
-
-    # x * 1 or 1 * x => x, x * 0 or 0 * x => 0
-    elif isinstance(binary_operation.children[0], Literal) or isinstance(
-        binary_operation.children[1], Literal
-    ):
-        for operand in binary_operation.children:
-            if isinstance(operand, Literal):
-                if operand.value == "1":
-                    return simplify_mul_by_one(binary_operation)
-                if operand.value in ("0", "0.0", "0."):
-                    return simplify_mul_by_zero(binary_operation)
 
     return binary_operation
 
@@ -698,9 +700,7 @@ def simplify_mul_div_minus_minus(binary_operation):
     for operand in binary_operation.children:
         _typecheck_minus(operand)
 
-    new_operands = [
-        operand.children[0].copy() for operand in binary_operation.children
-    ]
+    new_operands = [operand.children[0].copy() for operand in binary_operation.children]
     return BinaryOperation.create(binary_operation.operator, *new_operands)
     # binary_operation.replace_with(new_binary_operation)
 
@@ -763,7 +763,7 @@ def simplify_mul_div_plus_minus_or_minus_plus(binary_operation):
                 f"operator 'UnaryOperation.Operator.MINUS' but found "
                 f"'{binary_operation.children[0].operator}' and '{binary_operation.children[1].operator}'."
             )
-    #for operand in binary_operation.children:
+    # for operand in binary_operation.children:
     #    if isinstance(operand, UnaryOperation):
     #        _typecheck_minus(operand)
 
