@@ -47,7 +47,7 @@ from psyclone.psyir.nodes.literal import Literal
 from psyclone.psyir.nodes.reference import Reference
 from psyclone.psyir.symbols import IntrinsicSymbol
 
-from psyclone.psyir.symbols.datatypes import ScalarType, ArrayType
+from psyclone.psyir.symbols.datatypes import ScalarType, ArrayType, REAL_TYPE
 
 
 # pylint: disable=too-many-branches
@@ -150,10 +150,14 @@ class IntrinsicCall(Call):
         if self.intrinsic in (IntrinsicCall.Intrinsic.ALLOCATE,
                               IntrinsicCall.Intrinsic.DEALLOCATE):
             raise NotImplementedError("Datatypes of ALLOCATE and "
-                                      "DEALLOCATE are not implemented yet.")
+                                      "DEALLOCATE are not implemented.")
         
-        if self.intrinsic in (IntrinsicCall.Intrinsic.RANDOM_NUMBER,
-                              IntrinsicCall.Intrinsic.HUGE,
+        # Always returns REAL*4 using gfortran
+        if self.intrinsic is IntrinsicCall.Intrinsic.RANDOM_NUMBER:
+            return REAL_TYPE
+
+        # same type and kind as argument
+        if self.intrinsic in (IntrinsicCall.Intrinsic.HUGE,
                               IntrinsicCall.Intrinsic.TINY):
             return self.children[0].datatype
         
@@ -161,7 +165,8 @@ class IntrinsicCall(Call):
                               IntrinsicCall.Intrinsic.MAXVAL,
                               IntrinsicCall.Intrinsic.SUM):
             # Array of rank 1 or one argument => scalar
-            if (len(self.children[0].datatype.shape) == 1) \
+            if (isinstance(self.children[0].datatype, ArrayType) \
+                    and (len(self.children[0].datatype.shape) == 1)) \
                 or (len(self.children) == 1):
                 return ScalarType(self.children[0].datatype.intrinsic,
                                   self.children[0].datatype.precision)
@@ -177,7 +182,8 @@ class IntrinsicCall(Call):
                 scalar_type = ScalarType(self.children[0].datatype.intrinsic,
                                             self.children[0].datatype.precision)
                 dim = int(self.children[1].value) # Fortran DIM
-                shape = self.children[0].shape.copy().pop(dim - 1) # Python index
+                shape = self.children[0].datatype.shape.copy()
+                shape.pop(dim - 1) # Python index
                 return ArrayType(scalar_type, shape)
 
             # Second argument is MASK

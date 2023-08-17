@@ -301,3 +301,261 @@ def test_intrinsiccall_create_errors():
                              [aref, ("stat", sym)])
     assert ("The optional argument 'stat' to intrinsic 'ALLOCATE' must be "
             "of type 'Reference' but got 'DataSymbol'" in str(err.value))
+
+from itertools import product
+from subprocess import run
+from psyclone.psyir.nodes import Routine, Reference, FileContainer, Call, IntrinsicCall
+from psyclone.psyir.symbols import DataSymbol, ScalarType, ArrayType
+from psyclone.psyir.symbols.interfaces import ArgumentInterface, StaticInterface
+
+def _initialize_scalar_kinds():
+    intrinsics = ['INTEGER', 'BOOLEAN', 'REAL']
+    precisions = ['SINGLE', 'DOUBLE', 'UNDEFINED', 4, 8]
+
+    integer_kinds = []
+    boolean_kinds = []
+    real_kinds = []
+    for t in intrinsics:
+        for k in precisions:
+            if isinstance(k, str):
+                scalar_type = ScalarType(ScalarType.Intrinsic[t], ScalarType.Precision[k])
+            else:
+                scalar_type = ScalarType(ScalarType.Intrinsic[t], k)
+
+            if t == 'INTEGER':
+                integer_kinds.append(scalar_type)
+            elif t == 'REAL':
+                real_kinds.append(scalar_type)
+            else:
+                boolean_kinds.append(scalar_type)
+
+    return integer_kinds, real_kinds, boolean_kinds
+
+def _initialize_type_checkers(container, array_shape, arrays_only=False):
+    integer_kinds, real_kinds, boolean_kinds = _initialize_scalar_kinds()
+    scalar_datatypes = integer_kinds + real_kinds + boolean_kinds
+
+    array_datatypes = [ArrayType(scalar_type, array_shape) for scalar_type in scalar_datatypes]
+
+    routine_symbols = {}
+
+    if arrays_only:
+        datatypes = array_datatypes
+    else:
+        datatypes = scalar_datatypes + array_datatypes
+
+    for datatype in datatypes:
+        arg = DataSymbol("arg", datatype)
+        arg.interface = ArgumentInterface(ArgumentInterface.Access.READ)
+
+        if isinstance(datatype.precision, int):
+            name = f"{datatype.intrinsic.name}_{datatype.precision}"
+        else:
+            name = f"{datatype.intrinsic.name}_{datatype.precision.name}"
+
+        if datatype in array_datatypes:
+            dim_str = f"{array_shape[0]}"
+            if len(array_shape) == 2:
+                dim_str += f"x{array_shape[1]}"
+            name += "_" + dim_str
+
+        routine = Routine(name)
+        routine.symbol_table._argument_list.append(arg)
+        routine.symbol_table.add(arg)
+    
+        container.addchild(routine)
+        
+        if datatype in scalar_datatypes:
+            key = "scalar"
+        else:
+            key = dim_str
+        routine_symbols[(datatype.intrinsic, datatype.precision, key)] = routine.symbol_table.lookup_with_tag("own_routine_symbol")
+
+    return container, routine_symbols
+
+def _initialize_datasymbol(datatype):
+    if datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
+        initial_value = True
+    elif datatype.intrinsic is ScalarType.Intrinsic.INTEGER:
+        initial_value = 1
+    else:
+        initial_value = 1.1
+
+    if isinstance(datatype.precision, int):
+        name = f"ref_{datatype.intrinsic.name}_{datatype.precision}"
+    else:
+        name = f"ref_{datatype.intrinsic.name}_{datatype.precision.name}"
+    
+    if isinstance(datatype, ArrayType):
+        name += f"_{datatype.shape[0].upper.value}"
+        if len(datatype.shape) == 2:
+            name += f"x{datatype.shape[1].upper.value}"
+
+    return DataSymbol(name, datatype, initial_value=initial_value, interface=StaticInterface())
+
+    
+def _write_and_compile(fortran_writer, container, compiler_cmd = "gfortran"):
+    with open(f"{container.name}.f90", 'w') as file:
+        fortran = fortran_writer(container)
+        #print(fortran)
+        file.write(fortran)
+        
+    run([compiler_cmd, f"{container.name}.f90", "-o", container.name], check=True)
+    run(f"./{container.name}", check=True)
+
+def test_intrinsiccall_datatypes(fortran_writer, compiler_cmd = "gfortran"):
+    container = FileContainer("intrinsiccall")
+
+    array_shape = [2,3]
+    vector_shape = [3]
+
+    container, routine_symbols = _initialize_type_checkers(container, array_shape)
+    container, other_routine_symbols = _initialize_type_checkers(container, vector_shape, arrays_only=True)
+    routine_symbols = {**routine_symbols, **other_routine_symbols}
+
+    integer_kinds, real_kinds, boolean_kinds = _initialize_scalar_kinds()
+    scalar_datatypes = integer_kinds + real_kinds
+
+    array_mask_datatypes = [ArrayType(scalar_type, array_shape) for scalar_type in boolean_kinds]
+    array_datatypes = [ArrayType(scalar_type, array_shape) for scalar_type in scalar_datatypes]
+    vector_datatypes = [ArrayType(scalar_type, vector_shape) for scalar_type in scalar_datatypes]
+
+    program = Routine("intrinsiccall", is_program=True)
+    container.addchild(program)
+
+    for datatype in scalar_datatypes + array_datatypes + vector_datatypes:
+        sym = _initialize_datasymbol(datatype)
+        
+        program.symbol_table.add(sym)
+
+        if datatype in scalar_datatypes:
+            key = "scalar"
+        elif datatype in array_datatypes:
+            key = f"{array_shape[0]}x{array_shape[1]}"
+        else:
+            key = f"{vector_shape[0]}"
+
+        # RANDOM_NUMBER, HUGE and TINY only take REAL args
+        if datatype.intrinsic is ScalarType.Intrinsic.REAL \
+            and datatype in scalar_datatypes:
+            for func in (IntrinsicCall.Intrinsic.HUGE,
+                         IntrinsicCall.Intrinsic.TINY):
+                call = IntrinsicCall.create(func, [Reference(sym)])
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                     call.datatype.precision,
+                                                     key)], 
+                                    [call])
+                program.addchild(check)
+
+        # MINVAL, MAXVAL, SUM : matrix/vector => scalar
+        if datatype in array_datatypes + vector_datatypes:
+            for func in (IntrinsicCall.Intrinsic.MINVAL,
+                        IntrinsicCall.Intrinsic.MAXVAL,
+                        IntrinsicCall.Intrinsic.SUM):
+                call = IntrinsicCall.create(func, [Reference(sym)])
+
+                assert isinstance(call.datatype, ScalarType)
+                assert (call.datatype.intrinsic is datatype.intrinsic)
+                assert (call.datatype.precision is datatype.precision)
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                        call.datatype.precision,
+                                                        "scalar")], 
+                                    [call])
+                program.addchild(check)
+
+        # MINVAL, MAXVAL, SUM : (vector, 1) => scalar
+        if datatype in vector_datatypes:
+            for func in (IntrinsicCall.Intrinsic.MINVAL,
+                         IntrinsicCall.Intrinsic.MAXVAL,
+                         IntrinsicCall.Intrinsic.SUM):
+                call = IntrinsicCall.create(func, [Reference(sym), 
+                                                   ("dim", Literal("1", INTEGER_TYPE))])
+
+                assert isinstance(call.datatype, ScalarType)
+                assert (call.datatype.intrinsic is datatype.intrinsic)
+                assert (call.datatype.precision is datatype.precision)
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                     call.datatype.precision,
+                                                     "scalar")], 
+                                    [call])
+                program.addchild(check)
+
+        # MINVAL, MAXVAL, SUM : (matrix_ixj, 1) => vector_j
+        if datatype in array_datatypes:
+            for func in (IntrinsicCall.Intrinsic.MINVAL,
+                         IntrinsicCall.Intrinsic.MAXVAL,
+                         IntrinsicCall.Intrinsic.SUM):
+                call = IntrinsicCall.create(func, [Reference(sym), 
+                                                   ("dim", Literal("1", INTEGER_TYPE))])
+
+                assert isinstance(call.datatype, ArrayType)
+                assert (call.datatype.shape[0].upper.value == str(array_shape[1]))
+                assert (call.datatype.intrinsic is datatype.intrinsic)
+                assert (call.datatype.precision is datatype.precision)
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                     call.datatype.precision,
+                                                     "3")], 
+                                    [call])
+                program.addchild(check)
+                
+        # MINVAL, MAXVAL, SUM : (matrix_ixj, mask_ixj) => scalar
+        if datatype in array_datatypes:
+            new_sym = _initialize_datasymbol(array_mask_datatypes[0])
+            mask = DataSymbol(new_sym.name + "_mask", INTEGER_TYPE)
+            mask.copy_properties(new_sym)
+            if mask.name not in program.symbol_table:
+                program.symbol_table.add(mask)
+
+            for func in (IntrinsicCall.Intrinsic.MINVAL,
+                         IntrinsicCall.Intrinsic.MAXVAL,
+                         IntrinsicCall.Intrinsic.SUM):
+                call = IntrinsicCall.create(func, [Reference(sym), 
+                                                   ("mask", Reference(mask))])
+
+                assert isinstance(call.datatype, ScalarType)
+                assert (call.datatype.intrinsic is datatype.intrinsic)
+                assert (call.datatype.precision is datatype.precision)
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                     call.datatype.precision,
+                                                     "scalar")], 
+                                    [call])
+                program.addchild(check)
+
+        # MINVAL, MAXVAL, SUM : (matrix_ixj, 1, mask_ixj) => vector_j
+        if datatype in array_datatypes:
+            new_sym = _initialize_datasymbol(array_mask_datatypes[0])
+            mask = DataSymbol(new_sym.name + "_mask", INTEGER_TYPE)
+            mask.copy_properties(new_sym)
+            if mask.name not in program.symbol_table:
+                program.symbol_table.add(mask)
+
+            for func in (IntrinsicCall.Intrinsic.MINVAL,
+                         IntrinsicCall.Intrinsic.MAXVAL,
+                         IntrinsicCall.Intrinsic.SUM):
+                call = IntrinsicCall.create(func, [Reference(sym),
+                                                   ("dim", Literal("1", INTEGER_TYPE)),
+                                                   ("mask", Reference(mask))])
+
+                assert isinstance(call.datatype, ArrayType)
+                assert (call.datatype.shape[0].upper.value == str(array_shape[1]))
+                assert (call.datatype.intrinsic is datatype.intrinsic)
+                assert (call.datatype.precision is datatype.precision)
+
+                check = Call.create(routine_symbols[(call.datatype.intrinsic, 
+                                                     call.datatype.precision,
+                                                     "3")], 
+                                    [call])
+                program.addchild(check)
+
+    _write_and_compile(fortran_writer, container, compiler_cmd)
+
+from psyclone.psyir.backend.fortran import FortranWriter
+
+if __name__ == "__main__":
+    fortran_writer = FortranWriter()
+    test_intrinsiccall_datatypes(fortran_writer, "gfortran")
