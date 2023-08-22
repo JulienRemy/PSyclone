@@ -68,6 +68,7 @@ from psyclone.psyir.symbols import (
     RoutineSymbol,
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
+from psyclone.line_length import FortLineLength
 
 from psyclone.autodiff import SubroutineGenerator
 
@@ -411,11 +412,15 @@ class ComparatorGenerator(object):
         # - the autodiff transformation result
         # - the Tapenade transformation result
         # - the comparator subroutine
+        # taking care of using line_length on PSyclone outputs
+
+        line_length = FortLineLength()
 
         comparator_file_path = file_path[:dot_index] + "_comp" + file_path[dot_index:]
         # Write to the file
         with open(comparator_file_path, "w") as comparator_file:
             autodiff_string = fwriter(autodiff_result)
+            autodiff_string = line_length.process(autodiff_string)
             comparator_file.write("! psyclone.autodiff produced:\n")
             comparator_file.write(autodiff_string)
 
@@ -426,7 +431,9 @@ class ComparatorGenerator(object):
 
             comparator_file.write("\n\n\n! ===================================== \n")
             comparator_file.write("! Comparator subroutine:\n")
-            comparator_file.write(comparator.write())
+            comparator_string = comparator.write()
+            comparator_string = line_length.process(comparator_string)
+            comparator_file.write(comparator_string)
 
         ###############################
         # Finally, compile using numpy.f2py
