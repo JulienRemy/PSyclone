@@ -360,8 +360,8 @@ class ADOperationTrans(ADElementTrans):
             return inverse(add(one(), square(operand)))
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
-            # return div(operand, operation.copy())
-            return sign(one(operand.datatype), operand)
+            return div(operand, operation.copy())
+            #return sign(one(operand.datatype), operand)
         # if operator == UnaryOperation.Operator.CEIL:
         #    # 0             if sin(pi * operand) == 0
         #    # undefined     otherwise...
