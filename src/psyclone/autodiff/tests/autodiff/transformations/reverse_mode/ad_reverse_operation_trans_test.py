@@ -54,15 +54,15 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.transformations import TransformationError
 from psyclone.autodiff.transformations import (
-    ADOperationTrans,
-    ADRoutineTrans,
-    ADContainerTrans,
+    ADReverseOperationTrans,
+    ADReverseRoutineTrans,
+    ADReverseContainerTrans,
 )
 from psyclone.autodiff import assign, one, ADSplitReversalSchedule
 
-AP = ADRoutineTrans._adjoint_prefix
-AS = ADRoutineTrans._adjoint_suffix
-OA = ADRoutineTrans._operation_adjoint_name
+AP = ADReverseRoutineTrans._adjoint_prefix
+AS = ADReverseRoutineTrans._adjoint_suffix
+OA = ADReverseRoutineTrans._operation_adjoint_name
 
 
 def compare(nodes, strings, fortran_writer):
@@ -81,7 +81,7 @@ def initialize_transformations():
     psy = freader.psyir_from_source(src)
     container = psy.walk(Container)[0]
 
-    ad_container_trans = ADContainerTrans()
+    ad_container_trans = ADReverseContainerTrans()
     ad_container_trans.apply(container, "foo", [], [], reversal_schedule)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
@@ -90,8 +90,8 @@ def initialize_transformations():
 
 def test_ad_operation_trans_initialization():
     with pytest.raises(TypeError) as info:
-        ADOperationTrans(None)
-    assert "Argument should be of type 'ADRoutineTrans' but found 'NoneType'." in str(
+        ADReverseOperationTrans(None)
+    assert "Argument should be of type 'ADForwardRoutineTrans' or 'ADReverseRoutineTrans' but found 'NoneType'." in str(
         info.value
     )
 
@@ -110,14 +110,14 @@ def test_ad_operation_trans_validate():
     with pytest.raises(TransformationError) as info:
         ad_operation_trans.validate(None, None)
     assert (
-        "'operation' argument in ADOperationTrans should be a "
+        "'operation' argument in ADReverseOperationTrans should be a "
         "PSyIR 'Operation' but found 'NoneType'." in str(info.value)
     )
 
     with pytest.raises(TransformationError) as info:
         ad_operation_trans.validate(unary_op, None)
     assert (
-        "'parent_adj' argument in ADOperationTrans should be a "
+        "'parent_adj' argument in ADReverseOperationTrans should be a "
         "PSyIR 'DataSymbol' but found 'NoneType'." in str(info.value)
     )
 
@@ -200,7 +200,7 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     assert fortran_writer(ad_operation_trans.differentiate_unary(log)) == "1.0 / var"
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(log10))
-        == "1.0 / (var * LOG(10))"
+        == "1.0 / (var * LOG(10.0))"
     )
     assert fortran_writer(ad_operation_trans.differentiate_unary(cos)) == "-SIN(var)"
     assert fortran_writer(ad_operation_trans.differentiate_unary(sin)) == "COS(var)"
@@ -222,7 +222,7 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(abs_val))
-        == "SIGN(1, var)"
+        == "var / ABS(var)"
     )
 
     ceil = UnaryOperation.create(UnaryOperation.Operator.CEIL, ref)
@@ -235,8 +235,8 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
 
 
 def test_ad_operation_trans_differentiate_binary(fortran_writer):
-    # ad_container_trans = ADContainerTrans()
-    # ad_routine_trans = ADRoutineTrans(ad_container_trans)
+    # ad_container_trans = ADReverseContainerTrans()
+    # ad_routine_trans = ADReverseRoutineTrans(ad_container_trans)
     _, _, ad_operation_trans = initialize_transformations()
 
     with pytest.raises(TypeError) as info:
@@ -407,7 +407,7 @@ def test_ad_operation_trans_apply(fortran_writer):
 
     ##############
     # NOTE: the first element of assignment_lhs_incr is an incrementation
-    # IT IS TRANSFORMED BY ADAssignmentTrans to an assignment
+    # IT IS TRANSFORMED BY ADReverseAssignmentTrans to an assignment
     from psyclone.psyir.nodes import Assignment
 
     # References, iterative
@@ -513,7 +513,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
 
 if __name__ == "__main__":
-    print("Testing ADOperationTrans")
+    print("Testing ADReverseOperationTrans")
     from psyclone.psyir.backend.fortran import FortranWriter
 
     fwriter = FortranWriter()

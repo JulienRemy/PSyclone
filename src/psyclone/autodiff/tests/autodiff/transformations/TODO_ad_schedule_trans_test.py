@@ -33,7 +33,7 @@
 # -----------------------------------------------------------------------------
 # Authors: J. Remy, Inria
 
-"""A module to perform tests on the autodiff ADScheduleTrans class.
+"""A module to perform tests on the autodiff ADReverseScheduleTrans class.
 #"""
 
 import pytest
@@ -60,10 +60,10 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.transformations import TransformationError
 from psyclone.autodiff.transformations import (
-    ADOperationTrans,
-    ADScheduleTrans,
-    ADContainerTrans,
-    ADCallTrans,
+    ADReverseOperationTrans,
+    ADReverseScheduleTrans,
+    ADReverseContainerTrans,
+    ADReverseCallTrans,
 )
 from psyclone.autodiff.tapes import ADValueTape
 from psyclone.autodiff import (
@@ -76,9 +76,9 @@ from psyclone.autodiff import (
     ADJointReversalSchedule,
 )
 
-AP = ADScheduleTrans._adjoint_prefix
-AS = ADScheduleTrans._adjoint_suffix
-OA = ADScheduleTrans._operation_adjoint_name
+AP = ADReverseScheduleTrans._adjoint_prefix
+AS = ADReverseScheduleTrans._adjoint_suffix
+OA = ADReverseScheduleTrans._operation_adjoint_name
 TaP = ADValueTape._tape_prefix
 
 SRC = """subroutine foo()
@@ -89,9 +89,9 @@ def initialize_transformations():
     psy = freader.psyir_from_source(SRC)
     container = psy.walk(Container)[0]
 
-    ad_container_trans = ADContainerTrans()
+    ad_container_trans = ADReverseContainerTrans()
     ad_container_trans.apply(container, 'foo', [], [], ADJointReversalSchedule())
-    ad_schedule_trans = ADScheduleTrans(ad_container_trans)
+    ad_schedule_trans = ADReverseScheduleTrans(ad_container_trans)
 
     return ad_container_trans, ad_schedule_trans
 
