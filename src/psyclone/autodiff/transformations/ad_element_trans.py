@@ -48,35 +48,37 @@ class ADElementTrans(ADTrans, metaclass=ABCMeta):
     adjoints, temporaries, etc. are stored.
     This is the parent class of 'ADOperationTrans', 'ADAssignmentTrans' 
     and 'ADCallTrans'.
+
+    :param routine_trans: ADRoutineTrans context instance
+    :type routine_trans: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
+
+    :raises TypeError: if the routine_trans argument is of the wrong type
     """
 
     @property
     def routine_trans(self):
-        """Contextual ADRoutineTrans from which this ADElementTrans subclass instance \
-        was created.
+        """Contextual ADForwardRoutineTrans or ADReverseRoutineTrans \
+        from which this ADElementTrans subclass instance was created.
 
         :return: contextual ADRoutineTrans
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
+        :rtype: Union[:py:class:`psyclone.autodiff.transformations.ADForwardRoutineTrans`,
+                      :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`]
         """
         return self._routine_trans
     
     @routine_trans.setter
     def routine_trans(self, routine_trans):
-        from psyclone.autodiff.transformations import ADRoutineTrans
-        if not isinstance(routine_trans, ADRoutineTrans):
+        from psyclone.autodiff.transformations import ADForwardRoutineTrans, ADReverseRoutineTrans
+
+        if not isinstance(routine_trans, (ADForwardRoutineTrans, ADReverseRoutineTrans)):
             raise TypeError(
-                f"Argument should be of type 'ADRoutineTrans' "
+                f"Argument should be of type 'ADForwardRoutineTrans' "
+                f"or 'ADReverseRoutineTrans' "
                 f"but found '{type(routine_trans).__name__}'."
             )
         self._routine_trans = routine_trans
 
     def __init__(self, routine_trans):
-        #
-        from psyclone.autodiff.transformations import ADRoutineTrans
-        if not isinstance(routine_trans, ADRoutineTrans):
-            raise TypeError(
-                f"Argument should be of type 'ADRoutineTrans' "
-                f"but found '{type(routine_trans).__name__}'."
-            )
+        # Setter is typechecked
         self.routine_trans = routine_trans
 

@@ -33,15 +33,15 @@
 # -----------------------------------------------------------------------------
 # Authors: J. Remy, Inria
 
-"""A module to perform tests on the autodiff ADAssignmentTrans class.
+"""A module to perform tests on the autodiff ADReverseAssignmentTrans class.
 """
 
 import pytest
 
 from psyclone.autodiff.transformations import (
-    ADAssignmentTrans,
-    ADContainerTrans,
-    ADRoutineTrans,
+    ADReverseAssignmentTrans,
+    ADReverseContainerTrans,
+    ADReverseRoutineTrans,
 )
 from psyclone.autodiff import assign, minus, add, ADSplitReversalSchedule
 
@@ -53,10 +53,10 @@ from psyclone.psyir.symbols import (
 from psyclone.psyir.nodes import Literal, Container
 from psyclone.psyir.transformations import TransformationError
 
-AP = ADRoutineTrans._adjoint_prefix
-AS = ADRoutineTrans._adjoint_suffix
-TeP = ADRoutineTrans._temp_name_prefix
-TeS = ADRoutineTrans._temp_name_suffix
+AP = ADReverseRoutineTrans._adjoint_prefix
+AS = ADReverseRoutineTrans._adjoint_suffix
+TeP = ADReverseRoutineTrans._temp_name_prefix
+TeS = ADReverseRoutineTrans._temp_name_suffix
 
 
 def compare(nodes, strings, fortran_writer):
@@ -75,7 +75,7 @@ def initialize_transformations():
     psy = freader.psyir_from_source(src)
     container = psy.walk(Container)[0]
 
-    ad_container_trans = ADContainerTrans()
+    ad_container_trans = ADReverseContainerTrans()
     ad_container_trans.apply(container, "foo", [], [], reversal_schedule)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
@@ -84,9 +84,9 @@ def initialize_transformations():
 
 def test_ad_assignment_trans_initialization():
     with pytest.raises(TypeError) as info:
-        ADAssignmentTrans(None)
+        ADReverseAssignmentTrans(None)
     assert (
-        "Argument should be of type 'ADRoutineTrans' "
+        "Argument should be of type 'ADForwardRoutineTrans' or 'ADReverseRoutineTrans' "
         "but found 'NoneType'." in str(info.value)
     )
 
@@ -104,7 +104,7 @@ def test_ad_assignment_trans_validate():
     with pytest.raises(TransformationError) as info:
         ad_assignment_trans.validate(None)
     assert (
-        "'assignment' argument in ADAssignmentTrans.apply should be a "
+        "'assignment' argument should be a "
         "PSyIR 'Assignment' but found 'NoneType'." in str(info.value)
     )
 
@@ -319,7 +319,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
     # Call assignment is not implemented yet
 
 if __name__ == "__main__":
-    print("Testing ADAssignmentTrans")
+    print("Testing ADReverseAssignmentTrans")
     from psyclone.psyir.backend.fortran import FortranWriter
 
     fwriter = FortranWriter()
