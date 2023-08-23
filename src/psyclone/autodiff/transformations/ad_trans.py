@@ -43,7 +43,7 @@ from psyclone.psyGen import Transformation
 
 class ADTrans(Transformation, metaclass=ABCMeta):
     """An abstract base class for all `psyclone.autodiff` transformations.
-    Default options for `apply` are defined here, as a classe attribute, \
+    Default options for `apply` are defined here, as a class attribute, \
     as well as option unpacking from a `dict`.
     """
     _default_options = {'verbose': False,

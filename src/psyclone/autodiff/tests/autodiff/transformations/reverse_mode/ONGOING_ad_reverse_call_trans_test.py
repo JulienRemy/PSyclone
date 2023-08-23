@@ -33,7 +33,7 @@
 # -----------------------------------------------------------------------------
 # Authors: J. Remy, Inria
 
-"""A module to perform tests on the autodiff ADCallTrans class.
+"""A module to perform tests on the autodiff ADReverseCallTrans class.
 #"""
 
 import pytest
@@ -60,10 +60,10 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.transformations import TransformationError
 from psyclone.autodiff.transformations import (
-    ADOperationTrans,
-    ADRoutineTrans,
-    ADContainerTrans,
-    ADCallTrans,
+    ADReverseOperationTrans,
+    ADReverseRoutineTrans,
+    ADReverseContainerTrans,
+    ADReverseCallTrans,
 )
 from psyclone.autodiff.tapes import ADValueTape
 from psyclone.autodiff import (
@@ -76,17 +76,17 @@ from psyclone.autodiff import (
     ADJointReversalSchedule,
 )
 
-AP = ADRoutineTrans._adjoint_prefix
-AS = ADRoutineTrans._adjoint_suffix
-OA = ADRoutineTrans._operation_adjoint_name
+AP = ADReverseRoutineTrans._adjoint_prefix
+AS = ADReverseRoutineTrans._adjoint_suffix
+OA = ADReverseRoutineTrans._operation_adjoint_name
 TaP = ADValueTape._tape_prefix
 
-RECP = ADRoutineTrans._recording_prefix
-RECS = ADRoutineTrans._recording_suffix
-RETP = ADRoutineTrans._returning_prefix
-RETS = ADRoutineTrans._returning_suffix
-REVP = ADRoutineTrans._reversing_prefix
-REVS = ADRoutineTrans._reversing_suffix
+RECP = ADReverseRoutineTrans._recording_prefix
+RECS = ADReverseRoutineTrans._recording_suffix
+RETP = ADReverseRoutineTrans._returning_prefix
+RETS = ADReverseRoutineTrans._returning_suffix
+REVP = ADReverseRoutineTrans._reversing_prefix
+REVS = ADReverseRoutineTrans._reversing_suffix
 
 SRC = """subroutine foo()
 end subroutine foo
@@ -101,7 +101,7 @@ def initialize_transformations(
     psy = freader.psyir_from_source(src)
     container = psy.walk(Container)[0]
 
-    ad_container_trans = ADContainerTrans()
+    ad_container_trans = ADReverseContainerTrans()
     ad_container_trans.apply(container, routine, [], [], reversal_schedule)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
@@ -110,9 +110,9 @@ def initialize_transformations(
 
 def test_ad_call_trans_initialization():
     with pytest.raises(TypeError) as info:
-        ADCallTrans(None)
+        ADReverseCallTrans(None)
     assert (
-        "Argument should be of type 'ADRoutineTrans' "
+        "Argument should be of type 'ADForwardRoutineTrans' or 'ADReverseRoutineTrans' "
         "but found 'NoneType'." in str(info.value)
     )
 
@@ -127,7 +127,7 @@ def test_ad_call_trans_validate():
     with pytest.raises(TransformationError) as info:
         ad_call_trans.validate(None)
     assert (
-        "'call' argument in ADCallTrans should be a "
+        "'call' argument in ADReverseCallTrans should be a "
         "PSyIR 'Call' but found 'NoneType'." in str(info.value)
     )
 
@@ -312,12 +312,12 @@ def test_ad_call_trans_transform_called_routine():
     assert ad_container_trans.value_tape_map[routine_sym] == tape
 
     assert len(ad_container_trans.routine_transformations) == 2
-    assert isinstance(ad_container_trans.routine_transformations[1], ADRoutineTrans)
+    assert isinstance(ad_container_trans.routine_transformations[1], ADReverseRoutineTrans)
     assert ad_container_trans.routine_transformations[1].routine == routine
 
     assert ad_container_trans.routine_map[routine_sym] == [rec_sym, ret_sym, rev_sym]
 
-    assert isinstance(ad_call_trans.called_routine_trans, ADRoutineTrans)
+    assert isinstance(ad_call_trans.called_routine_trans, ADReverseRoutineTrans)
     assert ad_call_trans.called_routine_trans != ad_routine_trans
 
     #
@@ -344,7 +344,7 @@ def test_ad_call_trans_apply():
     with pytest.raises(TransformationError) as info:
         ad_call_trans.apply(None)
     assert (
-        "'call' argument in ADCallTrans should be a "
+        "'call' argument in ADReverseCallTrans should be a "
         "PSyIR 'Call' but found 'NoneType'." in str(info.value)
     )
 
@@ -551,7 +551,7 @@ def test_arguments(applied_ad_call_trans):
 # temp and adjoint assignments?
 
 if __name__ == "__main__":
-    print("Testing ADCallTrans")
+    print("Testing ADReverseCallTrans")
     from psyclone.psyir.backend.fortran import FortranWriter
 
     fwriter = FortranWriter()
