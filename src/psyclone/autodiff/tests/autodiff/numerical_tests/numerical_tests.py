@@ -33,9 +33,9 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This file contains numerical tests of `psyclone.autodiff` reverse-mode \
+"""This file contains numerical tests of `psyclone.autodiff` forward- and reverse-mode \
 transformations by comparing to results obtained using Tapenade.
-NOTE: this is upcoming work and nothing much has been done here."""
+NOTE: this is a work in progress."""
 
 from itertools import product
 import numpy as np
