@@ -47,7 +47,7 @@ tested yet.
 import subprocess
 from importlib import import_module
 
-from psyclone.autodiff.transformations import ADContainerTrans, ADRoutineTrans
+from psyclone.autodiff.transformations import ADReverseContainerTrans, ADReverseRoutineTrans
 from psyclone.psyir.frontend.fortran import FortranReader
 from psyclone.psyir.backend.fortran import FortranWriter
 from psyclone.psyir.nodes import (
@@ -101,7 +101,7 @@ class ComparatorGenerator(object):
         reversal_schedule,
         options=None
     ):
-        """Applies an ADContainerTrans from psyclone.autodiff.
+        """Applies an ADReverseContainerTrans from psyclone.autodiff.
 
         :param file_container: PSyIR file container containing the routine.
         :type file_container: :py:class:`psyclone.psyir.nodes.FileContainer`
@@ -122,7 +122,7 @@ class ComparatorGenerator(object):
         :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
 
-        container_trans = ADContainerTrans()
+        container_trans = ADReverseContainerTrans()
         return container_trans.apply(
             file_container,
             routine_name,
@@ -279,9 +279,9 @@ class ComparatorGenerator(object):
                 # Create the name of the adjoint and a new variable for it
                 # TODO: correct datatype
                 arg_adj_name = (
-                    ADRoutineTrans._adjoint_prefix
+                    ADReverseRoutineTrans._adjoint_prefix
                     + original_arg.name
-                    + ADRoutineTrans._adjoint_suffix
+                    + ADReverseRoutineTrans._adjoint_suffix
                 )
                 arg_adj = comparator.new_variable(arg_adj_name, cls._default_scalar_datatype)
 
@@ -319,9 +319,9 @@ class ComparatorGenerator(object):
 
         jacobians = (J_autodiff, J_tapenade)
         reversing_names = (
-            ADRoutineTrans._reversing_prefix
+            ADReverseRoutineTrans._reversing_prefix
             + routine_name
-            + ADRoutineTrans._reversing_suffix,
+            + ADReverseRoutineTrans._reversing_suffix,
             routine_name + "_b",
         )
 

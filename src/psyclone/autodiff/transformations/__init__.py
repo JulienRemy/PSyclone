@@ -39,11 +39,48 @@
 from psyclone.autodiff.transformations.ad_trans import ADTrans
 from psyclone.autodiff.transformations.ad_container_trans import ADContainerTrans
 from psyclone.autodiff.transformations.ad_schedule_trans import ADScheduleTrans
-from psyclone.autodiff.transformations.ad_routine_trans import ADRoutineTrans
 from psyclone.autodiff.transformations.ad_element_trans import ADElementTrans
 from psyclone.autodiff.transformations.ad_assignment_trans import ADAssignmentTrans
 from psyclone.autodiff.transformations.ad_operation_trans import ADOperationTrans
 from psyclone.autodiff.transformations.ad_call_trans import ADCallTrans
+
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_container_trans import (
+    ADReverseContainerTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_schedule_trans import (
+    ADReverseScheduleTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_routine_trans import (
+    ADReverseRoutineTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_assignment_trans import (
+    ADReverseAssignmentTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_operation_trans import (
+    ADReverseOperationTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_call_trans import (
+    ADReverseCallTrans,
+)
+
+from psyclone.autodiff.transformations.forward_mode.ad_forward_container_trans import (
+    ADForwardContainerTrans,
+)
+from psyclone.autodiff.transformations.forward_mode.ad_forward_schedule_trans import (
+    ADForwardScheduleTrans,
+)
+from psyclone.autodiff.transformations.forward_mode.ad_forward_routine_trans import (
+    ADForwardRoutineTrans,
+)
+from psyclone.autodiff.transformations.forward_mode.ad_forward_assignment_trans import (
+    ADForwardAssignmentTrans,
+)
+from psyclone.autodiff.transformations.forward_mode.ad_forward_operation_trans import (
+    ADForwardOperationTrans,
+)
+from psyclone.autodiff.transformations.forward_mode.ad_forward_call_trans import (
+    ADForwardCallTrans,
+)
 
 # from psyclone.autodiff.transformations.ad_adjoint_symbol_trans import ADAdjointSymbolTrans
 
@@ -53,10 +90,22 @@ __all__ = [
     "ADTrans",
     "ADContainerTrans",
     "ADScheduleTrans",
-    "ADRoutineTrans",
+    # "ADRoutineTrans",
     "ADElementTrans",
     "ADAssignmentTrans",
     "ADOperationTrans",
     "ADCallTrans",
     #'ADAdjointSymbolTrans',
+    "ADReverseContainerTrans",
+    "ADReverseScheduleTrans",
+    "ADReverseRoutineTrans",
+    "ADReverseAssignmentTrans",
+    "ADReverseOperationTrans",
+    "ADReverseCallTrans",
+    "ADForwardContainerTrans",
+    "ADForwardScheduleTrans",
+    "ADForwardRoutineTrans",
+    "ADForwardAssignmentTrans",
+    "ADForwardOperationTrans",
+    "ADForwardCallTrans",
 ]
