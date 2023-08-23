@@ -74,9 +74,10 @@ class NumericalComparator(object):
         dependent_vars,
         independent_vars,
         argument_values,
-        reversal_schedule,
         output_type,
-        options=None,
+        options,
+        mode,
+        reversal_schedule=None
     ):
         if not isinstance(argument_values, dict):
             raise TypeError(
@@ -116,9 +117,10 @@ class NumericalComparator(object):
             routine_name,
             dependent_vars,
             independent_vars,
-            reversal_schedule,
             output_type,
             options,
+            mode,
+            reversal_schedule
         )
 
         # Check that the provided arguments match those of the comparator
