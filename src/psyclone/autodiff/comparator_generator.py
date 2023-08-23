@@ -35,13 +35,12 @@
 
 """This file contains a Fortran subroutine generator class for the purpose of \
 comparing numerical results of programs transformed using `psyclone.autodiff` \
-with Tapenade (3.16) in reverse-mode (without `vector`/`multi` mode).
+with Tapenade (3.16) in forward- and reverse-mode (without `vector`/`multi` mode).
 Both tools are used to transform a subroutine, which possible nested calls and \
 fill Jacobians for all dependent and independent variables. 
 These are then compared in a Fortran subroutine, which is called from Python \
 using `numpy.f2py`.
-NOTE: this is a work in progress, it hasn't been cleaned up, refactored nor \
-tested yet.
+NOTE: this is a work in progress.
 """
 
 import subprocess
@@ -84,13 +83,12 @@ from numpy import f2py
 class ComparatorGenerator(object):
     """This class is a Fortran subroutine generator for the purpose of \
     comparing numerical results of programs transformed using `psyclone.autodiff` \
-    with Tapenade (3.16) in reverse-mode (without `vector`/`multi` mode).
+    with Tapenade (3.16) in forward- and reverse-mode (without `vector`/`multi` mode).
     Both tools are used to transform a subroutine, with possible nested calls and \
     fill Jacobians for all dependent and independent variables. 
     These are then compared in a Fortran subroutine, which is called from Python \
     using `numpy.f2py`.
-    NOTE: this is a work in progress, it hasn't been cleaned up, refactored nor \
-    tested yet.
+    NOTE: this is a work in progress.
     """
 
     # _fortran_version = "fortran90"
