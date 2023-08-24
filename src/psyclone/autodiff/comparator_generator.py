@@ -350,15 +350,15 @@ class ComparatorGenerator(object):
                 # TODO: correct datatype
                 if mode == "forward":
                     arg_diff_name = (
-                        ADForwardRoutineTrans._derivative_prefix
+                        ADForwardRoutineTrans._differential_prefix
                         + original_arg.name
-                        + ADForwardRoutineTrans._derivative_suffix
+                        + ADForwardRoutineTrans._differential_postfix
                     )
                 else:
                     arg_diff_name = (
-                        ADReverseRoutineTrans._adjoint_prefix
+                        ADReverseRoutineTrans._differential_prefix
                         + original_arg.name
-                        + ADReverseRoutineTrans._adjoint_suffix
+                        + ADReverseRoutineTrans._differential_postfix
                     )
                 arg_diff = comparator.new_variable(
                     arg_diff_name, cls._default_scalar_datatype
@@ -401,14 +401,14 @@ class ComparatorGenerator(object):
             transformed_names = (
                 ADForwardRoutineTrans._tangent_prefix
                 + routine_name
-                + ADForwardRoutineTrans._tangent_suffix,
+                + ADForwardRoutineTrans._tangent_postfix,
                 routine_name + tapenade_postfix,
             )
         else:
             transformed_names = (
                 ADReverseRoutineTrans._reversing_prefix
                 + routine_name
-                + ADReverseRoutineTrans._reversing_suffix,
+                + ADReverseRoutineTrans._reversing_postfix,
                 routine_name + tapenade_postfix,
             )
 

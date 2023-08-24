@@ -38,7 +38,9 @@
 
 from psyclone.autodiff.transformations.ad_trans import ADTrans
 from psyclone.autodiff.transformations.ad_container_trans import ADContainerTrans
+from psyclone.autodiff.transformations.ad_scope_trans import ADScopeTrans
 from psyclone.autodiff.transformations.ad_schedule_trans import ADScheduleTrans
+from psyclone.autodiff.transformations.ad_routine_trans import ADRoutineTrans
 from psyclone.autodiff.transformations.ad_element_trans import ADElementTrans
 from psyclone.autodiff.transformations.ad_assignment_trans import ADAssignmentTrans
 from psyclone.autodiff.transformations.ad_operation_trans import ADOperationTrans
@@ -89,8 +91,9 @@ from psyclone.autodiff.transformations.forward_mode.ad_forward_call_trans import
 __all__ = [
     "ADTrans",
     "ADContainerTrans",
+    "ADScopeTrans",
     "ADScheduleTrans",
-    # "ADRoutineTrans",
+    "ADRoutineTrans",
     "ADElementTrans",
     "ADAssignmentTrans",
     "ADOperationTrans",

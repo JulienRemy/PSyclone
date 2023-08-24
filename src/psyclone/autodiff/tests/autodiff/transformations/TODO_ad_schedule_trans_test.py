@@ -76,8 +76,8 @@ from psyclone.autodiff import (
     ADJointReversalSchedule,
 )
 
-AP = ADReverseScheduleTrans._adjoint_prefix
-AS = ADReverseScheduleTrans._adjoint_suffix
+AP = ADReverseScheduleTrans._differential_prefix
+AS = ADReverseScheduleTrans._differential_postfix
 OA = ADReverseScheduleTrans._operation_adjoint_name
 TaP = ADValueTape._tape_prefix
 

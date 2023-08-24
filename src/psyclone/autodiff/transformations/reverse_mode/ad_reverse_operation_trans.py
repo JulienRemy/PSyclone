@@ -191,7 +191,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            adj = self.routine_trans.data_symbol_adjoint_map[first_operand.symbol]
+            adj = self.routine_trans.data_symbol_differential_map[first_operand.symbol]
 
             parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
             adj_incr = increment(adj, parent_adj_mul)
@@ -216,7 +216,7 @@ class ADReverseOperationTrans(ADOperationTrans):
                     pass
                 elif isinstance(operand, Reference):
                     # If the operand is a Reference, increment its adjoint
-                    adj = self.routine_trans.data_symbol_adjoint_map[operand.symbol]
+                    adj = self.routine_trans.data_symbol_differential_map[operand.symbol]
                     parent_adj_mul = mul(parent_adj, partial)
                     adj_incr = increment(adj, parent_adj_mul)
 
@@ -235,7 +235,7 @@ class ADReverseOperationTrans(ADOperationTrans):
                     # If the operand is an Operation, create and assign its adjoint
                     # TODO: correct datatype
                     op_adj = self.routine_trans.new_operation_adjoint(
-                        self.routine_trans._default_adjoint_datatype
+                        self.routine_trans._default_differential_datatype
                     )
                     parent_adj_mul = mul(parent_adj, partial)
                     adj_assign = assign(op_adj, parent_adj_mul)

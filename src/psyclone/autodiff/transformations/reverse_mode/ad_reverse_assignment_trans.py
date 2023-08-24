@@ -100,7 +100,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         rhs = assignment.rhs
 
         # Adjoint symbol of LHS
-        lhs_adj = self.routine_trans.data_symbol_adjoint_map[lhs.symbol]
+        lhs_adj = self.routine_trans.data_symbol_differential_map[lhs.symbol]
 
         # In any case the LHS adjoint will be set to 0
         # after it's been used in incrementing the adjoints of variables
@@ -143,7 +143,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # This is not an iterative assignment
                 if lhs != rhs:
                     # Adjoint symbol of RHS
-                    rhs_adj = self.routine_trans.data_symbol_adjoint_map[rhs.symbol]
+                    rhs_adj = self.routine_trans.data_symbol_differential_map[rhs.symbol]
                     # Increment it
                     rhs_adj_op = increment(rhs_adj, lhs_adj)
                     # Add the incrementation to the returning motion
