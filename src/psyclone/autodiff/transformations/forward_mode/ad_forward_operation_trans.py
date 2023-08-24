@@ -142,7 +142,7 @@ class ADForwardOperationTrans(ADOperationTrans):
             return zero()
         
         if isinstance(operand, Reference):
-            operand_d_sym = self.routine_trans.data_symbol_derivative_map[operand.symbol]
+            operand_d_sym = self.routine_trans.data_symbol_differential_map[operand.symbol]
             operand_d = Reference(operand_d_sym)
         
         if isinstance(operand, Operation):
@@ -214,7 +214,7 @@ class ADForwardOperationTrans(ADOperationTrans):
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
-                operand_d_sym = self.routine_trans.data_symbol_derivative_map[operand.symbol]
+                operand_d_sym = self.routine_trans.data_symbol_differential_map[operand.symbol]
                 operands_d.append(Reference(operand_d_sym))
             else: #Operation
                 operands_d.append(self.apply(operand))

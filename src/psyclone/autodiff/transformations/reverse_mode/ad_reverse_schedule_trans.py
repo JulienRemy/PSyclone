@@ -67,20 +67,10 @@ class ADReverseScheduleTrans(ADScheduleTrans):
     :raises TypeError: if the container_trans argument is of the wrong type.
     """
 
-    _recording_prefix = ""
-    _recording_suffix = "_rec"
-
-    _returning_prefix = ""
-    _returning_suffix = "_ret"
-
-    _reversing_prefix = ""
-    _reversing_suffix = "_rev"
-
-    _schedule_prefixes = (_recording_prefix, _returning_prefix, _reversing_prefix)
-    _schedule_suffixes = (_recording_suffix, _returning_suffix, _reversing_suffix)
-
-    _adjoint_prefix = ""
-    _adjoint_suffix = "_adj"
+    _number_of_schedules = 3        # Recording, returning, reversing
+    _differential_prefix = ""
+    _differential_postfix = "_adj"
+    _differential_table_index = 1   # Adjoints are created in the returning table
 
     _operation_adjoint_name = "op_adj"
     # _call_adjoint_name = "call_adj"
@@ -88,14 +78,11 @@ class ADReverseScheduleTrans(ADScheduleTrans):
     # TODO: correct datatype
     _default_value_tape_datatype = REAL_DOUBLE_TYPE
 
-    # TODO: #001 use the dependent variable type and precision
-    _default_adjoint_datatype = REAL_DOUBLE_TYPE
-
     def __init__(self, container_trans):
         super().__init__(container_trans)
 
         # DataSymbol => adjoint DataSymbol
-        self.data_symbol_adjoint_map = dict()
+        self.data_symbol_differential_map = dict()
 
         # Lists of adjoint symbols for operations
         self.operation_adjoints = []
@@ -260,10 +247,9 @@ class ADReverseScheduleTrans(ADScheduleTrans):
         :raises NotImplementedError: if no transformation rule has yet been \
             implemented for one of the children of schedule.
 
-        :return: couple composed of the recording and returning Schedules \
-            that correspond to the transformation of this Schedule.
-        :rtype: Tuple[:py:class:`psyclone.psyir.nodes.Schedule`, \
-                      :py:class:`psyclone.psyir.nodes.Schedule`]
+        :return: list of the three transformed schedules \
+        (recording, returning, reversing).
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Schedule`]
         """
         self.validate(schedule, dependent_vars, independent_vars, value_tape, options)
 
@@ -277,7 +263,7 @@ class ADReverseScheduleTrans(ADScheduleTrans):
         self.variables_info = VariablesAccessInfo(schedule)
 
         # Empty transformed schedules with symbol tables
-        self.transformed = self.create_reversal_schedules()
+        self.transformed = self.create_transformed_schedules()
         # Add the transformed schedules symbols to the container_trans map
         # self.container_trans.add_transformed(self.schedule_symbol,
         #                                              self.transformed_symbols)
@@ -285,11 +271,7 @@ class ADReverseScheduleTrans(ADScheduleTrans):
         # Tape for the transformation
         # - none provided, create one
         if value_tape is None:
-            # If this Schedule is truly a Routine, use its name for the tape
-            if isinstance(schedule, Routine):
-                name = schedule.name
-            else:
-                name = "schedule"
+            name = "schedule"
             self.value_tape = ADValueTape(name, self._default_value_tape_datatype)
         # - use the provided one
         else:
@@ -313,91 +295,9 @@ class ADReverseScheduleTrans(ADScheduleTrans):
         # in the returning schedule
         simplify = self.unpack_option("simplify", options)
         if simplify:
-            self.simplify(options)
+            self.simplify(self.returning, options)
 
-        # Add the value_tape to the tables of both the recording
-        # and returning routines iff it's actually used
-        # if self.value_tape.length != 0:
-        #    self.add_value_tape_to_table(options)
-
-        # Tape all the values that are not written back to the parent schedule/scope
-        # self.value_tape_non_written_values(options)
-
-        return self.recording, self.returning, self.reversing
-
-    def create_reversal_schedules(self):
-        """Create the empty recording, returning and reversing Schedules.
-
-        :return: all three schedules as a list.
-        :rtype: List[:py:class:`psyclone.psyir.nodes.Schedule`]
-        """
-        # Shallow copy the symbol table
-        tables = [self.schedule_table.shallow_copy() for i in range(3)]
-        original_table = self.schedule_table.shallow_copy().detach()
-        tables = [table.detach() for table in tables]
-        original_table.attach(self.schedule)
-
-        # Create the schedules
-        schedules = [Schedule(children=[], symbol_table=table) for table in tables]
-
-        return schedules
-
-    def process_data_symbols(self, options=None):
-        """Process all the data symbols of the symbol table, \
-        generating their adjoint symbols in the returning table \
-        and adding them to the data_symbol_adjoint_map.
-
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-        """
-
-        for symbol in self.schedule_table.datasymbols:
-            self.create_adjoint_symbol(symbol, options)
-
-    def create_adjoint_symbol(self, datasymbol, options=None):
-        """Create the adjoint symbol of the argument symbol in the returning \
-        table.
-        Note: these are manually added later to the revesing table.
-
-        :param datasymbol: data symbol whose adjoint to create.
-        :param datasymbol: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-
-        :raises TypeError: if datasymbol is of the wrong type.
-
-        :return: the adjoint symbol.
-        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        """
-        if not isinstance(datasymbol, DataSymbol):
-            raise TypeError(
-                f"'datasymbol' argument should be of "
-                f"type 'DataSymbol' but found"
-                f"'{type(datasymbol).__name__}'."
-            )
-        if not datasymbol.is_scalar:
-            raise NotImplementedError(
-                "'datasymbol' is not a scalar. " "Arrays are not implemented yet."
-            )
-
-        # TODO: #001 use the dependent variable type and precision
-        # TODO: this would depend on the result of activity analysis
-        # Name using pre- and suffix
-        adjoint_name = self._adjoint_prefix + datasymbol.name
-        adjoint_name += self._adjoint_suffix
-        # New adjoint symbol with unique name in the returning table
-        adjoint = self.returning_table.new_symbol(
-            adjoint_name,
-            symbol_type=DataSymbol,
-            datatype=self._default_adjoint_datatype,
-        )
-
-        # Add it to the map
-        self.data_symbol_adjoint_map[datasymbol] = adjoint
-
-        return adjoint
+        return self.transformed
 
     # TODO: when using arrays, it may make sense to check indices?
     def is_written_before(self, reference):
@@ -674,7 +574,7 @@ class ADReverseScheduleTrans(ADScheduleTrans):
         :rtype: List[:py:class:`psyclone.psyir.symbols.DataSymbol`]
         """
         symbols = self.operation_adjoints  # + self.function_call_adjoints
-        symbols += self.temp_symbols + list(self.data_symbol_adjoint_map.values())
+        symbols += self.temp_symbols + list(self.data_symbol_differential_map.values())
         return symbols
 
     def inline_operation_adjoints(self, options=None):
@@ -729,13 +629,3 @@ class ADReverseScheduleTrans(ADScheduleTrans):
                 self.returning_table._symbols.pop(assignment.lhs.name)
                 for rhs_occurence in rhs_occurences:
                     rhs_occurence.replace_with(substitute.copy())
-
-    def simplify(self, options=None):
-        """Apply simplifications to the BinaryOperation and Assignment nodes
-        of the returning schedule.
-
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-        """
-        super().simplify(self.returning, options)
