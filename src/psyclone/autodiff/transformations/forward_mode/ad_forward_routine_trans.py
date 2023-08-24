@@ -36,6 +36,7 @@
 """This module provides a Transformation for forward-mode automatic 
 differentiation of PSyIR Routine nodes."""
 
+from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import (
     Routine,
     Call,
@@ -56,210 +57,38 @@ from psyclone.autodiff import assign_zero, own_routine_symbol, assign, one
 from psyclone.autodiff.transformations import (
     ADForwardContainerTrans,
     ADForwardScheduleTrans,
+    ADRoutineTrans
 )
 
 
-class ADForwardRoutineTrans(ADForwardScheduleTrans):
+class ADForwardRoutineTrans(ADRoutineTrans):
     """A class for automatic differentation transformations of Routine nodes. 
     Requires an ADForwardContainerTrans instance as context, where the definitions of  \
     the routines called inside the one to be transformed can be found.
-    Inherits from ADForwardScheduleTrans, which is used to transform the Schedule-like \
-    part of the Routine.
+    Uses an ADForwardScheduleTrans internally.
     """
 
-    _jacobian_prefix = ""
-    _jacobian_suffix = "_jacobian"
+    _tangent_prefix = ""
+    _tangent_postfix = "_tangent"
+
+    _routine_prefixes = (_tangent_prefix, )
+    _routine_postfixes = (_tangent_postfix, )
+
+    _number_of_schedules = ADForwardScheduleTrans._number_of_schedules
+    _differential_prefix = ADForwardScheduleTrans._differential_prefix
+    _differential_postfix = ADForwardScheduleTrans._differential_postfix
+    _differential_table_index = ADForwardScheduleTrans._differential_table_index
 
     def __init__(self, container_trans):
         super().__init__(container_trans)
 
-    @property
-    def routine(self):
-        """Returns the routine node being transformed.
-
-        :return: routine.
-        :rtype: :py:class:`psyclone.psyir.nodes.Routine`
-        """
-        return self._schedule
-
-    @routine.setter
-    def routine(self, routine):
-        if not isinstance(routine, Routine):
-            raise TypeError(
-                f"'routine' argument should be of "
-                f"type 'Routine' but found"
-                f"'{type(routine).__name__}'."
-            )
-
-        self._schedule = routine
-
-    @property
-    def routine_table(self):
-        """Returns the symbol table of the routine node being transformed.
-
-        :return: symbol table.
-        :rtype: :py:class:`psyclone.psyir.symbols.SymbolTable`
-        """
-        return self.routine.symbol_table
-
-    @property
-    def routine_symbol(self):
-        """Returns the symbol of the routine node being transformed.
-
-        :return: routine symbol.
-        :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
-        """
-        return self.routine_table.lookup_with_tag("own_routine_symbol")
-
-    @property
-    def container_trans(self):
-        """Returns the contextual ADForwardContainerTrans instance this \
-        transformation was initialized with.
-
-        :return: container transformation.
-        :rtype: :py:class:`psyclone.autodiff.transformation.ADForwardContainerTrans`
-        """
-        return self._container_trans
-
-    @container_trans.setter
-    def container_trans(self, container_trans):
-        if not isinstance(container_trans, ADForwardContainerTrans):
-            raise TypeError(
-                f"'container_trans' argument should be of "
-                f"type 'ADForwardContainerTrans' but found"
-                f"'{type(container_trans).__name__}'."
-            )
-
-        self._container_trans = container_trans
-
-    @property
-    def transformed_symbol(self):
-        """Returns the routine symbol of the transformed routine.
-
-        :return: transformed routine symbol.
-        :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
-        """
-        return own_routine_symbol(self.transformed[0])
-
-    def validate(
-        self, routine, dependent_vars, independent_vars, options=None
-    ):
-        """Validates the arguments of the `apply` method.
-
-        :param routine: routine Node to the transformed.
-        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
-        :param dependent_vars: list of dependent variables names to be \
-            differentiated.
-        :type dependent_vars: `List[str]`
-        :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
-        :type independent_vars: `List[str]`
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-
-        :raises TransformationError: if routine is of the wrong type.
-        :raises NotImplementedError: if routine is a program.
-        :raises NotImplementedError: if routine is a function.
-        :raises NotImplementedError: if routine contains a recursive call (to itself).
-        :raises TransformationError: if the SymbolTable of routine doesn't \
-            contain a symbol for each name in independent_var
-        :raises TransformationError: if the SymbolTable of routine doesn't \
-            contain a symbol for each name in dependent_var
-        :raises TransformationError: if the argument list of routine doesn't \
-            contain an argument of correct Access for each name in independent_var
-        :raises TransformationError: if the argument list of routine doesn't \
-            contain an argument of correct Access for each name in dependent_var
-        """
-        super().validate(routine, dependent_vars, independent_vars, options)
-
-        if not isinstance(routine, Routine):
-            raise TransformationError(
-                f"'routine' argument should be of "
-                f"type 'Routine' but found"
-                f"'{type(routine).__name__}'."
-            )
-        # TODO: extend this to functions and programs
-        # - functions won't be pure if modifying the value_tape!
-        # - programs would only work for ONE dependent variable,
-        #   and only by making a single program out of the recording and returning routines
-        if routine.is_program:
-            raise NotImplementedError(
-                "'routine' argument is a program, "
-                "this is not implemented yet. "
-                "For now ADReverseRoutineTrans only transforms "
-                "Fortran subroutines."
-            )
-        if routine.return_symbol is not None:
-            raise NotImplementedError(
-                "'routine' argument is a function, "
-                "this is not implemented yet."
-                "For now ADReverseRoutineTrans only transforms "
-                "Fortran subroutines."
-            )
-
-        # Avoid dealing with recursive calls for now
-        # TODO: these actually should work when using a joint reversal schedule
-        # TODO: make the link between the routine and itself always be weak?
-        for call in routine.walk(Call):
-            if call.routine.name == routine.name:
-                raise NotImplementedError(
-                    f"Found a recursive Call inside "
-                    f"Routine '{self.routine.name}'."
-                    f"This is not implemented yet."
-                )
-
-        symbol_table = routine.symbol_table
-        data_symbols = symbol_table.symbols
-        symbol_names = [symbol.name for symbol in data_symbols]
-
-        args = symbol_table.argument_list
-        dependent_args_names = []
-        independent_args_names = []
-        for arg in args:
-            if arg.interface.access == ArgumentInterface.Access.READ:
-                independent_args_names.append(arg.name)
-            elif arg.interface.access == ArgumentInterface.Access.WRITE:
-                # This also includes routine.return_symbol
-                # if it is a function
-                dependent_args_names.append(arg.name)
-            else:  # READWRITE or UNKNOWN
-                independent_args_names.append(arg.name)
-                dependent_args_names.append(arg.name)
-
-        for var in dependent_vars:
-            if var not in symbol_names:
-                raise TransformationError(
-                    f"Dependent variable name '{var}'"
-                    f"was not found among the "
-                    f"Symbol names in the Routine "
-                    f"SymbolTable."
-                )
-            if var not in dependent_args_names:
-                raise TransformationError(
-                    f"Dependent variable name '{var}'"
-                    f"was not found among the "
-                    f"Routine arguments with "
-                    f"ArgumentInterface.Access WRITE,"
-                    f"READWRITE or UNKNOWN."
-                )
-
-        for var in independent_vars:
-            if var not in symbol_names:
-                raise TransformationError(
-                    f"Independent variable name '{var}'"
-                    f"was not found among the "
-                    f"Symbol names in the Routine "
-                    f"SymbolTable."
-                )
-            if var not in independent_args_names:
-                raise TransformationError(
-                    f"Inependent variable name '{var}'"
-                    f"was not found among the "
-                    f"Routine arguments with "
-                    f"ArgumentInterface.Access READ,"
-                    f"READWRITE or UNKNOWN."
-                )
+        self.schedule_trans = ADForwardScheduleTrans(container_trans)
+        self.assignment_trans = self.schedule_trans.assignment_trans
+        self.assignment_trans.routine_trans = self
+        self.operation_trans = self.schedule_trans.operation_trans
+        self.operation_trans.routine_trans = self
+        self.call_trans = self.schedule_trans.call_trans
+        self.call_trans.routine_trans = self
 
     def apply(
         self, routine, dependent_vars, independent_vars, options=None
@@ -296,19 +125,28 @@ class ADForwardRoutineTrans(ADForwardScheduleTrans):
         """
         self.validate(routine, dependent_vars, independent_vars, options)
 
+        self.routine = routine
+        self.dependent_variables = dependent_vars
+        self.independent_variables = independent_vars
+        
+        # Get the variables access information (to determine overwrites and taping)
+        self.variables_info = VariablesAccessInfo(routine)
+
         # Add this transformation to the container_trans map
         # Do it before apply below or ordering is not from outer to inner routines
         self.container_trans.add_routine_trans(self)
 
-        # Apply the parent ADForwardScheduleTrans
-        super().apply(routine, dependent_vars, independent_vars, options)
+        # Apply the ADForwardScheduleTrans
+        schedule = self.schedule_trans.apply(routine, dependent_vars, independent_vars, options)
 
         # Raise the transformed schedule to routine
-        self.transformed[0] = self.raise_schedule_to_routine()
+        self.transformed = self.schedules_to_routines([schedule])
+        self.data_symbol_differential_map = self.schedule_trans.data_symbol_differential_map
+        self.temp_symbols = self.schedule_trans.temp_symbols
 
         # Add the transformed routines symbol to the container_trans map
         self.container_trans.add_transformed_routine(
-            self.routine_symbol, self.transformed_symbol
+            self.routine_symbol, self.transformed_symbols[0]
         )
 
         # All dependent and independent variables names
@@ -330,28 +168,6 @@ class ADForwardRoutineTrans(ADForwardScheduleTrans):
             self.container_trans.container.addchild(jacobian_routine)
 
         return self.transformed[0]
-
-    def raise_schedule_to_routine(self):
-        """Creates Routine out of the transformed schedule.
-
-        :return: transformed routine from schedule.
-        :rtype: :py:class:`psyclone.psyir.nodes.Routine`
-        """
-        # Remove the 'own_routine_symbol' symbols from the table
-        self.transformed_tables[0].remove(self.routine_symbol)
-
-        # Generate the name of the routine using pre- and suffix
-        name = self._tangent_prefix + self.routine.name + self._tangent_suffix
-
-        # Create it, this adds a new RoutineSymbol correctly named
-        # to its symbol table
-        return Routine.create(
-                name=name,
-                symbol_table=self.transformed[0].symbol_table.detach(),
-                children=[child.copy() for child in self.transformed[0].children],
-                is_program=False,
-                return_symbol_name=None,
-            )
 
     def add_derivative_arguments(self, diff_variables, options=None):
         """Add the derivatives of all differentiation variables \
@@ -385,7 +201,7 @@ class ADForwardRoutineTrans(ADForwardScheduleTrans):
             symbol = self.transformed_tables[0].lookup(var, scope_limit=self.transformed[0])
 
             # Use the original symbol (not the copy) to get its derivative
-            derivative_symbol = self.data_symbol_derivative_map[symbol]
+            derivative_symbol = self.data_symbol_differential_map[symbol]
             # Same intent as the argument
             derivative_symbol.interface = symbol.interface
 
@@ -394,281 +210,3 @@ class ADForwardRoutineTrans(ADForwardScheduleTrans):
             self.add_to_argument_list(
                 self.transformed_tables[0], derivative_symbol, after=symbol
             )
-
-    # TODO: column major matrix filling would be better
-    # TODO: test variables being both dependent and independent quite carefully...
-    def jacobian_routine(self, dependent_vars, independent_vars, options=None):
-        """Creates the Jacobian routine using forward-mode automatic \
-        differentation for the transformed routine and lists of \
-        dependent and independent variables names.
-        Options:
-        - bool 'verbose' : preceding comment for the routine.
-
-        :param dependent_vars: list of dependent variables names to be \
-            differentiated.
-        :type dependent_vars: `List[str]`
-        :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
-        :type independent_vars: `List[str]`
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-
-        :raises TypeError: if dependent_vars is of the wrong type.
-        :raises TypeError: if at least one element of dependent_vars is \
-            of the wrong type.
-        :raises TypeError: if independent_vars is of the wrong type.
-        :raises TypeError: if at least one element of independent_vars is \
-            of the wrong type.
-        :raises ValueError: if at least one element of dependent_vars is \
-            not in self.dependent_variables, so was not used in transforming \
-            the routine.
-        :raises ValueError: if at least one element of independent_vars is \
-            not in self.independent_variables, so was not used in transforming \
-            the routine.
-
-        :return: the routine computing the Jacobian.
-        :rtype: :py:class:`psyclone.psyir.nodes.Routine`
-        """
-        # :raises NotImplementedError: if dependent_vars and independent_vars \
-        # intersect.
-        if not isinstance(dependent_vars, list):
-            raise TypeError(
-                f"'dependent_vars' argument should be of "
-                f"type 'list' but found"
-                f"'{type(dependent_vars).__name__}'."
-            )
-        for var in dependent_vars:
-            if not isinstance(var, str):
-                raise TypeError(
-                    f"'dependent_vars' argument should be of "
-                    f"type 'List[str]' but found an element of type"
-                    f"'{type(var).__name__}'."
-                )
-            if var not in self.dependent_variables:
-                raise ValueError(
-                    f"'dependent_vars' argument contains variable name {var} "
-                    f"but it was not used as a dependent variable when "
-                    f"transforming the routine."
-                )
-
-        if not isinstance(independent_vars, list):
-            raise TypeError(
-                f"'independent_vars' argument should be of "
-                f"type 'list' but found"
-                f"'{type(independent_vars).__name__}'."
-            )
-        for var in independent_vars:
-            if not isinstance(var, str):
-                raise TypeError(
-                    f"'independent_vars' argument should be of "
-                    f"type 'List[str]' but found an element of type"
-                    f"'{type(var).__name__}'."
-                )
-            if var not in self.independent_variables:
-                raise ValueError(
-                    f"'independent_vars' argument contains variable name {var} "
-                    f"but it was not used as a dependent variable when "
-                    f"transforming the routine."
-                )
-
-        # if len(set(dependent_vars + independent_vars)) \
-        #    != len(dependent_vars + independent_vars):
-        #    raise NotImplementedError("Generating the jacobian routine for "
-        #                              "variables that are both dependent "
-        #                              "and independent is not implemented yet.")
-
-        dependent_derivative_symbols = []
-        independent_derivative_symbols = []
-
-        jacobian_routine = Routine(
-            self._jacobian_prefix + self.routine.name + self._jacobian_suffix
-        )
-        symbol_table = jacobian_routine.symbol_table
-
-        derivative_map = dict()
-        diff_symbol_names = []
-        other_args = []
-
-        # All differential variables (dependent & independent)
-        # They are added as arguments of jacobian with the same intent
-        for var in dependent_vars + independent_vars:
-            # Get the symbol from the reversing routine
-            sym = self.transformed_tables[0].lookup(var)
-
-            # Add it to the jacobian table and as argument (same intent)
-            if sym not in symbol_table._argument_list:
-                symbol_table.add(sym)
-                symbol_table._argument_list.append(sym)
-
-                # Get and copy the associated derivative symbol
-                d_sym_copy = self.data_symbol_derivative_map[sym].copy()
-                # Switch it to non-argument interface
-                d_sym_copy.interface = AutomaticInterface()
-                # Add to the value_tape
-                symbol_table.add(d_sym_copy)
-
-                # Keep track of the derivatives associated with the differential
-                # variables names
-                derivative_map[var] = d_sym_copy
-                diff_symbol_names.extend([sym.name, d_sym_copy.name])
-
-        # Remaining arguments of the transformed routine need to be added too
-        for sym in self.transformed_tables[0].argument_list:
-            if sym.name not in diff_symbol_names:
-                symbol_table.add(sym)
-                symbol_table._argument_list.append(sym)
-                other_args.append(sym.name)
-
-        # Lists of derivative symbols to fill the jacobian
-        for var in independent_vars:
-            d_sym = derivative_map[var]
-            independent_derivative_symbols.append(d_sym)
-        for var in dependent_vars:
-            d_sym = derivative_map[var]
-            dependent_derivative_symbols.append(d_sym)
-
-        # Some arguments of the jacobian routine with intent(inout) or unknown
-        # in the transformed routine could be overwritten
-        # Store and restore them as needed
-        temp_assigns = []
-        temp_restores = []
-        for arg in symbol_table._argument_list:
-            if arg.interface.access in (
-                ArgumentInterface.Access.READWRITE,
-                ArgumentInterface.Access.UNKNOWN,
-            ):
-                temp = symbol_table.new_symbol(
-                    "temp_" + arg.name, symbol_type=DataSymbol, datatype=arg.datatype
-                )
-                temp_assigns.append(assign(temp, arg))
-                temp_restores.append(assign(arg, temp))
-        self.add_children(jacobian_routine, temp_assigns)
-
-        # Jacobian matrix symbol, with intent(out)
-        rows = len(dependent_vars)
-        cols = len(independent_vars)
-        jacobian = symbol_table.new_symbol(
-            "J_" + self.routine.name,
-            symbol_type=DataSymbol,
-            datatype=ArrayType(self._default_derivative_datatype, [cols, rows]),
-        )
-        jacobian.interface = ArgumentInterface(ArgumentInterface.Access.WRITE)
-        symbol_table._argument_list.append(jacobian)
-
-        for col, indep_d in enumerate(independent_derivative_symbols):
-            # Restore overwritten arguments of the jacobian routine
-            # First col => first call so no restores
-            if col != 0:
-                self.add_children(
-                    jacobian_routine, [rest.copy() for rest in temp_restores]
-                )
-
-            # col + 1 to get the Fortran index
-            col_literal = Literal(str(col + 1), INTEGER_TYPE)
-
-            # Set the independent derivative for the column to 1.0
-            jacobian_routine.addchild(assign(indep_d, one(indep_d.datatype)))
-
-            # Set all other independent derivatives to 0.0
-            for other_indep_d in independent_derivative_symbols:
-                if other_indep_d != indep_d:
-                    jacobian_routine.addchild(assign_zero(other_indep_d))
-
-            # Set all dependent derivatives to 0.0
-            # TODO: check the indep == dep case
-            for dep_d in dependent_derivative_symbols:
-                if indep_d != dep_d:
-                    jacobian_routine.addchild(assign_zero(dep_d))
-
-            # Create the argument list from the transformed one
-            d_args = [Reference(sym) for sym in self.transformed_tables[0].argument_list]
-            # Create the call, add it to the jacobian routine
-            call = Call.create(self.transformed_symbol, d_args)
-            jacobian_routine.addchild(call)
-
-            # Insert every dependent derivative at the right location
-            # in the jacobian matrix
-            for row, dep_d in enumerate(dependent_derivative_symbols):
-                # row + 1 to get the Fortran index
-                row_literal = Literal(str(row + 1), INTEGER_TYPE)
-                jacobian_ref = ArrayReference.create(
-                    jacobian, [col_literal.copy(), row_literal.copy()]
-                )
-
-                jacobian_routine.addchild(assign(jacobian_ref, dep_d))
-
-        # Verbose description writes the dependent variables (columns),
-        # the independent variables (rows), the other arguments to specify,
-        # and the derivatives of the jacobian matrix as d_/d_
-        verbose = self.unpack_option("verbose", options)
-
-        if verbose:
-            jacobian_routine.preceding_comment = (
-                f"Independent variables as columns: {independent_vars}.\n! "
-                + f"Dependent variables as rows: {dependent_vars}.\n! "
-            )
-            if len(other_args) != 0:
-                jacobian_routine.preceding_comment += f"Also specify: {other_args}."
-            for dep in dependent_vars:
-                jacobian_routine.preceding_comment += "\n! "
-                for indep in independent_vars:
-                    jacobian_routine.preceding_comment += f"d{dep}/d{indep} "
-
-        return jacobian_routine
-
-    def add_to_argument_list(self, symbol_table, argument, after=None):
-        """Adds the argument to the symbol table's argument list, if it has \
-        the correct interface.
-        The argument is added after another if 'after' is provided or \
-        appended at the end otherwise.
-
-        :param symbol_table: symbol table whose argument_list will be augmented.
-        :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
-        :param argument: argument symbol to add.
-        :type argument: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        :param after: optional argument symbol after which to insert, defaults to None
-        :type after: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`, `NoneType`]
-        :raises TypeError: if symbol_table is of the wrong type.
-        :raises TypeError: if argument is of the wrong type.
-        :raises TypeError: if argument's interface is not an ArgumentInterface.
-        :raises TypeError: if after is of the wrong type.
-        :raises ValueError: if after is not None and is not in the argument list.
-        """
-        if not isinstance(symbol_table, SymbolTable):
-            raise TypeError(
-                f"'symbol_table' argument should be of type "
-                f"'SymbolTable' but found "
-                f"'{type(symbol_table).__name__}'."
-            )
-        if not isinstance(argument, DataSymbol):
-            raise TypeError(
-                f"'argument' argument should be of type "
-                f"'DataSymbol' but found "
-                f"'{type(argument).__name__}'."
-            )
-        if not isinstance(argument.interface, ArgumentInterface):
-            raise TypeError(
-                f"'argument' argument's interface should be of type "
-                f"'ArgumentInterface' but found "
-                f"'{type(argument.interface).__name__}'."
-            )
-        if not isinstance(after, (DataSymbol, type(None))):
-            raise TypeError(
-                f"'after' argument should be of type "
-                f"'DataSymbol' or 'NoneType' but found "
-                f"'{type(after).__name__}'."
-            )
-        if (after is not None) and (after not in symbol_table._argument_list):
-            raise ValueError(
-                f"'after' argument DataSymbol named {after.name} "
-                f"is not in the argument_list of symbol_table."
-            )
-
-        argument_list = symbol_table._argument_list
-
-        if after is None:
-            argument_list.append(argument)
-        else:
-            index = argument_list.index(after) + 1
-            argument_list.insert(index, argument)

@@ -176,7 +176,7 @@ class ADForwardCallTrans(ADCallTrans):
 
         # Symbol and derivative symbol of the argument
         symbol = reference.symbol
-        derivative_symbol = self.routine_trans.data_symbol_derivative_map[symbol]
+        derivative_symbol = self.routine_trans.data_symbol_differential_map[symbol]
 
         # Add (var, var_d) as arguments of the transformed routine
         return [Reference(symbol), Reference(derivative_symbol)]

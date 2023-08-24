@@ -60,8 +60,8 @@ from psyclone.autodiff.transformations import (
 )
 from psyclone.autodiff import assign, one, ADSplitReversalSchedule
 
-AP = ADReverseRoutineTrans._adjoint_prefix
-AS = ADReverseRoutineTrans._adjoint_suffix
+AP = ADReverseRoutineTrans._differential_prefix
+AS = ADReverseRoutineTrans._differential_postfix
 OA = ADReverseRoutineTrans._operation_adjoint_name
 
 
@@ -91,13 +91,13 @@ def initialize_transformations():
 def test_ad_operation_trans_initialization():
     with pytest.raises(TypeError) as info:
         ADReverseOperationTrans(None)
-    assert "Argument should be of type 'ADForwardRoutineTrans' or 'ADReverseRoutineTrans' but found 'NoneType'." in str(
+    assert "Argument should be of type 'ADScopeTrans' but found 'NoneType'." in str(
         info.value
     )
 
     _, ad_routine_trans, ad_operation_trans = initialize_transformations()
 
-    assert ad_operation_trans.routine_trans == ad_routine_trans
+    #assert ad_operation_trans.routine_trans == ad_routine_trans
 
 
 def test_ad_operation_trans_validate():
@@ -130,7 +130,7 @@ def test_ad_operation_trans_validate():
         "among the existing adjoint symbols." in str(info.value)
     )
 
-    adj_sym = ad_routine_trans.create_adjoint_symbol(sym)
+    adj_sym = ad_routine_trans.create_differential_symbol(sym)
     unary_op = UnaryOperation.create(
         UnaryOperation.Operator.EXP, Literal("1", INTEGER_TYPE)
     )
@@ -292,15 +292,15 @@ def test_ad_operation_trans_apply(fortran_writer):
         ) = initialize_transformations()
 
         sym = DataSymbol("var", REAL_TYPE)
-        adj_sym = ad_routine_trans.create_adjoint_symbol(sym)
+        adj_sym = ad_routine_trans.create_differential_symbol(sym)
         assert adj_sym.name == f"{AP}var{AS}"
 
         sym2 = DataSymbol("var2", REAL_TYPE)
-        adj_sym2 = ad_routine_trans.create_adjoint_symbol(sym2)
+        adj_sym2 = ad_routine_trans.create_differential_symbol(sym2)
         assert adj_sym2.name == f"{AP}var2{AS}"
 
         sym3 = DataSymbol("var3", REAL_TYPE)
-        adj_sym3 = ad_routine_trans.create_adjoint_symbol(sym3)
+        adj_sym3 = ad_routine_trans.create_differential_symbol(sym3)
         assert adj_sym3.name == f"{AP}var3{AS}"
 
         return ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3

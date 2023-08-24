@@ -67,20 +67,13 @@ class ADForwardScheduleTrans(ADScheduleTrans):
     :raises TypeError: if the container_trans argument is of the wrong type.
     """
 
-    _tangent_prefix = ""
-    _tangent_suffix = "_tangent"
-
-    _derivative_prefix = ""
-    _derivative_suffix = "_d"
-
-    # TODO: #001 use the dependent variable type and precision
-    _default_derivative_datatype = REAL_DOUBLE_TYPE
+    _number_of_schedules = 1
+    _differential_prefix = ""
+    _differential_postfix = "_d"
+    _differential_table_index = 0
 
     def __init__(self, container_trans):
         super().__init__(container_trans)
-
-        # DataSymbol => derivative DataSymbol
-        self.data_symbol_derivative_map = dict()
 
         # Transformations need to know about the ADForwardScheduleTrans calling them
         # to access the attributes defined above
@@ -127,10 +120,8 @@ class ADForwardScheduleTrans(ADScheduleTrans):
         :raises NotImplementedError: if no transformation rule has yet been \
             implemented for one of the children of schedule.
 
-        :return: couple composed of the recording and returning Schedules \
-            that correspond to the transformation of this Schedule.
-        :rtype: Tuple[:py:class:`psyclone.psyir.nodes.Schedule`, \
-                      :py:class:`psyclone.psyir.nodes.Schedule`]
+        :return: transformed schedule.
+        :rtype: :py:class:`psyclone.psyir.nodes.Schedule`
         """
         self.validate(schedule, dependent_vars, independent_vars, options)
 
@@ -144,7 +135,7 @@ class ADForwardScheduleTrans(ADScheduleTrans):
         self.variables_info = VariablesAccessInfo(schedule)
 
         # Empty transformed schedule with symbol table
-        self.transformed = self.create_reversal_schedule()
+        self.transformed = self.create_transformed_schedules()
 
         # Process all symbols in the table, generating derivative symbols
         self.process_data_symbols(options)
@@ -153,85 +144,12 @@ class ADForwardScheduleTrans(ADScheduleTrans):
         self.transform_children(options)
 
         # Simplify the BinaryOperation and Assignment nodes
-        # in the returning schedule
+        # in the transformed schedule
         simplify = self.unpack_option("simplify", options)
         if simplify:
-            self.simplify(options)
+            self.simplify(self.transformed[0], options)
 
         return self.transformed[0]
-
-    def create_reversal_schedule(self):
-        """Create the empty transformed Schedule.
-
-        :return: transformed schedule.
-        :rtype: :py:class:`psyclone.psyir.nodes.Schedule`
-        """
-        # Shallow copy the symbol table
-        table = self.schedule_table.shallow_copy()
-        original_table = self.schedule_table.shallow_copy().detach()
-        table = table.detach()
-        original_table.attach(self.schedule)
-
-        # Create the schedule
-        schedule = Schedule(children=[], symbol_table=table)
-
-        return [schedule]
-
-    def process_data_symbols(self, options=None):
-        """Process all the data symbols of the symbol table, \
-        generating their derivative symbols in the transformed table \
-        and adding them to the data_symbol_derivative_map.
-
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-        """
-
-        for symbol in self.schedule_table.datasymbols:
-            self.create_derivative_symbol(symbol, options)
-
-    def create_derivative_symbol(self, datasymbol, options=None):
-        """Create the derivative symbol of the argument symbol in the transformed \
-        table.
-
-        :param datasymbol: data symbol whose derivative to create.
-        :param datasymbol: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-
-        :raises TypeError: if datasymbol is of the wrong type.
-
-        :return: the derivative symbol.
-        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        """
-        if not isinstance(datasymbol, DataSymbol):
-            raise TypeError(
-                f"'datasymbol' argument should be of "
-                f"type 'DataSymbol' but found"
-                f"'{type(datasymbol).__name__}'."
-            )
-        if not datasymbol.is_scalar:
-            raise NotImplementedError(
-                "'datasymbol' is not a scalar. " "Arrays are not implemented yet."
-            )
-
-        # TODO: #001 use the dependent variable type and precision
-        # TODO: this would depend on the result of activity analysis
-        # Name using pre- and suffix
-        derivative_name = self._derivative_prefix + datasymbol.name
-        derivative_name += self._derivative_suffix
-        # New adjoint symbol with unique name in the transformed table
-        derivative = self.transformed_tables[0].new_symbol(
-            derivative_name,
-            symbol_type=DataSymbol,
-            datatype=self._default_derivative_datatype,
-        )
-
-        # Add it to the map
-        self.data_symbol_derivative_map[datasymbol] = derivative
-
-        return derivative
 
     def transform_assignment(self, assignment, options=None):
         """Transforms an Assignment child of the schedule and adds the \
@@ -286,14 +204,4 @@ class ADForwardScheduleTrans(ADScheduleTrans):
         :return: list of all derivative symbols.
         :rtype: List[:py:class:`psyclone.psyir.symbols.DataSymbol`]
         """
-        return list(self.data_symbol_derivative_map.values())
-
-    def simplify(self, options=None):
-        """Apply simplifications to the BinaryOperation and Assignment nodes
-        of the transformed schedule.
-
-        :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
-        """
-        super().simplify(self.transformed[0], options)
+        return list(self.data_symbol_differential_map.values())
