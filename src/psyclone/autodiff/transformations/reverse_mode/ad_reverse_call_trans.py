@@ -172,7 +172,7 @@ class ADReverseCallTrans(ADCallTrans):
         # strong => split reversal
         # weak => joint reversal
         split = self.reversal_schedule.is_strong_link(
-            self.routine_trans.routine.name, self.routine.name
+            self.routine_trans.schedule.name, self.routine.name
         )
 
         # TODO: recursive calls seem to work in joint reversal?
@@ -282,7 +282,7 @@ class ADReverseCallTrans(ADCallTrans):
         #        routine_arg_symbol.interface.access is not ArgumentInterface.Access.READ
         #    ):
         #        # Adjoint symbol to set to 0
-        #        adjoint_sym = self.routine_trans.data_symbol_adjoint_map[arg.symbol]
+        #        adjoint_sym = self.routine_trans.data_symbol_differential_map[arg.symbol]
         #
         #        # Assignment to 0
         #        adj_zero = assign_zero(adjoint_sym)
@@ -347,7 +347,7 @@ class ADReverseCallTrans(ADCallTrans):
         # call foo_rev(x, x_adj, 1.0, temp_dummy_adj, f, f_adj)
 
         # Data symbol is only here to use new_temp_symbol method
-        sym = DataSymbol("dummy_adj", self.routine_trans._default_adjoint_datatype)
+        sym = DataSymbol("dummy_adj", self.routine_trans._default_differential_datatype)
         # Temporary dummy adjoint
         dummy_adj = self.routine_trans.new_temp_symbol(
             sym, self.routine_trans.returning_table
@@ -392,7 +392,7 @@ class ADReverseCallTrans(ADCallTrans):
 
         # Symbol and adjoint symbol of the argument
         symbol = reference.symbol
-        adjoint_symbol = self.routine_trans.data_symbol_adjoint_map[symbol]
+        adjoint_symbol = self.routine_trans.data_symbol_differential_map[symbol]
 
         # Add (var, var_adj) as arguments of the returning/reversing routines
         returning_args = [Reference(symbol), Reference(adjoint_symbol)]
@@ -448,7 +448,7 @@ class ADReverseCallTrans(ADCallTrans):
         # TODO: test this !
         # New adjoint for the operation
         op_adj = self.routine_trans.new_operation_adjoint(
-            self.routine_trans._default_adjoint_datatype
+            self.routine_trans._default_differential_datatype
         )
         # op_adj = 0.0
         op_adj_zero = assign_zero(op_adj)
