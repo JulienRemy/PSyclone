@@ -89,8 +89,7 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         """Returns the routine transformations used in this container.
 
         :return: list of routine transformations.
-        :rtype: List[Union[:py:class:`psyclone.autodiff.transformations.ADForwardRoutineTrans`,
-                           :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`]]
+        :rtype: List[:py:class:`psyclone.autodiff.transformations.ADRoutineTrans`]
         """
         return self._routine_transformations
 
@@ -99,8 +98,7 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         """Add a new routine transformations to the list.
 
         :param routine_trans: routine transformation.
-        :type routine_trans: Union[:py:class:`psyclone.autodiff.transformations.ADForwardRoutineTrans`,
-                                   :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`]
+        :type routine_trans: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
         """
 
     @property

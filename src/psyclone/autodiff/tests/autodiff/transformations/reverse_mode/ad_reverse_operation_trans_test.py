@@ -58,7 +58,7 @@ from psyclone.autodiff.transformations import (
     ADReverseRoutineTrans,
     ADReverseContainerTrans,
 )
-from psyclone.autodiff import assign, one, ADSplitReversalSchedule
+from psyclone.autodiff import one, ADSplitReversalSchedule
 
 AP = ADReverseRoutineTrans._differential_prefix
 AS = ADReverseRoutineTrans._differential_postfix
@@ -91,13 +91,13 @@ def initialize_transformations():
 def test_ad_operation_trans_initialization():
     with pytest.raises(TypeError) as info:
         ADReverseOperationTrans(None)
-    assert "Argument should be of type 'ADScopeTrans' but found 'NoneType'." in str(
+    assert "Argument should be of type 'ADRoutineTrans' but found 'NoneType'." in str(
         info.value
     )
 
     _, ad_routine_trans, ad_operation_trans = initialize_transformations()
 
-    #assert ad_operation_trans.routine_trans == ad_routine_trans
+    assert ad_operation_trans.routine_trans == ad_routine_trans
 
 
 def test_ad_operation_trans_validate():
