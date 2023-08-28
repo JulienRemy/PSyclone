@@ -57,21 +57,21 @@ class ADElementTrans(ADTrans, metaclass=ABCMeta):
 
     @property
     def routine_trans(self):
-        """Contextual ADScopeTrans \
+        """Contextual ADRoutineTrans \
         from which this ADElementTrans subclass instance was created.
 
-        :return: contextual ADScopeTrans
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADScopeTrans`
+        :return: contextual ADRoutineTrans
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
         """
         return self._routine_trans
     
     @routine_trans.setter
     def routine_trans(self, routine_trans):
-        from psyclone.autodiff.transformations import ADScopeTrans
+        from psyclone.autodiff.transformations import ADRoutineTrans
 
-        if not isinstance(routine_trans, ADScopeTrans):
+        if not isinstance(routine_trans, ADRoutineTrans):
             raise TypeError(
-                f"Argument should be of type 'ADScopeTrans' "
+                f"Argument should be of type 'ADRoutineTrans' "
                 f"but found '{type(routine_trans).__name__}'."
             )
         self._routine_trans = routine_trans

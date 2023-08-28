@@ -38,15 +38,20 @@ differentiation of PSyIR Routine nodes."""
 
 from abc import ABCMeta, abstractmethod
 
+from psyclone.core import VariablesAccessInfo
+
 from psyclone.psyir.nodes import (
+    Node,
     Routine,
     Call,
     Reference,
     ArrayReference,
     Literal,
+    Assignment,
 )
 from psyclone.psyir.symbols import (
     INTEGER_TYPE,
+    REAL_DOUBLE_TYPE,
     SymbolTable,
     DataSymbol,
     ArrayType,
@@ -55,20 +60,67 @@ from psyclone.psyir.symbols.interfaces import ArgumentInterface, AutomaticInterf
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff import assign_zero, own_routine_symbol, assign, one
-from psyclone.autodiff.transformations import ADContainerTrans, ADScopeTrans
+from psyclone.autodiff import simplify_node
+from psyclone.autodiff.transformations import ADContainerTrans, ADTrans
 
 
-class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
+class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
     """An abstract class for automatic differentation transformations of Routine nodes.
-    Subclasses ADForwardRoutineTrans and ADReverseRoutineTrans are designed to use \
-    respectively ADForwardScheduleTrans and ADReverseScheduleTrans internally.
     """
 
+    # Pre- and postfix for temporary variables symbols names
+    _temp_name_prefix = "temp_"
+    _temp_name_postfix = ""
+
+    # Default PSyIR datatype for the derivatives/adjoints
+    # TODO: use the dependent variable type and precision
+    _default_differential_datatype = REAL_DOUBLE_TYPE
+
+    # Attributes that need to be redefined by subclasses
+    _number_of_routines = 0
+    _differential_prefix = ""
+    _differential_postfix = ""
+    _differential_table_index = 0
     _routine_prefixes = tuple()
     _routine_postfixes = tuple()
 
+    # Pre- and postfix for the jacobian routine symbol name
     _jacobian_prefix = ""
     _jacobian_postfix = "_jacobian"
+
+    def __init__(self):
+        # Transformation can only be applied once
+        self._was_applied = False
+
+        # Symbols for temporary variables
+        self.temp_symbols = []
+
+        # DataSymbol => derivative DataSymbol
+        self.data_symbol_differential_map = dict()
+
+    @property
+    @abstractmethod
+    def container_trans(self):
+        """Contextual container transformation.
+        """
+
+    @property
+    @abstractmethod
+    def assignment_trans(self):
+        """Used assignment transformation.
+        """
+
+    @property
+    @abstractmethod
+    def operation_trans(self):
+        """Used operation transformation.
+        """
+
+    @property
+    @abstractmethod
+    def call_trans(self):
+        """Used call transformation.
+        """
 
     @property
     def routine(self):
@@ -77,7 +129,7 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
         :return: routine.
         :rtype: :py:class:`psyclone.psyir.nodes.Routine`
         """
-        return self._schedule
+        return self._routine
 
     @routine.setter
     def routine(self, routine):
@@ -88,7 +140,7 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
                 f"'{type(routine).__name__}'."
             )
 
-        self._schedule = routine
+        self._routine = routine
 
     @property
     def routine_table(self):
@@ -97,7 +149,7 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
         :return: symbol table.
         :rtype: :py:class:`psyclone.psyir.symbols.SymbolTable`
         """
-        return self.schedule_table
+        return self.routine.symbol_table
 
     @property
     def routine_symbol(self):
@@ -107,6 +159,109 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
         :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
         """
         return self.routine_table.lookup_with_tag("own_routine_symbol")
+
+    @property
+    def dependent_variables(self):
+        """Names of the dependent variables used in transforming this Routine. \
+        These are the variables being differentiated.
+
+        :return: list of names.
+        :rtype: `List[Str]`
+        """
+        return self._dependent_variables
+
+    @dependent_variables.setter
+    def dependent_variables(self, dependent_vars):
+        if not isinstance(dependent_vars, list):
+            raise TypeError(
+                f"'dependent_vars' argument should be of "
+                f"type 'List[Str]' but found "
+                f"'{type(dependent_vars).__name__}'."
+            )
+        for var in dependent_vars:
+            if not isinstance(var, str):
+                raise TypeError(
+                    f"'dependent_vars' argument should be of "
+                    f"type 'List[Str]' but found "
+                    f"an element of type "
+                    f"'{type(var).__name__}'."
+                )
+        self._dependent_variables = dependent_vars
+
+    @property
+    def independent_variables(self):
+        """Names of the independent variables used in transforming this Routine. \
+        These are the variables with respect to which we are differentiating.
+
+        :return: list of names.
+        :rtype: `List[Str]`
+        """
+        return self._independent_variables
+
+    @independent_variables.setter
+    def independent_variables(self, independent_vars):
+        if not isinstance(independent_vars, list):
+            raise TypeError(
+                f"'independent_vars' argument should be of "
+                f"type 'List[Str]' but found "
+                f"'{type(independent_vars).__name__}'."
+            )
+        for var in independent_vars:
+            if not isinstance(var, str):
+                raise TypeError(
+                    f"'independent_vars' argument should be of "
+                    f"type 'List[Str]' but found "
+                    f"an element of type "
+                    f"'{type(var).__name__}'."
+                )
+        self._independent_variables = independent_vars
+
+    @property
+    def differential_variables(self):
+        """Names of all differential variables, both dependent and independent.
+        The list begins with independent variables. Names may not be unique in it.
+
+        :return: list of all differential variables.
+        :rtype: `List[Str]`
+        """
+        return self.dependent_variables + self.independent_variables
+
+    @property
+    def transformed(self):
+        """Returns the transformed routine(s) as a list.
+
+        :return: list of transformed routines.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Routine`]
+        """
+        return self._transformed
+
+    @transformed.setter
+    def transformed(self, transformed):
+        if not isinstance(transformed, list):
+            raise TypeError(
+                f"'transformed' argument should be of "
+                f"type 'List[Routine]' but found "
+                f"'{type(transformed).__name__}'."
+            )
+        for sym in transformed:
+            if not isinstance(sym, Routine):
+                raise TypeError(
+                    f"'transformed' argument should be of "
+                    f"type 'List[Routine]' but found "
+                    f"an element of type "
+                    f"'{type(sym).__name__}'."
+                )
+        self._transformed = transformed
+
+    @property
+    def transformed_tables(self):
+        """Returns the symbol table(s) of the transformed routines as a \
+        list.
+
+        :return: list of transformed routine symbol tables.
+        :rtype: List[:py:class:`psyclone.psyir.symbols.SymbolTable`]
+        """
+        return [routine.symbol_table for routine in self.transformed]
 
     @property
     def transformed_symbols(self):
@@ -119,9 +274,89 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
         """
         return [own_routine_symbol(routine) for routine in self.transformed]
 
-    def validate(
-        self, routine, dependent_vars, independent_vars, options=None
-    ):
+    @property
+    def variables_info(self):
+        """Returns the variables access information of the routine being \
+        transformed.
+
+        :return: variables access information.
+        :rtype: :py:class:`psyclone.core.VariablesAccessInfo`
+        """
+        return self._variables_info
+
+    @variables_info.setter
+    def variables_info(self, variables_info):
+        if not isinstance(variables_info, VariablesAccessInfo):
+            raise TypeError(
+                f"'variables_info' argument should be of "
+                f"type 'VariablesAccessInfo' but found "
+                f"'{type(variables_info).__name__}'."
+            )
+        self._variables_info = variables_info
+
+    def process_data_symbols(self, options=None):
+        """Process all the data symbols of the symbol table, \
+        generating their derivative/adjoint symbols in the transformed table \
+        and adding them to the data_symbol_differential_map.
+
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
+
+        for symbol in self.routine_table.datasymbols:
+            self.create_differential_symbol(symbol, options)
+
+    def create_differential_symbol(self, datasymbol, options=None):
+        """Create the derivative/adjoint symbol of the argument symbol in the transformed \
+        table.
+
+        :param datasymbol: data symbol whose derivative/adjoint to create.
+        :param datasymbol: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if datasymbol is of the wrong type.
+
+        :return: the derivative/adjoint symbol.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        """
+        if not isinstance(datasymbol, DataSymbol):
+            raise TypeError(
+                f"'datasymbol' argument should be of "
+                f"type 'DataSymbol' but found"
+                f"'{type(datasymbol).__name__}'."
+            )
+        if not datasymbol.is_scalar:
+            raise NotImplementedError(
+                "'datasymbol' is not a scalar. " "Arrays are not implemented yet."
+            )
+
+        # NOTE: subclasses need to redefine the
+        # _differential_prefix, _differential_postfix and _differential_table_index
+        # class attributes.
+
+        # TODO: #001 use the dependent variable type and precision
+        # TODO: this would depend on the result of activity analysis
+        # Name using pre- and postfix
+        differential_name = self._differential_prefix + datasymbol.name
+        differential_name += self._differential_postfix
+        # New adjoint symbol with unique name in the correct transformed table
+        differential = self.transformed_tables[
+            self._differential_table_index
+        ].new_symbol(
+            differential_name,
+            symbol_type=DataSymbol,
+            datatype=self._default_differential_datatype,
+        )
+
+        # Add it to the map
+        self.data_symbol_differential_map[datasymbol] = differential
+
+        return differential
+
+    def validate(self, routine, dependent_vars, independent_vars, options=None):
         """Validates the arguments of the `apply` method.
 
         :param routine: routine Node to the transformed.
@@ -149,7 +384,12 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
         :raises TransformationError: if the argument list of routine doesn't \
             contain an argument of correct Access for each name in dependent_var
         """
-        super().validate(routine, dependent_vars, independent_vars, options)
+        super().validate(routine, options)
+
+        if self._was_applied:
+            raise TransformationError(
+                "ADRoutineTrans instance can only be applied once."
+            )
 
         if not isinstance(routine, Routine):
             raise TransformationError(
@@ -176,8 +416,36 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
                 "Fortran subroutines."
             )
 
+        if not isinstance(dependent_vars, list):
+            raise TypeError(
+                f"'dependent_vars' argument should be of "
+                f"type 'list' but found"
+                f"'{type(dependent_vars).__name__}'."
+            )
+        for var in dependent_vars:
+            if not isinstance(var, str):
+                raise TypeError(
+                    f"'dependent_vars' argument should be of "
+                    f"type 'List[str]' but found an element of type"
+                    f"'{type(var).__name__}'."
+                )
+
+        if not isinstance(independent_vars, list):
+            raise TypeError(
+                f"'independent_vars' argument should be of "
+                f"type 'list' but found"
+                f"'{type(independent_vars).__name__}'."
+            )
+        for var in independent_vars:
+            if not isinstance(var, str):
+                raise TypeError(
+                    f"'independent_vars' argument should be of "
+                    f"type 'List[str]' but found an element of type"
+                    f"'{type(var).__name__}'."
+                )
+
         # Avoid dealing with recursive calls for now
-        # TODO: these actually should work when using a joint reversal schedule
+        # TODO: these actually should work when using a joint reversal routine
         # TODO: make the link between the routine and itself always be weak?
         for call in routine.walk(Call):
             if call.routine.name == routine.name:
@@ -239,41 +507,244 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
                     f"READWRITE or UNKNOWN."
                 )
 
-    def schedules_to_routines(self, schedules):
-        """Creates Routines out of the transformed schedules, \
-        by adding names to them.
+    @abstractmethod
+    def apply(self, routine, dependent_vars, independent_vars, options=None):
+        """Applies the transformation.
 
-        :param schedules: list of schedules.
-        :type schedules: List[:py:class:`psyclone.psyir.nodes.Schedule`]
+        :param routine: routine Node to the transformed.
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
+        :param dependent_vars: list of dependent variables names to be \
+            differentiated.
+        :type dependent_vars: `List[str]`
+        :param independent_vars: list of independent variables names to \
+            differentiate with respect to.
+        :type independent_vars: `List[str]`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
 
-        :return: list of routines.
+    def new_temp_symbol(self, symbol, symbol_table):
+        """Creates a new temporary symbol for the symbol argument.
+        Uses the name of the symbol.
+        Inserts it in symbol_table with an unused name and in the temp_symbol \
+        list.
+
+        :param symbol: symbol for which a temporary symbol should be created.
+        :type symbol: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param symbol_table: symbol table in which to insert it.
+        :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
+
+        :raises TypeError: if symbol is of the wrong type.
+        :raises TypeError: if symbol_table is of the wrong type.
+
+        :return: temporary symbol
+        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        """
+        if not isinstance(symbol, DataSymbol):
+            raise TypeError(
+                f"'symbol' argument should be of type "
+                f"'DataSymbol' but found "
+                f"'{type(symbol).__name__}'."
+            )
+
+        if not isinstance(symbol_table, SymbolTable):
+            raise TypeError(
+                f"'symbol_table' argument should be of type "
+                f"'SymbolTable' but found "
+                f"'{type(symbol_table).__name__}'."
+            )
+
+        name = self._temp_name_prefix + symbol.name + self._temp_name_postfix
+
+        temp_symbol = symbol_table.new_symbol(
+            name, symbol_type=DataSymbol, datatype=symbol.datatype
+        )
+        self.temp_symbols.append(temp_symbol)
+
+        return temp_symbol
+
+    def add_children(self, routine, children, reverse=False):
+        """Adds the children from a list to a routine.
+        Inserts them in the order of the list if reverse is False, \
+        in the reversed order and at index 0 otherwise.
+
+        :param routine: routine to add children to.
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
+        :param children: list of children to add.
+        :type children: List[:py:class:`psyclone.psyir.nodes.Routine`]
+        :param reverse: whether to reverse and add at index 0, \
+            defaults to False..
+        :type reverse: bool, optional
+
+        :raises TypeError: if routine is of the wrong type.
+        :raises TypeError: if children is of the wrong type.
+        :raises TypeError: if some child is of the wrong type.
+        :raises TypeError: if reverse is of the wrong type.
+        """
+        if not isinstance(routine, Routine):
+            raise TypeError(
+                f"'routine' argument should be of type "
+                f"'Routine' but found "
+                f"'{type(routine).__name__}'."
+            )
+        if not isinstance(children, list):
+            raise TypeError(
+                f"'children' argument should be of type "
+                f"'list' but found "
+                f"'{type(children).__name__}'."
+            )
+        for child in children:
+            if not isinstance(child, Node):
+                raise TypeError(
+                    f"Elements of 'children' argument list "
+                    f"should be of type 'Node' but found "
+                    f"'{type(child).__name__}'."
+                )
+        if not isinstance(reverse, bool):
+            raise TypeError(
+                f"'reverse' argument should be of type "
+                f"'bool' but found "
+                f"'{type(reverse).__name__}'."
+            )
+
+        # Leave the argument list unchanged
+        children_copy = children.copy()
+
+        index = None
+        if reverse:
+            children_copy.reverse()
+            index = 0
+
+        for child in children_copy:
+            routine.addchild(child, index)
+
+    def create_transformed_routines(self):
+        """Create the empty transformed Routines.
+
+        :return: all transformed routines as a list.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Routine`]
         """
+        # NOTE: subclasses need to redefine the _number_of_routines
+        # class attribute.
+
+        # Shallow copy the symbol table
+        tables = [
+            self.routine_table.shallow_copy() for i in range(self._number_of_routines)
+        ]
+        original_table = self.routine_table.shallow_copy().detach()
+        tables = [table.detach() for table in tables]
+        original_table.attach(self.routine)
+
         # Remove the 'own_routine_symbol' symbols from their tables
-        tables = [schedule.symbol_table for schedule in schedules]
+        # This is required to use new names for the routines
         for table in tables:
             table.remove(table.lookup_with_tag('own_routine_symbol'))
 
-        # Generate the names of the routine using pre- and postfixes
+        # Names using pre- and postfixes
         names = [
-            prefix + self.routine.name + postfix
-            for prefix, postfix in zip(self._routine_prefixes, self._routine_postfixes)
+            pre + self.routine.name + post
+            for pre, post in zip(self._routine_prefixes, self._routine_postfixes)
         ]
 
-        # Create them, this adds a new RoutineSymbol correctly named
-        # to their symbol tables
+        # Create the routines
         routines = [
             Routine.create(
                 name=name,
-                symbol_table=schedule.symbol_table.detach(),
-                children=[child.copy() for child in schedule.children],
+                symbol_table=table,
+                children=[],
                 is_program=False,
                 return_symbol_name=None,
             )
-            for name, schedule in zip(names, schedules)
+            for name, table in zip(names, tables)
         ]
 
         return routines
+
+    @abstractmethod
+    def transform_assignment(self, assignment, options=None):
+        """Transforms an Assignment child of the routine.
+
+        :param assignment: assignment to transform.
+        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
+
+    @abstractmethod
+    def transform_call(self, call, options=None):
+        """Transforms a Call child of the routine.
+
+        :param call: call to transform.
+        :type call: :py:class:`psyclone.psyir.nodes.Call`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
+
+    def transform_children(self, options=None):
+        """Transforms all the children of the routine being transformed \
+        and adds the statements to the transformed routines.
+
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises NotImplementedError: if a child is a recursive Call to the \
+            Routine being transformed.
+        :raises NotImplementedError: if the child transformation is not \
+            implemented yet. For now only those for Assignment and Call are.
+        """
+        # Go line by line through the Routine
+        # Note that this creates the symbols for operation adjoints and temporaries
+        for child in self.routine.children:
+            if isinstance(child, Assignment):
+                self.transform_assignment(child, options)
+            elif isinstance(child, Call):
+                self.transform_call(child, options)
+            else:
+                raise NotImplementedError(
+                    f"Transforming a Routine child of "
+                    f"type '{type(child).__name__}' is "
+                    f"not implemented yet."
+                )
+
+    def simplify(self, routine, options=None):
+        """Apply simplifications to the BinaryOperation and Assignment nodes
+        of the transformed routine provided as argument.
+
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if routine is of the wrong type.
+        :raises ValueError: if routine is not in self.transformed.
+        """
+        if not isinstance(routine, Routine):
+            raise TypeError(
+                f"'routine' argument should be of type "
+                f"'Routine' but found "
+                f"'{type(routine).__name__}'."
+            )
+        if routine not in self.transformed:
+            raise ValueError(
+                "'routine' argument should be in " "self.transformed but is not."
+            )
+
+        simplify_n_times = self.unpack_option("simplify_n_times", options)
+        for i in range(simplify_n_times):
+            # Reverse the walk result to apply from deepest operations to shallowest
+            all_nodes = routine.walk(Node)[::-1]
+            for i, node in enumerate(all_nodes):
+                simplified_node = simplify_node(node)
+                if simplified_node is None:
+                    node.detach()
+                    all_nodes.pop(i)
+                else:
+                    if simplified_node is not node:
+                        node.replace_with(simplified_node)
+                        all_nodes[i] = simplified_node
 
     def jacobian_routine(self, mode, dependent_vars, independent_vars, options=None):
         """Creates the Jacobian routine using automatic \
@@ -370,8 +841,8 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
             transformed_table = self.transformed_tables[0]
             transformed_symbol = self.transformed_symbols[0]
         else:
-            transformed_table = self.transformed_tables[2]  #reversing
-            transformed_symbol = self.transformed_symbols[2]#reversing
+            transformed_table = self.transformed_tables[2]  # reversing
+            transformed_symbol = self.transformed_symbols[2]  # reversing
 
         jacobian_routine = Routine(
             self._jacobian_prefix + self.routine.name + self._jacobian_postfix
@@ -466,7 +937,7 @@ class ADRoutineTrans(ADScopeTrans, metaclass=ABCMeta):
                     jacobian_routine, [rest.copy() for rest in temp_restores]
                 )
 
-            #first_dim + 1 to get the Fortran index
+            # first_dim + 1 to get the Fortran index
             first_dim_literal = Literal(str(first_dim + 1), INTEGER_TYPE)
 
             # Set the independent derivative/dependent adjoint for the row/column to 1.0
