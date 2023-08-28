@@ -544,7 +544,20 @@ class ComparatorGenerator(object):
 
         ###############################
         # Finally, compile using numpy.f2py
-        module_and_function_name = routine_name + "_comp"
+
+        # Create a module name that doesn't already exist
+        correct_module_name = False
+        module_name_postfix = 0
+        while not correct_module_name:
+            try:
+                import_module(routine_name + "_comp_" + str(module_name_postfix))
+            except ModuleNotFoundError:
+                correct_module_name = True
+            else:
+                module_name_postfix += 1
+        module_name = routine_name + "_comp_" + str(module_name_postfix)
+
+        print(f"This will create a module '{module_name}'.")
 
         # TODO: fix the extension
         subprocess.run(
@@ -552,7 +565,7 @@ class ComparatorGenerator(object):
                 "f2py3",
                 "-c",
                 "-m",
-                module_and_function_name,
+                module_name,
                 comparator_file_path,
                 tapenade_path + "/ADFirstAidKit/adStack.c",
             ],
@@ -560,9 +573,9 @@ class ComparatorGenerator(object):
             capture_output=True,
         )
 
-        module = import_module(module_and_function_name)
+        module = import_module(module_name)
 
-        return getattr(module, module_and_function_name), [
+        return getattr(module, routine_name + "_comp"), [
             arg.name for arg in comparator_arguments
         ]
 
@@ -573,20 +586,21 @@ if __name__ == "__main__":
 
     schedule = ADSplitReversalSchedule()
     output_types = ("Jacobians_values", "Jacobians_error", "L1_error", "Linf_error")
-    output_type = output_types[1]
+    output_type = output_types[3]
     foo_comp, arg_names = ComparatorGenerator.compare(
-        "./tapenade_3.16",
-        "foo.f90",        #f2py_result = f2py.compile(
+        "./tests/autodiff/numerical_tests/tapenade_3.16",
+        "./tests/autodiff/numerical_tests/routine.f90",        #f2py_result = f2py.compile(
         #    sourcecode, modulename=module_and_function_name, extension=".f90"
         #)
         #if f2py_result != 0:
         #    raise ValueError("f2py compilation failed.")
-        "foo",
-        ["f", "g"],
-        ["x", "w"],
-        schedule,
+        "routine_unary",
+        ["f"],
+        ["x"],
         output_type,
         {"verbose": True},
+        "forward",
+        schedule,
     )
 
     # from numpy import f2py
@@ -599,10 +613,10 @@ if __name__ == "__main__":
     print(foo_comp.__doc__)
 
     if output_type == "Jacobians_values":
-        J_autodiff, J_tapenade = foo_comp(2.23, 3.51, 1.2)
+        J_autodiff, J_tapenade = foo_comp(2.23)
         print(J_autodiff)
         print(J_tapenade)
     else:
-        error = foo_comp(2.23, 3.51, 1.2)
+        error = foo_comp(2.23)
         print(error)
 """
