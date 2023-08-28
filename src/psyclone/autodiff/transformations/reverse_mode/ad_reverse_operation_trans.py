@@ -309,9 +309,9 @@ class ADReverseOperationTrans(ADOperationTrans):
         operand = operation.children[0].copy()
 
         if operator == UnaryOperation.Operator.PLUS:
-            return one()
+            return one(REAL_TYPE)
         if operator == UnaryOperation.Operator.MINUS:
-            return minus(one())
+            return minus(one(REAL_TYPE))
         if operator == UnaryOperation.Operator.SQRT:
             # TODO: x=0 should print something, raise an exception or something
             return inverse(mul(Literal("2", INTEGER_TYPE), operation))
@@ -326,13 +326,14 @@ class ADReverseOperationTrans(ADOperationTrans):
         if operator == UnaryOperation.Operator.SIN:
             return cos(operand)
         if operator == UnaryOperation.Operator.TAN:
-            return inverse(square(cos(operand)))
+            return add(one(REAL_TYPE), square(operation))
+            #return inverse(square(cos(operand)))
         if operator == UnaryOperation.Operator.ACOS:
-            return minus(inverse(sqrt(sub(one(), square(operand)))))
+            return minus(inverse(sqrt(sub(one(REAL_TYPE), square(operand)))))
         if operator == UnaryOperation.Operator.ASIN:
-            return inverse(sqrt(sub(one(), square(operand))))
+            return inverse(sqrt(sub(one(REAL_TYPE), square(operand))))
         if operator == UnaryOperation.Operator.ATAN:
-            return inverse(add(one(), square(operand)))
+            return inverse(add(one(REAL_TYPE), square(operand)))
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
             return div(operand, operation.copy())
@@ -370,9 +371,9 @@ class ADReverseOperationTrans(ADOperationTrans):
         lhs, rhs = [child.copy() for child in operation.children]
 
         if operator == BinaryOperation.Operator.ADD:
-            return [one(), one()]
+            return [one(REAL_TYPE), one(REAL_TYPE)]
         if operator == BinaryOperation.Operator.SUB:
-            return [one(), minus(one())]
+            return [one(REAL_TYPE), minus(one(REAL_TYPE))]
         if operator == BinaryOperation.Operator.MUL:
             return [rhs, lhs]
         if operator == BinaryOperation.Operator.DIV:
