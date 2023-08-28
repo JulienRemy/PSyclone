@@ -166,13 +166,14 @@ class ADForwardOperationTrans(ADOperationTrans):
         if operator == UnaryOperation.Operator.SIN:
             return mul(cos(operand), operand_d)
         if operator == UnaryOperation.Operator.TAN:
-            return div(operand_d, square(cos(operand)))
+            return mul(add(one(REAL_TYPE), square(operation)), operand_d)
+            #return div(operand_d, square(cos(operand)))
         if operator == UnaryOperation.Operator.ACOS:
-            return minus(div(operand_d, sqrt(sub(one(), square(operand)))))
+            return minus(div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand)))))
         if operator == UnaryOperation.Operator.ASIN:
-            return div(operand_d, sqrt(sub(one(), square(operand))))
+            return div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
         if operator == UnaryOperation.Operator.ATAN:
-            return div(operand_d, add(one(), square(operand)))
+            return div(operand_d, add(one(REAL_TYPE), square(operand)))
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
             return div(mul(operand, operand_d), operation.copy())
@@ -229,7 +230,7 @@ class ADForwardOperationTrans(ADOperationTrans):
         if operator == BinaryOperation.Operator.MUL:
             return add(mul(lhs_d, rhs), mul(rhs_d, lhs))
         if operator == BinaryOperation.Operator.DIV:
-            return sub(div(lhs_d, rhs), div(mul(rhs_d, lhs), square(rhs)))
+            return div(sub(lhs_d, div(mul(rhs_d, lhs), rhs)), rhs)
         if operator == BinaryOperation.Operator.POW:
             if isinstance(rhs, Literal):
                 whole, dot, decimal = rhs.value.partition(".")
