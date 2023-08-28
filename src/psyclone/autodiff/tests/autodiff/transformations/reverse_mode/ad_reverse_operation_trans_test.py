@@ -206,7 +206,7 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     assert fortran_writer(ad_operation_trans.differentiate_unary(sin)) == "COS(var)"
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(tan))
-        == "1.0 / COS(var) ** 2"
+        == "1.0 + TAN(var) ** 2"
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(acos))
