@@ -86,13 +86,13 @@ def test_ad_assignment_trans_initialization():
     with pytest.raises(TypeError) as info:
         ADReverseAssignmentTrans(None)
     assert (
-        "Argument should be of type 'ADScopeTrans' "
+        "Argument should be of type 'ADRoutineTrans' "
         "but found 'NoneType'." in str(info.value)
     )
 
     _, ad_routine_trans, ad_assignment_trans = initialize_transformations()
 
-    #assert ad_assignment_trans.routine_trans == ad_routine_trans
+    assert ad_assignment_trans.routine_trans == ad_routine_trans
 
 
 def test_ad_assignment_trans_validate():

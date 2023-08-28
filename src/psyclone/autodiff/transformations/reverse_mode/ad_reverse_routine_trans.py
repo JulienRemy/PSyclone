@@ -38,35 +38,32 @@ differentiation of PSyIR Routine nodes."""
 
 from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import (
-    Routine,
     Call,
     Reference,
-    ArrayReference,
-    Literal,
+    Assignment,
 )
 from psyclone.psyir.symbols import (
-    INTEGER_TYPE,
-    SymbolTable,
+    REAL_DOUBLE_TYPE,
     DataSymbol,
+    ScalarType,
     ArrayType,
 )
-from psyclone.psyir.symbols.interfaces import ArgumentInterface, AutomaticInterface
-from psyclone.psyir.transformations import TransformationError
+from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff import assign_zero, own_routine_symbol, assign, one
+from psyclone.autodiff import assign_zero, own_routine_symbol
 from psyclone.autodiff.tapes import ADValueTape
-from psyclone.autodiff.transformations import (
-    ADReverseContainerTrans,
-    ADReverseScheduleTrans,
-    ADRoutineTrans
-)
+from psyclone.autodiff.transformations import ADRoutineTrans
 
 
 class ADReverseRoutineTrans(ADRoutineTrans):
     """A class for automatic differentation transformations of Routine nodes. 
     Requires an ADReverseContainerTrans instance as context, where the definitions of  \
     the routines called inside the one to be transformed can be found.
-    Uses an ADReverseScheduleTrans internally.
+
+    :param container_trans: ADReverseContainerTrans context instance
+    :type container_trans: :py:class:`psyclone.autodiff.transformations.ADReverseContainerTrans`
+
+    :raises TypeError: if the container_trans argument is of the wrong type.
     """
 
     _recording_prefix = ""
@@ -81,23 +78,119 @@ class ADReverseRoutineTrans(ADRoutineTrans):
     _routine_prefixes = (_recording_prefix, _returning_prefix, _reversing_prefix)
     _routine_postfixes = (_recording_postfix, _returning_postfix, _reversing_postfix)
 
-    _number_of_schedules = ADReverseScheduleTrans._number_of_schedules
-    _differential_prefix = ADReverseScheduleTrans._differential_prefix
-    _differential_postfix = ADReverseScheduleTrans._differential_postfix
-    _differential_table_index = ADReverseScheduleTrans._differential_table_index
-    _operation_adjoint_name = ADReverseScheduleTrans._operation_adjoint_name
-    _default_value_tape_datatype = ADReverseScheduleTrans._default_value_tape_datatype
+    _number_of_routines = 3  # Recording, returning, reversing
+    _differential_prefix = ""
+    _differential_postfix = "_adj"
+    _differential_table_index = 1  # Adjoints are created in the returning table
+
+    _operation_adjoint_name = "op_adj"
+    # _call_adjoint_name = "call_adj"
+
+    # TODO: correct datatype
+    _default_value_tape_datatype = REAL_DOUBLE_TYPE
 
     def __init__(self, container_trans):
-        super().__init__(container_trans)
+        super().__init__()
 
-        self.schedule_trans = ADReverseScheduleTrans(container_trans)
-        self.assignment_trans = self.schedule_trans.assignment_trans
-        self.assignment_trans.routine_trans = self
-        self.operation_trans = self.schedule_trans.operation_trans
-        self.operation_trans.routine_trans = self
-        self.call_trans = self.schedule_trans.call_trans
-        self.call_trans.routine_trans = self
+        # Contextual container trans
+        self.container_trans = container_trans
+
+        # DataSymbol => adjoint DataSymbol
+        self.data_symbol_differential_map = dict()
+
+        # Lists of adjoint symbols for operations
+        self.operation_adjoints = []
+
+        # Transformations need to know about the ADReverseRoutineTrans calling them
+        # to access the attributes defined above
+        # Import here to avoid circular dependencies
+        from psyclone.autodiff.transformations import (
+            ADReverseOperationTrans,
+            ADReverseAssignmentTrans,
+            ADReverseCallTrans,
+        )
+
+        # Initialize the sub transformations
+        # self.adjoint_symbol_trans = ADAdjointSymbolTrans(self)
+        self.assignment_trans = ADReverseAssignmentTrans(self)
+        self.operation_trans = ADReverseOperationTrans(self)
+        self.call_trans = ADReverseCallTrans(self)
+
+    @property
+    def container_trans(self):
+        """Returns the ADReverseContainerTrans this instance uses.
+
+        :return: container transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADReverseContainerTrans`
+        """
+        return self._container_trans
+    
+    @container_trans.setter
+    def container_trans(self, container_trans):
+        # Import here to avoid circular dependencies
+        from psyclone.autodiff.transformations import ADReverseContainerTrans
+        if not isinstance(container_trans, ADReverseContainerTrans):
+            raise TypeError(f"Argument should be an 'ADReverseContainerTrans' "
+                            f"but found '{type(container_trans)}.__name__'.")
+        
+        self._container_trans = container_trans
+
+    @property
+    def assignment_trans(self):
+        """Returns the ADReverseAssignmentTrans this instance uses.
+
+        :return: assignment transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADReverseAssignmentTrans`
+        """
+        return self._assignment_trans
+    
+    @assignment_trans.setter
+    def assignment_trans(self, assignment_trans):
+        # Import here to avoid circular dependencies
+        from psyclone.autodiff.transformations import ADReverseAssignmentTrans
+        if not isinstance(assignment_trans, ADReverseAssignmentTrans):
+            raise TypeError(f"Argument should be an 'ADReverseAssignmentTrans' "
+                            f"but found '{type(assignment_trans)}.__name__'.")
+        
+        self._assignment_trans = assignment_trans
+
+    @property
+    def operation_trans(self):
+        """Returns the ADReverseOperationTrans this instance uses.
+
+        :return: operation transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADReverseOperationTrans`
+        """
+        return self._operation_trans
+    
+    @operation_trans.setter
+    def operation_trans(self, operation_trans):
+        # Import here to avoid circular dependencies
+        from psyclone.autodiff.transformations import ADReverseOperationTrans
+        if not isinstance(operation_trans, ADReverseOperationTrans):
+            raise TypeError(f"Argument should be an 'ADReverseOperationTrans' "
+                            f"but found '{type(operation_trans)}.__name__'.")
+        
+        self._operation_trans = operation_trans
+
+    @property
+    def call_trans(self):
+        """Returns the ADReverseCallTrans this instance uses.
+
+        :return: call transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADReverseCallTrans`
+        """
+        return self._call_trans
+    
+    @call_trans.setter
+    def call_trans(self, call_trans):
+        # Import here to avoid circular dependencies
+        from psyclone.autodiff.transformations import ADReverseCallTrans
+        if not isinstance(call_trans, ADReverseCallTrans):
+            raise TypeError(f"Argument should be an 'ADReverseCallTrans' "
+                            f"but found '{type(call_trans)}.__name__'.")
+        
+        self._call_trans = call_trans
 
     @property
     def recording(self):
@@ -154,25 +247,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         return self.reversing.symbol_table
 
     @property
-    def value_tape(self):
-        """Returns the value_tape used by the transformation.
-
-        :return: value_tape.
-        :rtype: :py:class:`psyclone.autodiff.ADValueTape`
-        """
-        return self._value_tape
-
-    @value_tape.setter
-    def value_tape(self, value_tape):
-        if not isinstance(value_tape, ADValueTape):
-            raise TypeError(
-                f"'value_tape' argument should be of "
-                f"type 'ADValueTape' but found "
-                f"'{type(value_tape).__name__}'."
-            )
-        self._value_tape = value_tape
-
-    @property
     def recording_symbol(self):
         """Returns the routine symbol of the recording routine being generated.
 
@@ -199,6 +273,37 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """
         return own_routine_symbol(self.reversing)
 
+    @property
+    def value_tape(self):
+        """Returns the value_tape used by the transformation.
+
+        :return: value_tape.
+        :rtype: :py:class:`psyclone.autodiff.ADValueTape`
+        """
+        return self._value_tape
+
+    @value_tape.setter
+    def value_tape(self, value_tape):
+        if not isinstance(value_tape, ADValueTape):
+            raise TypeError(
+                f"'value_tape' argument should be of "
+                f"type 'ADValueTape' but found "
+                f"'{type(value_tape).__name__}'."
+            )
+        self._value_tape = value_tape
+
+    @property
+    def adjoint_symbols(self):
+        """Returns all the adjoint symbols used in transforming the Routine,
+            ie. adjoints of data symbols, operations and all temporary symbols.
+
+        :return: list of all adjoint symbols.
+        :rtype: List[:py:class:`psyclone.psyir.symbols.DataSymbol`]
+        """
+        symbols = self.operation_adjoints  # + self.function_call_adjoints
+        symbols += self.temp_symbols + list(self.data_symbol_differential_map.values())
+        return symbols
+
     def validate(
         self, routine, dependent_vars, independent_vars, value_tape=None, options=None
     ):
@@ -212,14 +317,22 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :param independent_vars: list of independent variables names to \
             differentiate with respect to.
         :type independent_vars: `List[str]`
-        :param value_tape: value tape to use to transform the schedule.
+        :param value_tape: value tape to use to transform the routine.
         :type value_tape: Optional[Union[NoneType, ADValueTape]]
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if value_tape is of the wrong type.
         """
         super().validate(routine, dependent_vars, independent_vars, options)
-        self.schedule_trans.validate(routine, dependent_vars, independent_vars, value_tape, options)
+
+        if not isinstance(value_tape, (ADValueTape, type(None))):
+            raise TypeError(
+                f"'value_tape' argument should be of "
+                f"type 'ADValueTape' or 'NoneType' but found an element of type"
+                f"'{type(value_tape).__name__}'."
+            )
 
     def apply(
         self, routine, dependent_vars, independent_vars, value_tape=None, options=None
@@ -247,7 +360,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :param independent_vars: list of independent variables names to \
             differentiate with respect to.
         :type independent_vars: `List[str]`
-        :param value_tape: value tape to use to transform the schedule.
+        :param value_tape: value tape to use to transform the routine.
         :type value_tape: Optional[Union[NoneType, ADValueTape]]
         :param options: a dictionary with options for transformations, \
             defaults to None.
@@ -263,10 +376,13 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """
         self.validate(routine, dependent_vars, independent_vars, value_tape, options)
 
+        # Transformation can only be applied once
+        self._was_applied = True
+
         self.routine = routine
         self.dependent_variables = dependent_vars
         self.independent_variables = independent_vars
-        
+
         # Get the variables access information (to determine overwrites and taping)
         self.variables_info = VariablesAccessInfo(routine)
 
@@ -283,22 +399,45 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Do it before apply below or ordering is not from outer to inner routines
         self.container_trans.add_routine_trans(self)
 
+        # Empty transformed routines with symbol tables
+        self.transformed = self.create_transformed_routines()
+
+        # Process all symbols in the table, generating adjoint symbols
+        self.process_data_symbols(options)
+
+        # Transform the statements found in the Routine
+        self.transform_children(options)
+
+        # Inline the operation adjoints definitions
+        # (rhs of Assignment nodes whose LHS is an operation adjoint)
+        inline_operation_adjoints = self.unpack_option(
+            "inline_operation_adjoints", options
+        )
+        if inline_operation_adjoints:
+            self.inline_operation_adjoints(options)
+
+        # Simplify the BinaryOperation and Assignment nodes
+        # in the returning routine
+        simplify = self.unpack_option("simplify", options)
+        if simplify:
+            self.simplify(self.returning, options)
+
         # Apply the ADReverseScheduleTrans
-        schedules = self.schedule_trans.apply(routine, dependent_vars, independent_vars, self.value_tape, options)
+        # schedules = self.schedule_trans.apply(routine, dependent_vars, independent_vars, self.value_tape, options)
 
         # Raise the transformed schedules to routines
-        self.transformed = self.schedules_to_routines(schedules)
+        # self.transformed = self.schedules_to_routines(schedules)
         # Get relevant attributes from the ScheduleTrans
-        self.data_symbol_differential_map = self.schedule_trans.data_symbol_differential_map
-        self.temp_symbols = self.schedule_trans.temp_symbols
-        self.value_tape = self.schedule_trans.value_tape
+        # self.data_symbol_differential_map = self.schedule_trans.data_symbol_differential_map
+        # self.temp_symbols = self.schedule_trans.temp_symbols
+        # self.value_tape = self.schedule_trans.value_tape
 
         # Add the transformed routines symbols to the container_trans map
         self.container_trans.add_transformed_routines(
             self.routine_symbol, self.transformed_symbols
         )
 
-        # Tape all the values that are not written back to the parent schedule/scope
+        # Tape all the values that are not written back to the parent routine/scope
         self.value_tape_non_written_values(options)
 
         # add The value tape to the container_trans map
@@ -340,6 +479,311 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.container_trans.container.addchild(jacobian_routine)
 
         return self.recording, self.returning, self.reversing
+
+    # TODO: when using arrays, it may make sense to check indices?
+    def is_written_before(self, reference):
+        """Checks whether the reference was written before. \
+        This only considers it appearing as lhs of assignments.
+
+        :param reference: reference to check.
+        :type reference: :py:class:`psyclone.psyir.node.Reference`
+
+        :raises TypeError: if reference is of the wrong type.
+
+        :return: True is there are writes before, False otherwise.
+        :rtype: bool
+        """
+        if not isinstance(reference, Reference):
+            raise TypeError(
+                f"'reference' argument should be of "
+                f"type 'Reference' but found"
+                f"'{type(reference).__name__}'."
+            )
+
+        # Get the signature and indices of the assignment lhs
+        sig, indices = reference.get_signature_and_indices()
+        # Get the variable info
+        info = self.variables_info[sig]
+
+        # Check whether it was written before this
+        return info.is_written_before(reference)
+
+    # TODO: consider the intents
+    def is_call_argument_before(self, reference):
+        """Checks whether the reference appeared before as an argument \
+        of a routine call.
+        This does not consider the intents of the arguments in the called \
+        routine.
+
+        :param reference: reference to check.
+        :type reference: :py:class:`psyclone.psyir.node.Reference`
+
+        :raises TypeError: if reference is of the wrong type.
+
+        :return: True if it appeared as a call argument before, \
+            False otherwise.
+        :rtype: bool
+        """
+        if not isinstance(reference, Reference):
+            raise TypeError(
+                f"'reference' argument should be of "
+                f"type 'Reference' but found"
+                f"'{type(reference).__name__}'."
+            )
+
+        # All preceding nodes
+        preceding = reference.preceding(routine=True)
+        # All preceding calls
+        preceding_calls = [node for node in preceding if isinstance(node, Call)]
+
+        # If the reference is in a call, get it
+        # then remove it from the calls to consider.
+        # Otherwise we'll always get True if reference is a call argument.
+        parent_call = reference.ancestor(Call)
+        if parent_call in preceding_calls:
+            preceding_calls.remove(parent_call)
+
+        # Check all arguments of the calls
+        # if the same symbol as reference is present
+        # then it was possibly written before as an argument
+        for call in preceding_calls:
+            refs = call.walk(Reference)
+            syms = [ref.symbol for ref in refs]
+            if reference.symbol in syms:
+                return True
+
+        return False
+
+    def is_overwrite(self, reference, options=None):
+        """Checks whether a reference was written before in the Routine
+        being transformed or if appeared as a call argument before. 
+        Used to determine whether to value_tape its prevalue or not.
+
+        :param reference: reference to check.
+        :type reference: :py:class:`psyclone.psyir.nodes.Reference`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if reference is of the wrong type.
+
+        :return: True if this reference is overwriting a prevalue, \
+            False otherwise.
+        :rtype: bool
+        """
+        if not isinstance(reference, Reference):
+            raise TypeError(
+                f"'reference' argument should be of "
+                f"type 'Reference' but found"
+                f"'{type(reference).__name__}'."
+            )
+
+        # Arguments with intent(in) cannot be assigned to/modified in calls
+        if reference.symbol in self.recording_table.argument_list:
+            if reference.symbol.interface.access == ArgumentInterface.Access.READ:
+                return False
+
+        # Check whether the reference is written before
+        # this only considers assignments lhs it seems
+        overwriting = self.is_written_before(reference)
+
+        # Also check if it appears as argument in a call
+        overwriting = overwriting or self.is_call_argument_before(reference)
+
+        # Check whether it is an argument and has intent other than out
+        variable_is_in_arg = (
+            reference.symbol in self.routine_table.argument_list
+            and reference.symbol.interface.access != ArgumentInterface.Access.WRITE
+        )
+
+        return overwriting or variable_is_in_arg
+
+    def transform_assignment(self, assignment, options=None):
+        """Transforms an Assignment child of the routine and adds the \
+        statements to the recording and returning routines.
+
+        :param assignment: assignment to transform.
+        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if assignment is of the wrong type.
+
+        """
+        if not isinstance(assignment, Assignment):
+            raise TypeError(
+                f"'assignment' argument should be of "
+                f"type 'Assignment' but found"
+                f"'{type(assignment).__name__}'."
+            )
+
+        overwriting = self.is_overwrite(assignment.lhs)
+
+        returning = []
+
+        # Tape record and restore first
+        if overwriting:
+            value_tape_record = self.value_tape.record(assignment.lhs)
+            self.recording.addchild(value_tape_record)
+
+            value_tape_restore = self.value_tape.restore(assignment.lhs)
+            returning.append(value_tape_restore)
+
+            # verbose_comment += ", overwrite"
+
+        # Apply the transformation
+        recording, ret = self.assignment_trans.apply(assignment, options)
+        returning.extend(ret)
+
+        # Insert in the recording routine
+        self.add_children(self.recording, recording)
+
+        # Insert in the returning routine
+        self.add_children(self.returning, returning, reverse=True)
+
+    def transform_call(self, call, options=None):
+        """Transforms a Call child of the routine and adds the \
+        statements to the recording and returning routines.
+
+        :param call: call to transform.
+        :type call: :py:class:`psyclone.psyir.nodes.Call`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+
+        :raises TypeError: if call is of the wrong type.
+        """
+        if not isinstance(call, Call):
+            raise TypeError(
+                f"'call' argument should be of "
+                f"type 'Call' but found"
+                f"'{type(call).__name__}'."
+            )
+
+        # Tape record/restore the Reference arguments of the Call
+        # Symbols already value_taped due to this call
+        # to avoid taping multiple times if it appears as multiple
+        # arguments of the call
+        value_taped_symbols = []
+        # accumulate the restores for now
+        value_tape_restores = []
+        for arg in call.children:
+            if isinstance(arg, Reference):
+                # Check whether the lhs variable was written before
+                # or if it is an argument of a call before
+                overwriting = self.is_overwrite(arg)
+                # TODO: this doesn't deal with the intents
+                # of the routine being called for now
+                # ie. intent(in) doesn't need to be value_taped?
+                # see self.is_call_argument_before
+
+                if overwriting:
+                    # Symbol wasn't value_taped yet
+                    if arg.symbol not in value_taped_symbols:
+                        # Tape record in the recording routine
+                        value_tape_record = self.value_tape.record(arg)
+                        self.recording.addchild(value_tape_record)
+
+                        # Associated value_tape restore in the returning routine
+                        value_tape_restore = self.value_tape.restore(arg)
+                        value_tape_restores.append(value_tape_restore)
+
+                        # Don't value_tape the same symbol again in this call
+                        value_taped_symbols.append(arg.symbol)
+
+        # Apply an ADReverseCallTrans
+        recording, returning = self.call_trans.apply(call, options)
+
+        # Add the statements to the recording routine
+        self.add_children(self.recording, recording)
+
+        # Add the statements to the returning routine
+        # Reverse to insert always at index 0
+        self.add_children(self.returning, returning, reverse=True)
+
+        # Add the value_tape restores before the call
+        self.add_children(self.returning, value_tape_restores, reverse=True)
+
+    def new_operation_adjoint(self, datatype):
+        """Creates a new adjoint symbol for an Operation node in the \
+        returning table. Also appends it to the operation_adjoints list.
+
+        :param datatype: datatype of the adjoint symbol
+        :type datatype: Union[:py:class:`psyclone.psyir.symbols.ScalarType`,
+                              :py:class:`psyclone.psyir.symbols.ArrayType`]
+
+        :raises TypeError: if datatype is of the wrong type.
+
+        :return: the adjoint symbol generated.
+        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        """
+        if not isinstance(datatype, (ScalarType, ArrayType)):
+            raise TypeError(
+                f"'datatype' argument should be of type "
+                f"'ScalarType' or 'ArrayType' but found "
+                f"'{type(datatype).__name__}'."
+            )
+
+        adjoint = self.returning_table.new_symbol(
+            self._operation_adjoint_name, symbol_type=DataSymbol, datatype=datatype
+        )
+        self.operation_adjoints.append(adjoint)
+
+        return adjoint
+
+    def inline_operation_adjoints(self, options=None):
+        """Inline the definitions of operations adjoints, ie. the RHS of 
+        Assignment nodes with LHS being an operation adjoint, 
+        everywhere it's possible in the returning routine, ie. except 
+        for those used as Call arguments.
+
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[str, Any]]
+        """
+
+        # NOTE: must NOT be done for independent adjoints...
+        all_assignments = self.returning.walk(Assignment)
+        all_calls = self.returning.walk(Call)
+        # Only assignments to operation adjoints
+        op_adj_assignments = [
+            assignment
+            for assignment in all_assignments
+            if assignment.lhs.name.startswith(self._operation_adjoint_name)
+        ]
+        for assignment in op_adj_assignments:
+            call_args = []
+            for call in all_calls:
+                call_args.extend(call.children)
+            if assignment.lhs in call_args:
+                continue
+
+            # Used to look at other assignments after this one only
+            i = all_assignments.index(assignment)
+            # Get the occurences of this operation adjoint on the rhs of
+            # other assignments
+            rhs_occurences = []
+            for other_assignment in all_assignments[i + 1 :]:
+                refs_in_rhs = other_assignment.rhs.walk(Reference)
+                for ref in refs_in_rhs:
+                    if ref == assignment.lhs:
+                        rhs_occurences.append(ref)
+                        # If already 1 occurence, we won't inline unless rhs is a Reference
+                        # so stop there
+                        if (not isinstance(assignment.rhs, Reference)) and (
+                            len(rhs_occurences) == 2
+                        ):
+                            break
+
+            if len(rhs_occurences) == 1:
+                substitute = assignment.rhs.detach()
+                assignment.detach()
+                all_assignments.remove(assignment)
+                # TODO: this might not be right for vectors...
+                self.returning_table._symbols.pop(assignment.lhs.name)
+                for rhs_occurence in rhs_occurences:
+                    rhs_occurence.replace_with(substitute.copy())
 
     def value_tape_non_written_values(self, options):
         """Record and restore the last values of non-argument variables \

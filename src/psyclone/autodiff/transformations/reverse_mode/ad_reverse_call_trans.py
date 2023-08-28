@@ -172,7 +172,7 @@ class ADReverseCallTrans(ADCallTrans):
         # strong => split reversal
         # weak => joint reversal
         split = self.reversal_schedule.is_strong_link(
-            self.routine_trans.schedule.name, self.routine.name
+            self.routine_trans.routine.name, self.routine.name
         )
 
         # TODO: recursive calls seem to work in joint reversal?

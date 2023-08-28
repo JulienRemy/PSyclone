@@ -42,15 +42,10 @@ from itertools import product
 from psyclone.psyir.frontend.fortran import FortranReader
 from psyclone.psyir.symbols import (
     DataSymbol,
-    INTEGER_TYPE,
     REAL_TYPE,
     RoutineSymbol,
 )
 from psyclone.psyir.nodes import (
-    Literal,
-    UnaryOperation,
-    BinaryOperation,
-    NaryOperation,
     Call,
     Reference,
     Container,
@@ -60,7 +55,6 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.transformations import TransformationError
 from psyclone.autodiff.transformations import (
-    ADReverseOperationTrans,
     ADReverseRoutineTrans,
     ADReverseContainerTrans,
     ADReverseCallTrans,
@@ -68,7 +62,6 @@ from psyclone.autodiff.transformations import (
 from psyclone.autodiff.tapes import ADValueTape
 from psyclone.autodiff import (
     own_routine_symbol,
-    assign,
     add,
     zero,
     one,
@@ -112,13 +105,13 @@ def test_ad_call_trans_initialization():
     with pytest.raises(TypeError) as info:
         ADReverseCallTrans(None)
     assert (
-        "Argument should be of type 'ADScopeTrans' "
+        "Argument should be of type 'ADRoutineTrans' "
         "but found 'NoneType'." in str(info.value)
     )
 
     _, ad_routine_trans, ad_call_trans = initialize_transformations()
 
-    #assert ad_call_trans.routine_trans == ad_routine_trans
+    assert ad_call_trans.routine_trans == ad_routine_trans
 
 
 def test_ad_call_trans_validate():
