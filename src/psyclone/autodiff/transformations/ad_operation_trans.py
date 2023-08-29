@@ -33,8 +33,9 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of PSyIR Operation nodes."""
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR Operation nodes.
+"""
 
 from abc import ABCMeta, abstractmethod
 
@@ -50,7 +51,8 @@ from psyclone.autodiff.transformations import ADElementTrans
 
 
 class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
-    """An abstract class for automatic differentation transformations of Operation nodes.
+    """An abstract class for automatic differentation transformations of \
+    Operation nodes.
     """
 
     def validate(self, operation, options=None):
@@ -59,11 +61,13 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if operation is of the wrong type.
         """
+        # pylint: disable=arguments-renamed
+
         super().validate(operation, options)
 
         if not isinstance(operation, Operation):
@@ -79,10 +83,12 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
-        
+        # pylint: disable=arguments-renamed, unnecessary-pass
+        pass
+
     @abstractmethod
     def differentiate(self, operation):
         """Compute the derivative(s) of the operation argument.
@@ -101,7 +107,7 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
 
         if isinstance(operation, NaryOperation):
             raise NotImplementedError(
-                "Differentiating NaryOperation nodes " "isn't implement yet."
+                "Differentiating NaryOperation nodes isn't implement yet."
             )
 
     @abstractmethod
@@ -135,6 +141,6 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
             )
 
     # TODO: implement these
-    #@abstractmethod
+    # @abstractmethod
     # def differentiate_nary_operation(self, operation):
     #    pass

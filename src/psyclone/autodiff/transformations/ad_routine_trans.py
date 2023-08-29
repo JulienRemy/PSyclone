@@ -33,8 +33,9 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of PSyIR Routine nodes."""
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR Routine nodes.
+"""
 
 from abc import ABCMeta, abstractmethod
 
@@ -56,17 +57,22 @@ from psyclone.psyir.symbols import (
     DataSymbol,
     ArrayType,
 )
-from psyclone.psyir.symbols.interfaces import ArgumentInterface, AutomaticInterface
+from psyclone.psyir.symbols.interfaces import (
+    ArgumentInterface,
+    AutomaticInterface,
+)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff import assign_zero, own_routine_symbol, assign, one
 from psyclone.autodiff import simplify_node
-from psyclone.autodiff.transformations import ADContainerTrans, ADTrans
+from psyclone.autodiff.transformations import ADTrans
 
 
 class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
-    """An abstract class for automatic differentation transformations of Routine nodes.
-    """
+    """An abstract class for automatic differentation transformations of \
+    Routine nodes."""
+
+    # pylint: disable=too-many-instance-attributes, too-many-public-methods
 
     # Pre- and postfix for temporary variables symbols names
     _temp_name_prefix = "temp_"
@@ -101,26 +107,22 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
     @property
     @abstractmethod
     def container_trans(self):
-        """Contextual container transformation.
-        """
+        """Contextual container transformation."""
 
     @property
     @abstractmethod
     def assignment_trans(self):
-        """Used assignment transformation.
-        """
+        """Used assignment transformation."""
 
     @property
     @abstractmethod
     def operation_trans(self):
-        """Used operation transformation.
-        """
+        """Used operation transformation."""
 
     @property
     @abstractmethod
     def call_trans(self):
-        """Used call transformation.
-        """
+        """Used call transformation."""
 
     @property
     def routine(self):
@@ -190,7 +192,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
     @property
     def independent_variables(self):
-        """Names of the independent variables used in transforming this Routine. \
+        """Names of the independent variables used in transforming this Routine.
         These are the variables with respect to which we are differentiating.
 
         :return: list of names.
@@ -219,7 +221,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
     @property
     def differential_variables(self):
         """Names of all differential variables, both dependent and independent.
-        The list begins with independent variables. Names may not be unique in it.
+        The list begins with independent variables. \
+        Names may not be unique in it.
 
         :return: list of all differential variables.
         :rtype: `List[Str]`
@@ -300,22 +303,22 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         and adding them to the data_symbol_differential_map.
 
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
 
         for symbol in self.routine_table.datasymbols:
             self.create_differential_symbol(symbol, options)
 
     def create_differential_symbol(self, datasymbol, options=None):
-        """Create the derivative/adjoint symbol of the argument symbol in the transformed \
-        table.
+        """Create the derivative/adjoint symbol of the argument symbol in the \
+        transformed table.
 
         :param datasymbol: data symbol whose derivative/adjoint to create.
         :param datasymbol: :py:class:`psyclone.psyir.symbols.DataSymbol`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if datasymbol is of the wrong type.
 
@@ -330,14 +333,15 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
             )
         if not datasymbol.is_scalar:
             raise NotImplementedError(
-                "'datasymbol' is not a scalar. " "Arrays are not implemented yet."
+                "'datasymbol' is not a scalar. "
+                "Arrays are not implemented yet."
             )
 
         # NOTE: subclasses need to redefine the
         # _differential_prefix, _differential_postfix and _differential_table_index
         # class attributes.
 
-        # TODO: #001 use the dependent variable type and precision
+        # TODO: use the dependent variable type and precision
         # TODO: this would depend on the result of activity analysis
         # Name using pre- and postfix
         differential_name = self._differential_prefix + datasymbol.name
@@ -356,34 +360,43 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
         return differential
 
-    def validate(self, routine, dependent_vars, independent_vars, options=None):
+    def validate(
+        self, routine, dependent_vars, independent_vars, options=None
+    ):
         """Validates the arguments of the `apply` method.
 
         :param routine: routine Node to the transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
+                               differentiated.
         :type dependent_vars: `List[str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if routine is of the wrong type.
         :raises NotImplementedError: if routine is a program.
         :raises NotImplementedError: if routine is a function.
-        :raises NotImplementedError: if routine contains a recursive call (to itself).
+        :raises NotImplementedError: if routine contains a recursive call \
+                                     (to itself).
         :raises TransformationError: if the SymbolTable of routine doesn't \
-            contain a symbol for each name in independent_var
+                                     contain a symbol for each name in \
+                                     independent_var.
         :raises TransformationError: if the SymbolTable of routine doesn't \
-            contain a symbol for each name in dependent_var
+                                     contain a symbol for each name in \
+                                     dependent_var.
         :raises TransformationError: if the argument list of routine doesn't \
-            contain an argument of correct Access for each name in independent_var
+                                     contain an argument of correct Access for \
+                                     each name in independent_var.
         :raises TransformationError: if the argument list of routine doesn't \
-            contain an argument of correct Access for each name in dependent_var
+                                     contain an argument of correct Access for \
+                                     each name in dependent_var.
         """
+        # pylint: disable=arguments-differ
+
         super().validate(routine, options)
 
         if self._was_applied:
@@ -400,7 +413,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         # TODO: extend this to functions and programs
         # - functions won't be pure if modifying the value_tape!
         # - programs would only work for ONE dependent variable,
-        #   and only by making a single program out of the recording and returning routines
+        #   and only by making a single program out of the recording and
+        #   returning routines
         if routine.is_program:
             raise NotImplementedError(
                 "'routine' argument is a program, "
@@ -466,7 +480,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
             if arg.interface.access == ArgumentInterface.Access.READ:
                 independent_args_names.append(arg.name)
             elif arg.interface.access == ArgumentInterface.Access.WRITE:
-                # This also includes routine.return_symbol
+                # NOTE: This would also include routine.return_symbol
                 # if it is a function
                 dependent_args_names.append(arg.name)
             else:  # READWRITE or UNKNOWN
@@ -514,15 +528,17 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param routine: routine Node to the transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
+                               differentiated.
         :type dependent_vars: `List[str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
+        # pylint: disable=arguments-differ, unnecessary-pass
+        pass
 
     def new_temp_symbol(self, symbol, symbol_table):
         """Creates a new temporary symbol for the symbol argument.
@@ -538,7 +554,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :raises TypeError: if symbol is of the wrong type.
         :raises TypeError: if symbol_table is of the wrong type.
 
-        :return: temporary symbol
+        :return: temporary symbol.
         :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
         """
         if not isinstance(symbol, DataSymbol):
@@ -574,8 +590,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param children: list of children to add.
         :type children: List[:py:class:`psyclone.psyir.nodes.Routine`]
         :param reverse: whether to reverse and add at index 0, \
-            defaults to False..
-        :type reverse: bool, optional
+                        defaults to False.
+        :type reverse: Optional[Bool]
 
         :raises TypeError: if routine is of the wrong type.
         :raises TypeError: if children is of the wrong type.
@@ -630,21 +646,25 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
         # Shallow copy the symbol table
         tables = [
-            self.routine_table.shallow_copy() for i in range(self._number_of_routines)
+            self.routine_table.shallow_copy()
+            for i in range(self._number_of_routines)
         ]
         original_table = self.routine_table.shallow_copy().detach()
         tables = [table.detach() for table in tables]
+        # TODO: make this cleaner...
         original_table.attach(self.routine)
 
         # Remove the 'own_routine_symbol' symbols from their tables
         # This is required to use new names for the routines
         for table in tables:
-            table.remove(table.lookup_with_tag('own_routine_symbol'))
+            table.remove(table.lookup_with_tag("own_routine_symbol"))
 
         # Names using pre- and postfixes
         names = [
             pre + self.routine.name + post
-            for pre, post in zip(self._routine_prefixes, self._routine_postfixes)
+            for pre, post in zip(
+                self._routine_prefixes, self._routine_postfixes
+            )
         ]
 
         # Create the routines
@@ -668,8 +688,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param assignment: assignment to transform.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
 
     @abstractmethod
@@ -679,8 +699,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param call: call to transform.
         :type call: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
 
     def transform_children(self, options=None):
@@ -688,16 +708,16 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         and adds the statements to the transformed routines.
 
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises NotImplementedError: if a child is a recursive Call to the \
-            Routine being transformed.
+                                     Routine being transformed.
         :raises NotImplementedError: if the child transformation is not \
-            implemented yet. For now only those for Assignment and Call are.
+                                     implemented yet. For now only those for \
+                                     Assignment and Call instances are.
         """
         # Go line by line through the Routine
-        # Note that this creates the symbols for operation adjoints and temporaries
         for child in self.routine.children:
             if isinstance(child, Assignment):
                 self.transform_assignment(child, options)
@@ -715,8 +735,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         of the transformed routine provided as argument.
 
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if routine is of the wrong type.
         :raises ValueError: if routine is not in self.transformed.
@@ -729,24 +749,94 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
             )
         if routine not in self.transformed:
             raise ValueError(
-                "'routine' argument should be in " "self.transformed but is not."
+                "'routine' argument should be in "
+                "self.transformed but is not."
             )
 
         simplify_n_times = self.unpack_option("simplify_n_times", options)
         for i in range(simplify_n_times):
-            # Reverse the walk result to apply from deepest operations to shallowest
+            # Reverse the walk result to apply from deepest operations to
+            # shallowest
             all_nodes = routine.walk(Node)[::-1]
             for i, node in enumerate(all_nodes):
                 simplified_node = simplify_node(node)
+                # Simplification yields None if node should be removed
                 if simplified_node is None:
                     node.detach()
                     all_nodes.pop(i)
                 else:
+                    # Replace the node if different
                     if simplified_node is not node:
                         node.replace_with(simplified_node)
                         all_nodes[i] = simplified_node
 
-    def jacobian_routine(self, mode, dependent_vars, independent_vars, options=None):
+    def add_to_argument_list(self, symbol_table, argument, after=None):
+        """Adds the argument to the symbol table's argument list, if it has \
+        the correct interface.
+        The argument is added after another if 'after' is provided or \
+        appended at the end otherwise.
+
+        :param symbol_table: symbol table whose argument_list will be augmented.
+        :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
+        :param argument: argument symbol to add.
+        :type argument: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param after: optional argument symbol after which to insert, 
+                      defaults to None.
+        :type after: Optional[Union[:py:class:`psyclone.psyir.symbols.
+                                               DataSymbol`, 
+                                    `NoneType`]]
+        :raises TypeError: if symbol_table is of the wrong type.
+        :raises TypeError: if argument is of the wrong type.
+        :raises TypeError: if argument's interface is not an ArgumentInterface.
+        :raises TypeError: if after is of the wrong type.
+        :raises ValueError: if after is not None and is not in the argument \
+                            list.
+        """
+        # Accessing private SymbolTable._argument_list to avoid property check.
+        # pylint: disable=protected-access
+
+        if not isinstance(symbol_table, SymbolTable):
+            raise TypeError(
+                f"'symbol_table' argument should be of type "
+                f"'SymbolTable' but found "
+                f"'{type(symbol_table).__name__}'."
+            )
+        if not isinstance(argument, DataSymbol):
+            raise TypeError(
+                f"'argument' argument should be of type "
+                f"'DataSymbol' but found "
+                f"'{type(argument).__name__}'."
+            )
+        if not isinstance(argument.interface, ArgumentInterface):
+            raise TypeError(
+                f"'argument' argument's interface should be of type "
+                f"'ArgumentInterface' but found "
+                f"'{type(argument.interface).__name__}'."
+            )
+        if not isinstance(after, (DataSymbol, type(None))):
+            raise TypeError(
+                f"'after' argument should be of type "
+                f"'DataSymbol' or 'NoneType' but found "
+                f"'{type(after).__name__}'."
+            )
+        if (after is not None) and (after not in symbol_table._argument_list):
+            raise ValueError(
+                f"'after' argument DataSymbol named {after.name} "
+                f"is not in the argument_list of symbol_table."
+            )
+
+        argument_list = symbol_table._argument_list
+
+        if after is None:
+            argument_list.append(argument)
+        else:
+            index = argument_list.index(after) + 1
+            argument_list.insert(index, argument)
+
+    # TODO: this is a mess.
+    def jacobian_routine(
+        self, mode, dependent_vars, independent_vars, options=None
+    ):
         """Creates the Jacobian routine using automatic \
         differentation for the transformed routine and lists of \
         dependent and independent variables names.
@@ -756,29 +846,29 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param mode: mode to use. Can be either 'forward' or 'reverse'.
         :type mode: str
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
+                               differentiated.
         :type dependent_vars: `List[str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if mode is of the wrong type.
         :raises ValueError: if mode is neither 'forward' nor 'reverse'.
         :raises TypeError: if dependent_vars is of the wrong type.
         :raises TypeError: if at least one element of dependent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises TypeError: if independent_vars is of the wrong type.
         :raises TypeError: if at least one element of independent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises ValueError: if at least one element of dependent_vars is \
-            not in self.dependent_variables, so was not used in transforming \
-            the routine.
+                            not in self.dependent_variables, so was not used \
+                            in transforming the routine.
         :raises ValueError: if at least one element of independent_vars is \
-            not in self.independent_variables, so was not used in transforming \
-            the routine.
+                            not in self.independent_variables, so was not used \
+                            in transforming the routine.
 
         :return: the routine computing the Jacobian.
         :rtype: :py:class:`psyclone.psyir.nodes.Routine`
@@ -905,7 +995,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                 ArgumentInterface.Access.UNKNOWN,
             ):
                 temp = symbol_table.new_symbol(
-                    "temp_" + arg.name, symbol_type=DataSymbol, datatype=arg.datatype
+                    "temp_" + arg.name,
+                    symbol_type=DataSymbol,
+                    datatype=arg.datatype,
                 )
                 temp_assigns.append(assign(temp, arg))
                 temp_restores.append(assign(arg, temp))
@@ -917,7 +1009,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         jacobian = symbol_table.new_symbol(
             "J_" + self.routine.name,
             symbol_type=DataSymbol,
-            datatype=ArrayType(self._default_differential_datatype, [cols, rows]),
+            datatype=ArrayType(
+                self._default_differential_datatype, [cols, rows]
+            ),
         )
         jacobian.interface = ArgumentInterface(ArgumentInterface.Access.WRITE)
         symbol_table._argument_list.append(jacobian)
@@ -941,7 +1035,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
             first_dim_literal = Literal(str(first_dim + 1), INTEGER_TYPE)
 
             # Set the independent derivative/dependent adjoint for the row/column to 1.0
-            jacobian_routine.addchild(assign(first_diff, one(first_diff.datatype)))
+            jacobian_routine.addchild(
+                assign(first_diff, one(first_diff.datatype))
+            )
 
             # Set all other independent derivatives/dependent adjoints to 0.0
             for other_first_diff in first_diffs:
@@ -955,7 +1051,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                     jacobian_routine.addchild(assign_zero(second_diff))
 
             # Create the argument list from the transformed one
-            rev_args = [Reference(sym) for sym in transformed_table.argument_list]
+            rev_args = [
+                Reference(sym) for sym in transformed_table.argument_list
+            ]
             # Create the call, add it to the jacobian routine
             call = Call.create(transformed_symbol, rev_args)
             jacobian_routine.addchild(call)
@@ -990,66 +1088,12 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                 + f"Dependent variables as rows: {dependent_vars}.\n! "
             )
             if len(other_args) != 0:
-                jacobian_routine.preceding_comment += f"Also specify: {other_args}."
+                jacobian_routine.preceding_comment += (
+                    f"Also specify: {other_args}."
+                )
             for dep in dependent_vars:
                 jacobian_routine.preceding_comment += "\n! "
                 for indep in independent_vars:
                     jacobian_routine.preceding_comment += f"d{dep}/d{indep} "
 
         return jacobian_routine
-
-    def add_to_argument_list(self, symbol_table, argument, after=None):
-        """Adds the argument to the symbol table's argument list, if it has \
-        the correct interface.
-        The argument is added after another if 'after' is provided or \
-        appended at the end otherwise.
-
-        :param symbol_table: symbol table whose argument_list will be augmented.
-        :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
-        :param argument: argument symbol to add.
-        :type argument: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        :param after: optional argument symbol after which to insert, defaults to None
-        :type after: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`, `NoneType`]
-        :raises TypeError: if symbol_table is of the wrong type.
-        :raises TypeError: if argument is of the wrong type.
-        :raises TypeError: if argument's interface is not an ArgumentInterface.
-        :raises TypeError: if after is of the wrong type.
-        :raises ValueError: if after is not None and is not in the argument list.
-        """
-        if not isinstance(symbol_table, SymbolTable):
-            raise TypeError(
-                f"'symbol_table' argument should be of type "
-                f"'SymbolTable' but found "
-                f"'{type(symbol_table).__name__}'."
-            )
-        if not isinstance(argument, DataSymbol):
-            raise TypeError(
-                f"'argument' argument should be of type "
-                f"'DataSymbol' but found "
-                f"'{type(argument).__name__}'."
-            )
-        if not isinstance(argument.interface, ArgumentInterface):
-            raise TypeError(
-                f"'argument' argument's interface should be of type "
-                f"'ArgumentInterface' but found "
-                f"'{type(argument.interface).__name__}'."
-            )
-        if not isinstance(after, (DataSymbol, type(None))):
-            raise TypeError(
-                f"'after' argument should be of type "
-                f"'DataSymbol' or 'NoneType' but found "
-                f"'{type(after).__name__}'."
-            )
-        if (after is not None) and (after not in symbol_table._argument_list):
-            raise ValueError(
-                f"'after' argument DataSymbol named {after.name} "
-                f"is not in the argument_list of symbol_table."
-            )
-
-        argument_list = symbol_table._argument_list
-
-        if after is None:
-            argument_list.append(argument)
-        else:
-            index = argument_list.index(after) + 1
-            argument_list.insert(index, argument)

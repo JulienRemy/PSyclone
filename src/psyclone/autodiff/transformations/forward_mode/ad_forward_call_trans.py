@@ -42,18 +42,20 @@ from psyclone.psyir.nodes import (
     Operation,
     Literal,
 )
-from psyclone.psyir.symbols import DataSymbol
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff.transformations import ADCallTrans, ADForwardRoutineTrans
-from psyclone.autodiff import own_routine_symbol, zero
+from psyclone.autodiff.transformations import (
+    ADCallTrans,
+    ADForwardRoutineTrans,
+)
+from psyclone.autodiff import zero
 
 
 class ADForwardCallTrans(ADCallTrans):
     """A class for automatic differentation transformations of Call nodes \
     in forward-mode.
-    Requires an ADForwardRoutineTrans instance as context, where the derivative symbols
-    can be found.
+    Requires an ADForwardRoutineTrans instance as context, where the \
+    derivative symbols can be found.
     Applying it generates the calls to the transformed routine.
     """
 
@@ -83,19 +85,19 @@ class ADForwardCallTrans(ADCallTrans):
         to the call arguments.
 
         Options:
-        - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
-            to False.
+        - bool 'jacobian': whether to generate the Jacobian routine. \
+                           Defaults to False.
         - bool 'verbose' : toggles explanatory comments. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
-            transformations. Defaults to True.
+                           transformations. Defaults to True.
         - int 'simplify_n_times': number of time to apply simplification \
-            rules to BinaryOperation nodes. Defaults to 5.
+                                  rules to BinaryOperation nodes. Defaults to 5.
 
-        :param assignment: node to be transformed.
+        :param assignment: assignment to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: transformed call.
         :rtype: :py:class:`psyclone.psyir.nodes.Call`
@@ -107,12 +109,19 @@ class ADForwardCallTrans(ADCallTrans):
         # Call RoutineSymbol
         call_symbol = call.routine
         # Routine
-        routine = self.routine_trans.container_trans.routine_from_symbol(call_symbol)
+        routine = self.routine_trans.container_trans.routine_from_symbol(
+            call_symbol
+        )
         self.routine = routine
 
         # If routine was already transformed, get the transformation
-        if self.routine_symbol in self.routine_trans.container_trans.routine_map:
-            for trans in self.routine_trans.container_trans.routine_transformations:
+        if (
+            self.routine_symbol
+            in self.routine_trans.container_trans.routine_map
+        ):
+            for (
+                trans
+            ) in self.routine_trans.container_trans.routine_transformations:
                 if trans.routine == self.routine:
                     self.called_routine_trans = trans
 
@@ -123,9 +132,12 @@ class ADForwardCallTrans(ADCallTrans):
         transformed_args = self.transform_call_arguments(call, options)
 
         # Call to the transformed routine
-        transformed_call = Call.create(self.transformed_symbol, transformed_args)
+        transformed_call = Call.create(
+            self.transformed_symbol, transformed_args
+        )
 
         if verbose:
+            # TODO: writer should be an attribute of the (container?) trans
             from psyclone.psyir.backend.fortran import FortranWriter
 
             fwriter = FortranWriter()
@@ -133,7 +145,7 @@ class ADForwardCallTrans(ADCallTrans):
             transformed_call.preceding_comment = f"Derivating {src}"
 
         return transformed_call
-    
+
     def transform_literal_argument(self, literal, options=None):
         """Transforms a Literal argument of the Call.
         Passes 0 as the associated derivative.
@@ -141,8 +153,8 @@ class ADForwardCallTrans(ADCallTrans):
         :param literal: literal argument to transform.
         :type literal: :py:class:`psyclone.psyir.nodes.Literal`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if literal is of the wrong type.
 
@@ -164,8 +176,8 @@ class ADForwardCallTrans(ADCallTrans):
         :param reference: reference argument to transform.
         :type reference: :py:class:`psyclone.psyir.nodes.Reference`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if reference is of the wrong type.
 
@@ -176,7 +188,9 @@ class ADForwardCallTrans(ADCallTrans):
 
         # Symbol and derivative symbol of the argument
         symbol = reference.symbol
-        derivative_symbol = self.routine_trans.data_symbol_differential_map[symbol]
+        derivative_symbol = self.routine_trans.data_symbol_differential_map[
+            symbol
+        ]
 
         # Add (var, var_d) as arguments of the transformed routine
         return [Reference(symbol), Reference(derivative_symbol)]
@@ -190,8 +204,8 @@ class ADForwardCallTrans(ADCallTrans):
         :param operation: operation argument to transform.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
 
@@ -215,8 +229,8 @@ class ADForwardCallTrans(ADCallTrans):
         :param call: call to transform.
         :type call: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
 
@@ -233,17 +247,11 @@ class ADForwardCallTrans(ADCallTrans):
         # Process all arguments of the call
         for arg in call.children:
             if isinstance(arg, Literal):
-                args = self.transform_literal_argument(
-                    arg, options
-                )
+                args = self.transform_literal_argument(arg, options)
             elif isinstance(arg, Reference):
-                args = self.transform_reference_argument(
-                    arg, options
-                )
+                args = self.transform_reference_argument(arg, options)
             elif isinstance(arg, Operation):
-                args = self.transform_operation_argument(
-                    arg, options
-                )
+                args = self.transform_operation_argument(arg, options)
             else:
                 raise NotImplementedError(
                     f"Transforming Call with  "
@@ -269,7 +277,7 @@ class ADForwardCallTrans(ADCallTrans):
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
             defaults to None.
-        :type options: Optional[Dict[str, Any]]
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if routine is of the wrong type.
 

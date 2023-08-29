@@ -33,8 +33,9 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of PSyIR Assignment nodes in both modes."""
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR Assignment nodes in both modes.
+"""
 
 from abc import ABCMeta, abstractmethod
 
@@ -45,8 +46,8 @@ from psyclone.autodiff.transformations import ADElementTrans
 
 
 class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
-    """An abstract class for automatic differentation transformations of Assignment \
-    nodes.
+    """An abstract class for automatic differentation transformations of \
+    Assignment nodes.
     """
 
     def validate(self, assignment, options=None):
@@ -55,11 +56,13 @@ class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignment`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if assignment is of the wrong type.
         """
+        # pylint: disable=arguments-renamed
+
         super().validate(assignment, options)
 
         if not isinstance(assignment, Assignment):
@@ -76,9 +79,10 @@ class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignment`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
+        # pylint: disable=arguments-renamed, unnecessary-pass
         pass
 
     # TODO: This method is not actually needed
@@ -103,7 +107,9 @@ class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
                 f"PSyIR 'Assignment' but found '{type(assignment).__name__}'."
             )
         if assignment.is_array_assignment:
-            raise NotImplementedError("Array assignment are not implemented yet.")
+            raise NotImplementedError(
+                "Array assignment are not implemented yet."
+            )
 
         lhs = assignment.lhs
         rhs = assignment.rhs

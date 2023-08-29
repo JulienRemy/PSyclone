@@ -45,17 +45,20 @@ from psyclone.psyir.nodes import (
 from psyclone.psyir.symbols import DataSymbol
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff.transformations import ADCallTrans, ADReverseRoutineTrans
-from psyclone.autodiff import own_routine_symbol, assign_zero
+from psyclone.autodiff.transformations import (
+    ADCallTrans,
+    ADReverseRoutineTrans,
+)
+from psyclone.autodiff import assign_zero
 
 
 class ADReverseCallTrans(ADCallTrans):
     """A class for automatic differentation transformations of Call nodes \
     in reverse-mode.
-    Requires an ADReverseRoutineTrans instance as context, where the adjoint symbols
-    can be found.
-    Applying it generates the calls to the recording and returning routines and returns
-    both motions.
+    Requires an ADReverseRoutineTrans instance as context, where the adjoint \
+    symbols can be found.
+    Applying it generates the calls to the recording and returning routines \
+    and returns both motions.
     """
 
     # TODO: this only works for subroutines call for now
@@ -71,6 +74,11 @@ class ADReverseCallTrans(ADCallTrans):
 
     @property
     def reversal_schedule(self):
+        """Reversal schedule used by the parent ADReverseContainerTrans.
+
+        :return: reversal schedule.
+        :rtype: :py:class:`psyclone.autodiff.ADReversalSchedule`
+        """
         return self.routine_trans.container_trans.reversal_schedule
 
     @property
@@ -134,20 +142,21 @@ class ADReverseCallTrans(ADCallTrans):
 
         Options:
         - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
-            to False.
+                           to False.
         - bool 'verbose' : toggles explanatory comments. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
-            transformations. Defaults to True.
+                           transformations. Defaults to True.
         - int 'simplify_n_times': number of time to apply simplification \
-            rules to BinaryOperation nodes. Defaults to 5.
+                                  rules to BinaryOperation nodes. Defaults to 5.
         - bool 'inline_operation_adjoints': True to inline all possible \
-            operation adjoints definitions. Defaults to True.
+                                            operation adjoints definitions. \
+                                            Defaults to True.
 
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: couple composed of the recording and returning motions \
             that correspond to the transformation of this Call.
@@ -165,12 +174,15 @@ class ADReverseCallTrans(ADCallTrans):
         # Call RoutineSymbol
         call_symbol = call.routine
         # Routine
-        routine = self.routine_trans.container_trans.routine_from_symbol(call_symbol)
+        routine = self.routine_trans.container_trans.routine_from_symbol(
+            call_symbol
+        )
         self.routine = routine
 
-        # check if the link between the parent and called routines is strong or weak
-        # strong => split reversal
-        # weak => joint reversal
+        # check if the link between the parent and called routines 
+        # is strong or weak
+        # - strong => split reversal
+        # - weak => joint reversal
         split = self.reversal_schedule.is_strong_link(
             self.routine_trans.routine.name, self.routine.name
         )
@@ -180,8 +192,13 @@ class ADReverseCallTrans(ADCallTrans):
         # force split = False
 
         # If routine was already transformed, get the different motions
-        if self.routine_symbol in self.routine_trans.container_trans.routine_map:
-            for trans in self.routine_trans.container_trans.routine_transformations:
+        if (
+            self.routine_symbol
+            in self.routine_trans.container_trans.routine_map
+        ):
+            for (
+                trans
+            ) in self.routine_trans.container_trans.routine_transformations:
                 if trans.routine == self.routine:
                     self.called_routine_trans = trans
 
@@ -189,7 +206,8 @@ class ADReverseCallTrans(ADCallTrans):
             self.transform_called_routine(routine, options)
 
         # Generate the arguments to use in the calls to the reversing routine
-        # as well as the assignments to insert before/after the calls in returning motion.
+        # as well as the assignments to insert before/after the calls 
+        # in the returning motion.
         # NOTE: tape is not included, as it it not used in reversing
         # the returning arguments are the same, plus the tape at the end
         (
@@ -201,13 +219,14 @@ class ADReverseCallTrans(ADCallTrans):
         # Returning arguments, copy
         returning_args = reversing_args.copy()
 
-        # In any case the temp assignements go before the call in the returning motion
+        # In any case the temp assignements go before the call in the 
+        # returning motion
         returning.extend(temp_assignments)
 
         # If this is SPLIT REVERSAL, call the recording routine when
-        # recording the parent routine
-        # This passes a slice of the parent value_tape as value_tape argument of the
-        # called routine.
+        # recording the parent routine.
+        # This passes a slice of the parent value_tape as value_tape argument 
+        # of the called routine.
         if split:
             # Recording arguments are the same as in the original
             # plus the value_tape if it's used
@@ -219,13 +238,16 @@ class ADReverseCallTrans(ADCallTrans):
 
             # If the value_tape has null length, it's unused
             if self.value_tape.length > 0:
-                # Extend the calling routine value tape by the called routine one
-                # and get the corresponding slice of the first
-                value_tape_slice = self.routine_trans.value_tape.extend_and_slice(
-                    self.value_tape
+                # Extend the calling routine value tape by the called routine 
+                # one and get the corresponding slice of the first
+                value_tape_slice = (
+                    self.routine_trans.value_tape.extend_and_slice(
+                        self.value_tape
+                    )
                 )
 
-                # Will be used as last argument of the recording and returning calls
+                # Will be used as last argument of the recording and 
+                # returning calls
                 recording_args.append(value_tape_slice)
                 returning_args.append(value_tape_slice.copy())
 
@@ -241,8 +263,9 @@ class ADReverseCallTrans(ADCallTrans):
         # so call the advancing routine (original call) while recording
         # and the reversing routine while returning
         else:
-            # NOTE : this is a Call using the actual RoutineSymbol of the Routine
-            # rather than the original RoutineSymbol of the Call node (not the same)
+            # NOTE : this is a Call using the actual RoutineSymbol of the 
+            # Routine rather than the original RoutineSymbol of the Call node 
+            # (not the same)
             advancing_call = Call.create(
                 self.routine_symbol,
                 [arg.copy() for arg in call.children],
@@ -252,55 +275,12 @@ class ADReverseCallTrans(ADCallTrans):
             reversing_call = Call.create(self.reversing_symbol, reversing_args)
             returning.append(reversing_call)
 
-        ######################################
-        ######################################
-        ######################################
-        ######################################
-        # NOTE: this was wrong.
-        # adjoints are intent(inout) and only need to be set to 0 inside
-        # the called routine.
-
-        # For all written out arguments,
-        # set the adjoint to 0 RIGHT AFTER the recording or reverting call,
-        # as for assignments
-        # Right after since the argument may also be in an operation input
-        # (should not be input and output as per Fortran aliasing convention)
-        # for index, arg in enumerate(reversing_args):
-        #    # Only if the argument is a Reference or Call (to a function),
-        #    # else the adjoint is not important (Literal or Operation)
-        #    if not isinstance(arg, (Reference, Call)):
-        #        continue
-        #    # We only want the non-adjoint arguments to check their interface
-        #    # in the called routine
-        #    if arg.symbol in self.routine_trans.adjoint_symbols:
-        #        continue
-        #    # Get the symbol of the argument slot in the called reversing routine
-        #    routine_arg_symbol = self.reversing.symbol_table.argument_list[index]
-        #    # If the intent is other than intent(in) then the argument is
-        #    # written out of the subroutine
-        #    if isinstance(routine_arg_symbol.interface, ArgumentInterface) and (
-        #        routine_arg_symbol.interface.access is not ArgumentInterface.Access.READ
-        #    ):
-        #        # Adjoint symbol to set to 0
-        #        adjoint_sym = self.routine_trans.data_symbol_differential_map[arg.symbol]
-        #
-        #        # Assignment to 0
-        #        adj_zero = assign_zero(adjoint_sym)
-        #        if verbose:
-        #            adj_zero.preceding_comment = f"{arg.name} is output so overwritten"
-        #
-        #        ### Add right after the call, as first adjoint assignment
-        #        adjoint_assignments = [adj_zero] + adjoint_assignments
-
-        ######################################
-        ######################################
-        ######################################
-        ######################################
-
-        # In any case the adjoints assignments go after the call in the returning motion
+        # In any case the adjoints assignments go after the call in the 
+        # returning motion
         returning.extend(adjoint_assignments)
 
         if verbose and len(returning) != 0:
+            # TODO: writer should be an attribute of the (container?) trans
             from psyclone.psyir.backend.fortran import FortranWriter
 
             fwriter = FortranWriter()
@@ -312,9 +292,9 @@ class ADReverseCallTrans(ADCallTrans):
 
     def transform_literal_argument(self, literal, options=None):
         """Transforms a Literal argument of the Call.
-        Returns the associated arguments to use in the reversing/returning call, \
-        as well as the temporary assignments (before the call) and adjoint  \
-        assignments (after the call).
+        Returns the associated arguments to use in the reversing/returning \
+        call, as well as the temporary assignments (before the call) and \
+        adjoint assignments (after the call).
         Creates a dummy adjoint set to 0.0 to pass as adjoint argument.
         For a Literal, the temp assignment is `dummy_adj = 0.0`, there are no \
         adjoint assignments and the arguments are the literal followed by a \
@@ -323,17 +303,19 @@ class ADReverseCallTrans(ADCallTrans):
         :param literal: literal argument to transform.
         :type literal: :py:class:`psyclone.psyir.nodes.Literal`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if literal is of the wrong type.
 
         :return: list of returning arguments, list of temporary assignments, \
-            list of adjoint assignments.
+                 list of adjoint assignments.
         :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Literal`,
                                  :py:class:`psyclone.psyir.nodes.Reference`],
                                  :py:class:`psyclone.psyir.nodes.Assignment`]]
         """
+        # pylint: disable=protected-access
+
         super().transform_literal_argument(literal, options)
 
         verbose = self.unpack_option("verbose", options)
@@ -347,7 +329,9 @@ class ADReverseCallTrans(ADCallTrans):
         # call foo_rev(x, x_adj, 1.0, temp_dummy_adj, f, f_adj)
 
         # Data symbol is only here to use new_temp_symbol method
-        sym = DataSymbol("dummy_adj", self.routine_trans._default_differential_datatype)
+        sym = DataSymbol(
+            "dummy_adj", self.routine_trans._default_differential_datatype
+        )
         # Temporary dummy adjoint
         dummy_adj = self.routine_trans.new_temp_symbol(
             sym, self.routine_trans.returning_table
@@ -369,22 +353,22 @@ class ADReverseCallTrans(ADCallTrans):
 
     def transform_reference_argument(self, reference, options=None):
         """Transforms a Reference argument of the Call.
-        Returns the associated arguments to use in the reversing/returning call, \
-        as well as the temporary assignments (before the call) and adjoint  \
-        assignments (after the call).
-        For a Reference, there are no assignments of either type \
-        and the arguments are the reference followed by a reference to the adjoint.
+        Returns the associated arguments to use in the reversing/returning \
+        call, as well as the temporary assignments (before the call) and \
+        adjoint assignments (after the call).
+        For a Reference, there are no assignments of either type and the \
+        arguments are the reference followed by a reference to the adjoint.
 
         :param reference: reference argument to transform.
         :type reference: :py:class:`psyclone.psyir.nodes.Reference`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if reference is of the wrong type.
 
         :return: list of returning arguments, list of temporary assignments, \
-            list of adjoint assignments.
+                 list of adjoint assignments.
         :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Reference`],
                                  :py:class:`psyclone.psyir.nodes.Assignment`]]
         """
@@ -392,7 +376,9 @@ class ADReverseCallTrans(ADCallTrans):
 
         # Symbol and adjoint symbol of the argument
         symbol = reference.symbol
-        adjoint_symbol = self.routine_trans.data_symbol_differential_map[symbol]
+        adjoint_symbol = self.routine_trans.data_symbol_differential_map[
+            symbol
+        ]
 
         # Add (var, var_adj) as arguments of the returning/reversing routines
         returning_args = [Reference(symbol), Reference(adjoint_symbol)]
@@ -406,19 +392,20 @@ class ADReverseCallTrans(ADCallTrans):
 
     def transform_operation_argument(self, operation, options=None):
         """Transforms an Operation argument of the Call.
-        Returns the associated arguments to use in the reversing/returning call, \
-        as well as the temporary assignments (before the call) and adjoint  \
-        assignments (after the call).
+        Returns the associated arguments to use in the reversing/returning \
+        call, as well as the temporary assignments (before the call) and \
+        adjoint assignments (after the call).
         Creates an operation adjoint.
         The temp assignment is `temp_[var]_adj = 0.0`, the \
         adjoint assignments are those obtained by transforming the Operation \
-        and the arguments are the Operation followed by a reference to its adjoint.
+        and the arguments are the Operation followed by a reference to its \
+        adjoint.
 
         :param operation: operation argument to transform.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
 
@@ -428,6 +415,8 @@ class ADReverseCallTrans(ADCallTrans):
                                  :py:class:`psyclone.psyir.nodes.Reference`],
                                  :py:class:`psyclone.psyir.nodes.Assignment`]]
         """
+        # pylint: disable=protected-access
+
         super().transform_operation_argument(operation, options)
 
         # if the argument of the called routine is an operation
@@ -442,10 +431,7 @@ class ADReverseCallTrans(ADCallTrans):
         # x_adj = x_adj + op_adj * 1
         # y _adj = y_adj + op_adj * 1
 
-        verbose = self.unpack_option("verbose", options)
-
         # TODO: correct datatype
-        # TODO: test this !
         # New adjoint for the operation
         op_adj = self.routine_trans.new_operation_adjoint(
             self.routine_trans._default_differential_datatype
@@ -468,22 +454,22 @@ class ADReverseCallTrans(ADCallTrans):
 
     def transform_call_arguments(self, call, options=None):
         """Transforms all arguments of the Call.
-        Returns the associated arguments to use in the reversing/returning call, \
-        as well as the temporary assignments (before the call) and adjoint  \
-        assignments (after the call).
+        Returns the associated arguments to use in the reversing/returning \
+        call, as well as the temporary assignments (before the call) and \
+        adjoint assignments (after the call).
         This method calls the relevant transform_[node type]_argument method \
         and appends their results.
 
         :param call: call to transform.
         :type call: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
 
         :return: list of returning arguments, list of temporary assignments, \
-            list of adjoint assignments.
+                 list of adjoint assignments.
         :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Operation`,
                                  :py:class:`psyclone.psyir.nodes.Literal`,
                                  :py:class:`psyclone.psyir.nodes.Reference`],
@@ -504,17 +490,23 @@ class ADReverseCallTrans(ADCallTrans):
         # Process all arguments of the call
         for arg in call.children:
             if isinstance(arg, Literal):
-                ret_args, temp_asgs, adjoint_asgs = self.transform_literal_argument(
-                    arg, options
-                )
+                (
+                    ret_args,
+                    temp_asgs,
+                    adjoint_asgs,
+                ) = self.transform_literal_argument(arg, options)
             elif isinstance(arg, Reference):
-                ret_args, temp_asgs, adjoint_asgs = self.transform_reference_argument(
-                    arg, options
-                )
+                (
+                    ret_args,
+                    temp_asgs,
+                    adjoint_asgs,
+                ) = self.transform_reference_argument(arg, options)
             elif isinstance(arg, Operation):
-                ret_args, temp_asgs, adjoint_asgs = self.transform_operation_argument(
-                    arg, options
-                )
+                (
+                    ret_args,
+                    temp_asgs,
+                    adjoint_asgs,
+                ) = self.transform_operation_argument(arg, options)
             else:
                 raise NotImplementedError(
                     f"Transforming Call with  "
@@ -543,7 +535,7 @@ class ADReverseCallTrans(ADCallTrans):
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
             defaults to None.
-        :type options: Optional[Dict[str, Any]]
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if routine is of the wrong type.
 

@@ -43,33 +43,35 @@ from psyclone.autodiff.transformations import ADAssignmentTrans
 
 
 class ADForwardAssignmentTrans(ADAssignmentTrans):
-    """A class for automatic differentation transformations of Assignment nodes \
-    using forward-mode.
-    Requires an ADForwardRoutineTrans instance as context, where the derivative symbols \
-    can be found.
-    If the RHS is an Operation node, `apply` applies an `ADForwardOperationTrans` to it.
+    """A class for automatic differentation transformations of Assignment \
+    nodes using forward-mode.
+    Requires an ADForwardRoutineTrans instance as context, where the \
+    derivative symbols can be found.
     """
 
     def apply(self, assignment, options=None):
         """Applies the transformation, generating the transformed \
         statement associated with this Assignment.
+        If the RHS is an Operation node, `apply` applies an \
+        `ADForwardOperationTrans` to it.
             
         Options:
-        - bool 'verbose' : toggles preceding and inline comments around the derivative \
-            of the assignment in the transformed motion.
+        - bool 'verbose' : toggles preceding and inline comments around the \
+            derivative of the assignment in the transformed motion.
 
-        :param assignment: node to be transformed.
+        :param assignment: assignment to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignment`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: list containing the transformed statements.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Assignment`]
         """
         self.validate(assignment, options)
 
-        # verbose option adds comments to the first and last returning statements
+        # verbose option adds comments to the first and last returning 
+        # statements
         verbose = self.unpack_option("verbose", options)
 
         # DataNodes on both sides
@@ -116,7 +118,8 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         transformed.append(assignment.copy())
 
         # Verbose mode adds comments to the derivative statement
-        # TODO: writer should be initialization argument of the (container?) transformation
+        # TODO: writer should be initialization argument of the (container?)
+        # transformation
         if verbose:
             from psyclone.psyir.backend.fortran import FortranWriter
 

@@ -44,19 +44,20 @@ from psyclone.autodiff.transformations import ADAssignmentTrans
 
 
 class ADReverseAssignmentTrans(ADAssignmentTrans):
-    """A class for automatic differentation transformations of Assignment nodes \
-    using reverse-mode.
-    Requires an ADReverseRoutineTrans instance as context, where the adjoint symbols \
-    can be found.
+    """A class for automatic differentation transformations of Assignment \
+    nodes using reverse-mode.
+    Requires an ADReverseRoutineTrans instance as context, where the adjoint \
+    symbols can be found.
     Applying it returns both the recording and returning motions associated to \
     the transformed Assignment.
-    If the RHS is an Operation node, `apply` applies an `ADReverseOperationTrans` to it.
     """
 
     # TODO: iterative assignments should deal with EQUIVALENCE once implemented
     def apply(self, assignment, options=None):
         """Applies the transformation, generating the recording and returning \
         motions associated to this Assignment.
+        If the RHS is an Operation node, `apply` applies an \
+        `ADReverseOperationTrans` to it.
 
         The `recording` motion is a copy of the Assignment.
 
@@ -66,8 +67,8 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         - if it is also the LHS, it does nothing.
         - otherwise it increments the RHS adjoint by the LHS one, \
             then sets the LHS adjoint to 0.
-        If the RHS is an Operation node, this applies an `ADReverseOperationTrans` to it, \
-            then using its results:
+        If the RHS is an Operation node, this applies an \
+            `ADReverseOperationTrans` to it, then using its results:
         - it increments the adjoints of all Reference nodes on the RHS, \
             *except for the LHS one if the assignment is iterative*,
         - it sets the LHS adjoint to 0,
@@ -75,23 +76,24 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
             an iterative assignment.
             
         Options:
-        - bool 'verbose' : toggles preceding and inline comments around the adjoining \
-            of the assignment in the returning motion.
+        - bool 'verbose' : toggles preceding and inline comments around the \
+                           adjoining of the assignment in the returning motion.
 
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignment`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: couple composed of the recording and returning motions \
-            that correspond to the transformation of this Assignment.
+                 that correspond to the transformation of this Assignment.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Assignment`], \
                 List[:py:class:`psyclone.psyir.nodes.Assignment`]
         """
         self.validate(assignment, options)
 
-        # verbose option adds comments to the first and last returning statements
+        # verbose option adds comments to the first and last returning
+        # statements
         verbose = self.unpack_option("verbose", options)
         verbose_comment = ""
 
@@ -123,11 +125,13 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         elif isinstance(rhs, (Reference, Operation)):
             # RHS is a Reference/Operation:
             #   - not iterative:
-            #       - LHS is restored from value_tape if needed (in the ADReverseScheduleTrans)
+            #       - LHS is restored from value_tape if needed
+            #           (in the ADReverseScheduleTrans)
             #       - (all) RHS adjoint(s) are incremented, using the LHS adjoint
             #       - LHS adjoint is set to 0
             #   - iterative:
-            #       - LHS is restored from value_tape if needed (in the ADReverseScheduleTrans)
+            #       - LHS is restored from value_tape if needed
+            #           (in the ADReverseScheduleTrans)
             #       - (all) RHS adjoint(s) **except the LHS adjoint**
             #           are incremented, using the LHS adjoint
             #       - LHS adjoint is set to 0
@@ -143,7 +147,9 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # This is not an iterative assignment
                 if lhs != rhs:
                     # Adjoint symbol of RHS
-                    rhs_adj = self.routine_trans.data_symbol_differential_map[rhs.symbol]
+                    rhs_adj = self.routine_trans.data_symbol_differential_map[
+                        rhs.symbol
+                    ]
                     # Increment it
                     rhs_adj_op = increment(rhs_adj, lhs_adj)
                     # Add the incrementation to the returning motion
@@ -158,13 +164,15 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                         verbose_comment += ", this is self-assignment"
 
             else:  # isinstance(rhs, Operation)
-                # Apply the ADElementTransOperation to all children of the operation
-                # with parent_adj being the LHS adjoint
+                # Apply the ADElementTransOperation to all children of the 
+                # operation with parent_adj being the LHS adjoint
 
                 (
                     op_returning,
                     lhs_adj_incrementations,
-                ) = self.routine_trans.operation_trans.apply(rhs, lhs_adj, options)
+                ) = self.routine_trans.operation_trans.apply(
+                    rhs, lhs_adj, options
+                )
 
                 # NOTE: List lhs_adj_incrementations is non-empty
                 #   iff the assignment is iterative.
@@ -194,17 +202,20 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                     lhs_adj_incrementations[0] = lhs_adj_assign
 
                     # If this was an iterative statement,
-                    # verbose comment on the LHS adjoint incrementations coming last
+                    # verbose comment on the LHS adjoint incrementations 
+                    # coming last
                     if verbose:
                         verbose_comment += ", iterative"
                         lhs_adj_incrementations[
                             0
-                        ].preceding_comment = (
-                            "Iterative assignment, so LHS adjoint comes last. First assign..."
-                        )
+                        ].preceding_comment = ("Iterative assignment, "
+                                               "so LHS adjoint comes last. "
+                                               "First assign...")
 
                         if len(lhs_adj_incrementations) > 1:
-                            lhs_adj_incrementations[1].preceding_comment = ("... then increment")
+                            lhs_adj_incrementations[
+                                1
+                            ].preceding_comment = "... then increment"
 
                         lhs_adj_incrementations[
                             -1
@@ -213,13 +224,16 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # Now increment the LHS adjoint as needed for its RHS occurences
                 returning.extend(lhs_adj_incrementations)
 
-                # TODO: this should always pass, is_iterative method is not actually needed
+                # TODO: this should always pass, is_iterative method is 
+                # not actually needed
                 # TODO: drop these once it's certain
                 if len(lhs_adj_incrementations) != 0 and not self.is_iterative(
                     assignment
                 ):
                     raise TransformationError("Iterative but also not?")
-                if len(lhs_adj_incrementations) == 0 and self.is_iterative(assignment):
+                if len(lhs_adj_incrementations) == 0 and self.is_iterative(
+                    assignment
+                ):
                     raise TransformationError("Iterative but also not?")
 
         # TODO: rhs is Call to function
@@ -233,14 +247,17 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
             )
 
         # Verbose mode adds comments to the first and last returning statements
-        # TODO: writer should be initialization argument of the (container?) transformation
+        # TODO: writer should be initialization argument of the (container?) 
+        # transformation
         if verbose and len(returning) != 0:
             from psyclone.psyir.backend.fortran import FortranWriter
 
             fwriter = FortranWriter()
             src = fwriter(assignment.copy())
             # indexing to remove the line break
-            returning[0].preceding_comment = f"Adjoining {src[:-1]}{verbose_comment}"
+            returning[
+                0
+            ].preceding_comment = f"Adjoining {src[:-1]}{verbose_comment}"
             returning[-1].inline_comment = f"Finished adjoining {src}"
 
         return recording, returning

@@ -47,21 +47,25 @@ from psyclone.autodiff.transformations import ADRoutineTrans
 
 class ADForwardRoutineTrans(ADRoutineTrans):
     """A class for automatic differentation transformations of Routine nodes. 
-    Requires an ADForwardContainerTrans instance as context, where the definitions of  \
-    the routines called inside the one to be transformed can be found.
+    Requires an ADForwardContainerTrans instance as context, where the \
+    definitions of  the routines called inside the one to be transformed \
+    can be found.
 
     :param container_trans: ADForwardContainerTrans context instance
-    :type container_trans: :py:class:`psyclone.autodiff.transformations.ADForwardContainerTrans`
+    :type container_trans: \
+        :py:class:`psyclone.autodiff.transformations.ADForwardContainerTrans`
 
     :raises TypeError: if the container_trans argument is of the wrong type.
     """
+    # pylint: disable=too-many-instance-attributes
 
+    # Pre- and posfix of the transformed routine name
     _tangent_prefix = ""
     _tangent_postfix = "_tangent"
-
     _routine_prefixes = (_tangent_prefix,)
     _routine_postfixes = (_tangent_postfix,)
 
+    # Redefining parent class attributes
     _number_of_routines = 1
     _differential_prefix = ""
     _differential_postfix = "_d"
@@ -73,9 +77,10 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         # Contextual container trans
         self.container_trans = container_trans
 
-        # Transformations need to know about the ADForwardScheduleTrans calling them
-        # to access the attributes defined above
+        # Transformations need to know about the ADForwardScheduleTrans 
+        # calling them to access the attributes defined above
         # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import (
             ADForwardOperationTrans,
             ADForwardAssignmentTrans,
@@ -83,7 +88,6 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         )
 
         # Initialize the sub transformations
-        # self.adjoint_symbol_trans = ADAdjointSymbolTrans(self)
         self.assignment_trans = ADForwardAssignmentTrans(self)
         self.operation_trans = ADForwardOperationTrans(self)
         self.call_trans = ADForwardCallTrans(self)
@@ -93,18 +97,23 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         """Returns the ADForwardContainerTrans this instance uses.
 
         :return: container transformation, reverse-mode.
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardContainerTrans`
+        :rtype: \
+          :py:class:`psyclone.autodiff.transformations.ADForwardContainerTrans`
         """
         return self._container_trans
-    
+
     @container_trans.setter
     def container_trans(self, container_trans):
         # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADForwardContainerTrans
+
         if not isinstance(container_trans, ADForwardContainerTrans):
-            raise TypeError(f"Argument should be an 'ADForwardContainerTrans' "
-                            f"but found '{type(container_trans)}.__name__'.")
-        
+            raise TypeError(
+                f"Argument should be an 'ADForwardContainerTrans' "
+                f"but found '{type(container_trans)}.__name__'."
+            )
+
         self._container_trans = container_trans
 
     @property
@@ -112,18 +121,23 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         """Returns the ADForwardAssignmentTrans this instance uses.
 
         :return: assignment transformation, reverse-mode.
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardAssignmentTrans`
+        :rtype: \
+          :py:class:`psyclone.autodiff.transformations.ADForwardAssignmentTrans`
         """
         return self._assignment_trans
-    
+
     @assignment_trans.setter
     def assignment_trans(self, assignment_trans):
         # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADForwardAssignmentTrans
+
         if not isinstance(assignment_trans, ADForwardAssignmentTrans):
-            raise TypeError(f"Argument should be an 'ADForwardAssignmentTrans' "
-                            f"but found '{type(assignment_trans)}.__name__'.")
-        
+            raise TypeError(
+                f"Argument should be an 'ADForwardAssignmentTrans' "
+                f"but found '{type(assignment_trans)}.__name__'."
+            )
+
         self._assignment_trans = assignment_trans
 
     @property
@@ -131,18 +145,23 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         """Returns the ADForwardOperationTrans this instance uses.
 
         :return: operation transformation, reverse-mode.
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardOperationTrans`
+        :rtype: \
+          :py:class:`psyclone.autodiff.transformations.ADForwardOperationTrans`
         """
         return self._operation_trans
-    
+
     @operation_trans.setter
     def operation_trans(self, operation_trans):
         # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADForwardOperationTrans
+
         if not isinstance(operation_trans, ADForwardOperationTrans):
-            raise TypeError(f"Argument should be an 'ADForwardOperationTrans' "
-                            f"but found '{type(operation_trans)}.__name__'.")
-        
+            raise TypeError(
+                f"Argument should be an 'ADForwardOperationTrans' "
+                f"but found '{type(operation_trans)}.__name__'."
+            )
+
         self._operation_trans = operation_trans
 
     @property
@@ -153,15 +172,19 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardCallTrans`
         """
         return self._call_trans
-    
+
     @call_trans.setter
     def call_trans(self, call_trans):
         # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADForwardCallTrans
+
         if not isinstance(call_trans, ADForwardCallTrans):
-            raise TypeError(f"Argument should be an 'ADForwardCallTrans' "
-                            f"but found '{type(call_trans)}.__name__'.")
-        
+            raise TypeError(
+                f"Argument should be an 'ADForwardCallTrans' "
+                f"but found '{type(call_trans)}.__name__'."
+            )
+
         self._call_trans = call_trans
 
     def apply(self, routine, dependent_vars, independent_vars, options=None):
@@ -169,28 +192,29 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         using forward-mode automatic differentiation.
 
         Options:
-        - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
-            to False.
+        - bool 'jacobian': whether to generate the Jacobian routine. \
+                           Defaults to False.
         - bool 'verbose' : toggles explanatory comments. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
-            transformations. Defaults to True.
+                           transformations. Defaults to True.
         - int 'simplify_n_times': number of time to apply simplification \
-            rules to BinaryOperation nodes. Defaults to 5.
+                                  rules to BinaryOperation nodes. Defaults to 5.
 
         :param routine: routine Node to the transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
-        :type dependent_vars: `List[str]`
+                               differentiated.
+        :type dependent_vars: `List[Str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
-        :type independent_vars: `List[str]`
+                                 differentiate with respect to.
+        :type independent_vars: `List[Str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises NotImplementedError: if no transformation rule has yet been \
-            implemented for one of the children of routine.
+                                     implemented for one of the children of \
+                                     routine.
 
         :return: transformed Routine.
         :rtype: :py:class:`psyclone.psyir.nodes.Routine`
@@ -204,11 +228,13 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         self.dependent_variables = dependent_vars
         self.independent_variables = independent_vars
 
-        # Get the variables access information (to determine overwrites and taping)
+        # Get the variables access information (to determine overwrites 
+        # and taping)
         self.variables_info = VariablesAccessInfo(routine)
 
         # Add this transformation to the container_trans map
-        # Do it before apply below or ordering is not from outer to inner routines
+        # Do it before apply below or ordering is not from outer 
+        # to inner routines
         self.container_trans.add_routine_trans(self)
 
         # Empty transformed routine with symbol table
@@ -225,14 +251,6 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         simplify = self.unpack_option("simplify", options)
         if simplify:
             self.simplify(self.transformed[0], options)
-
-        # Apply the ADForwardScheduleTrans
-        # schedule = self.schedule_trans.apply(routine, dependent_vars, independent_vars, options)
-
-        # Raise the transformed schedule to routine
-        # self.transformed = self.schedules_to_routines([schedule])
-        # self.data_symbol_differential_map = self.schedule_trans.data_symbol_differential_map
-        # self.temp_symbols = self.schedule_trans.temp_symbols
 
         # Add the transformed routines symbol to the container_trans map
         self.container_trans.add_transformed_routine(
@@ -266,8 +284,8 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         :param assignment: assignment to transform.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if assignment is of the wrong type.
 
@@ -295,8 +313,8 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         :param call: call to transform.
         :type call: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
         """
@@ -315,7 +333,8 @@ class ADForwardRoutineTrans(ADRoutineTrans):
 
     @property
     def derivative_symbols(self):
-        """Returns all the derivatives symbols used in transforming the Schedule.
+        """Returns all the derivatives symbols used in transforming the \
+        Routine.
 
         :return: list of all derivative symbols.
         :rtype: List[:py:class:`psyclone.psyir.symbols.DataSymbol`]
@@ -331,7 +350,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         :type variables: List[str]
         :param options: a dictionary with options for transformations, \
             defaults to None.
-        :type options: Optional[Dict[str, Any]]
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if diff_variables is of the wrong type.
         """

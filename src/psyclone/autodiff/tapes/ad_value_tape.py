@@ -67,9 +67,6 @@ class ADValueTape(ADTape):
     _tape_prefix = "value_tape_"
 
     def __init__(self, name, datatype):
-        # if not isinstance(name, str):
-        #    raise TypeError(f"'name' argument should be of type "
-        #                    f"'str' but found '{type(name).__name__}'.")
         if not isinstance(datatype, (ScalarType, ArrayType)):
             raise TypeError(
                 f"'datatype' argument should be of type "
@@ -94,45 +91,51 @@ class ADValueTape(ADTape):
 
         :raises TypeError: if reference is of the wrong type.
         :raises TypeError: if the intrinsic of reference's datatype is not the \
-                                same as the intrinsic of the value_tape's elements \
-                                datatype.
+                           same as the intrinsic of the value_tape's elements \
+                           datatype.
         :raises NotImplementedError: if the reference's datatype is ArrayType.
 
-        :return: an Assignment node for recording the prevalue of the reference \
-                    as last element of the value_tape.
+        :return: an Assignment node for recording the prevalue of the reference\
+                 as last element of the value_tape.
         :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
         """
+        # pylint: disable=arguments-renamed
+
         if not isinstance(reference, Reference):
             raise TypeError(f"'reference' argument should be of type "
                            f"'Reference' but found "
                            f"'{type(reference).__name__}'.")
-        else:
-            if reference.datatype.intrinsic != self.datatype.intrinsic:
-                raise TypeError(
-                    f"The intrinsic datatype of the 'reference' argument "
-                    f"should be {self.datatype.intrinsic} but found "
-                    f"{reference.datatype.intrinsic}."
-                )
-            if isinstance(reference.datatype, ArrayType):
-                raise NotImplementedError("Taping arrays is not implemented yet.")
+
+        if reference.datatype.intrinsic != self.datatype.intrinsic:
+            raise TypeError(
+                f"The intrinsic datatype of the 'reference' argument "
+                f"should be {self.datatype.intrinsic} but found "
+                f"{reference.datatype.intrinsic}."
+            )
+        if isinstance(reference.datatype, ArrayType):
+            raise NotImplementedError("Taping arrays is not implemented yet.")
 
         value_tape_ref = super().record(reference)
 
         return Assignment.create(value_tape_ref, reference.copy())
 
     def restore(self, reference):
-        """Restore the last element of the value_tape if it is the symbol argument \
-         and return the Assignment node to restore the prevalue to the variable.
+        """Restore the last element of the value_tape if it is the symbol \
+        argument and return the Assignment node to restore the prevalue to the \
+        variable.
 
-        :param reference: reference whose prevalue should be restored from the value_tape.
+        :param reference: reference whose prevalue should be restored from the \
+                          value_tape.
         :type reference: :py:class:`psyclone.psyir.symbols.DataSymbol`
 
         :raises TypeError: if reference is of the wrong type.
 
-        :return: an Assignment node for restoring the prevalue of the reference \
-                    from the last element of the value_tape.
+        :return: an Assignment node for restoring the prevalue of the reference\
+                 from the last element of the value_tape.
         :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
         """
+        # pylint: disable=arguments-renamed
+
         if not isinstance(reference, Reference):
             raise TypeError(
                 f"'reference' argument should be of type "

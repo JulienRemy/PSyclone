@@ -33,8 +33,8 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of PSyIR Container nodes."""
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR Container nodes."""
 
 from abc import ABCMeta, abstractmethod
 
@@ -50,10 +50,13 @@ from psyclone.autodiff.transformations import ADTrans
 class ADContainerTrans(ADTrans, metaclass=ABCMeta):
     """An abstract class for automatic differentation transformation \
     of Container nodes.
-    This is the transformation to apply on the PSyIR AST generated from a source.
+    This is the transformation to apply on the PSyIR AST generated from a \
+    source.
     """
 
     def __init__(self):
+        # pylint: disable=use-dict-literal
+
         # Transformation should only be applied once.
         # Applying it modifies its attributes.
         self._was_applied = False
@@ -89,7 +92,8 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         """Returns the routine transformations used in this container.
 
         :return: list of routine transformations.
-        :rtype: List[:py:class:`psyclone.autodiff.transformations.ADRoutineTrans`]
+        :rtype: List[:py:class:`psyclone.autodiff.transformations.\
+                                ADRoutineTrans`]
         """
         return self._routine_transformations
 
@@ -98,7 +102,8 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         """Add a new routine transformations to the list.
 
         :param routine_trans: routine transformation.
-        :type routine_trans: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
+        :type routine_trans: :py:class:`psyclone.autodiff.transformations.\
+                                        ADRoutineTrans`
         """
 
     @property
@@ -107,9 +112,9 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         and their transformed routines symbols.
 
         :return: dictionnary with original routine symbols as keys \
-            and lists of all transformed routine symbols as values.
-        :rtype: dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, 
-                      list[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]]
+                 and lists of all transformed routine symbols as values.
+        :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, 
+                     List[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]]
         """
         return self._routine_map
 
@@ -128,27 +133,30 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         :param routine_name: name of the Routine to be transformed.
         :type routine_name: `str`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
+                               differentiated.
         :type dependent_vars: `List[str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
-        :raises TransformationError: if the transformation has already been applied.
+        :raises TransformationError: if the transformation has already been \
+                                     applied.
         :raises TransformationError: if container is of the wrong type.
         :raises TypeError: if routine_name is of the wrong type.
         :raises TypeError: if dependent_vars is of the wrong type.
         :raises TypeError: if at least one element of dependent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises TypeError: if independent_vars is of the wrong type.
         :raises TypeError: if at least one element of independent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises TransformationError: if no Routine named routine_name can \
-            be found in the container.
+                                     be found in the container.
         """
+        # pylint: disable=too-many-arguments, arguments-differ
+
         super().validate(container, options)
 
         if self._was_applied:
@@ -217,19 +225,21 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         :param routine_name: name of the Routine to be transformed.
         :type routine_name: `str`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
+                               differentiated.
         :type dependent_vars: `List[str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: a copied and modified container with all necessary \
-            Routine definitions.
+                 Routine definitions.
         :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
+        # pylint: disable=too-many-arguments, arguments-differ, unnecessary-pass
+        pass
 
     def routine_from_symbol(self, routine_symbol):
         """Get the Routine (definition) associated to a RoutineSymbol if it \
@@ -243,7 +253,7 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
 
         :raises TypeError: if routine_symbol is of the wrong type.
         :raises ValueError: if there is no Routine named the same as the \
-            argument routine_symbol.
+                            argument routine_symbol.
 
         :return: routine definition.
         :rtype: :py:class:`psyclone.psyir.nodes.Routine`

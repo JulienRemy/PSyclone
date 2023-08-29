@@ -33,8 +33,9 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of PSyIR Call nodes."""
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR Call nodes.
+"""
 
 from abc import ABCMeta, abstractmethod
 
@@ -52,24 +53,27 @@ from psyclone.autodiff.transformations import ADElementTrans
 
 
 class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
-    """An abstract class for automatic differentation transformations of Call nodes."""
+    """An abstract class for automatic differentation transformations of Call
+    nodes.
+    """
 
     @property
     def called_routine_trans(self):
-        """Instance of ADForwardRoutineTrans or ADReverseRoutineTrans \
-        that transforms the called routine.
+        """Instance of a subclass of ADRoutineTrans that transforms the called \
+        routine.
 
         :return: transformation of the called routine.
-        :rtype: Union[:py:class:`psyclone.autodiff.transformations.ADForwardRoutineTrans`,
-                      :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`]
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
         """
         return self._called_routine_trans
 
     @called_routine_trans.setter
     def called_routine_trans(self, called_routine_trans):
-        from psyclone.autodiff.transformations import ADForwardRoutineTrans, ADReverseRoutineTrans
+        # Avoid circular dependency
+        # pylint: disable=import-outside-toplevel
+        from psyclone.autodiff.transformations import ADRoutineTrans
 
-        if not isinstance(called_routine_trans, (ADForwardRoutineTrans, ADReverseRoutineTrans)):
+        if not isinstance(called_routine_trans, ADRoutineTrans):
             raise TypeError(
                 f"Argument should be of type 'ADForwardRoutineTrans' "
                 f"or 'ADReverseRoutineTrans' "
@@ -90,8 +94,7 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
     def routine(self, routine):
         if not isinstance(routine, Routine):
             raise TypeError(
-                f"'routine' argument should be of "
-                f"type 'Routine' but found"
+                f"'routine' argument should be of type 'Routine' but found "
                 f"'{type(routine).__name__}'."
             )
 
@@ -140,37 +143,42 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if call is of the wrong type.
-        :raises NotImplementedError: if the parent node of Call is not a Schedule \
-            ie. this is not called as a subroutine.
+        :raises NotImplementedError: if the parent node of Call is not a \
+                                     Schedule ie. this is not called as a \
+                                     subroutine.
         :raises NotImplementedError: if the call uses named arguments.
         """
+        # pylint: disable=arguments-renamed
+
         super().validate(call, options)
 
         if not isinstance(call, Call):
             raise TransformationError(
-                f"'call' argument in ADReverseCallTrans should be a "
-                f"PSyIR 'Call' but found '{type(call).__name__}'."
+                f"'call' argument should be a PSyIR 'Call' but found "
+                f"'{type(call).__name__}'."
             )
 
         if not isinstance(call.parent, Schedule):
             raise NotImplementedError(
-                "Transforming function calls is not " "supported yet."
+                "Transforming function calls is not supported yet."
             )
 
         for name in call.argument_names:
             if name is not None:
                 raise NotImplementedError(
-                    "Transforming Call with named " "arguments is not implemented yet."
+                    "Transforming Call with named "
+                    "arguments is not implemented yet."
                 )
 
         # Call RoutineSymbol
         call_symbol = call.routine
         already_transformed_names = [
-            symbol.name for symbol in self.routine_trans.container_trans.routine_map
+            symbol.name
+            for symbol in self.routine_trans.container_trans.routine_map
         ]
 
         if (
@@ -178,9 +186,8 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
             and call_symbol.name
             not in [
                 routine.name
-                for routine in self.routine_trans.container_trans.container.walk(
-                    Routine
-                )
+                for routine 
+                in self.routine_trans.container_trans.container.walk(Routine)
             ]
         ):
             raise TransformationError(
@@ -199,9 +206,11 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
         """
+        # pylint: disable=arguments-renamed, unnecessary-pass
+        pass
 
     @abstractmethod
     def transform_literal_argument(self, literal, options=None):
@@ -210,8 +219,8 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param literal: literal argument to transform.
         :type literal: :py:class:`psyclone.psyir.nodes.Literal`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if literal is of the wrong type.
         """
@@ -229,8 +238,8 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param reference: reference argument to transform.
         :type reference: :py:class:`psyclone.psyir.nodes.Reference`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if reference is of the wrong type.
         """
@@ -248,8 +257,8 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param operation: operation argument to transform.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         """
@@ -262,15 +271,13 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
 
     @abstractmethod
     def transform_call_arguments(self, call, options=None):
-        """Transforms an all arguments of the Call.
-        This method calls the relevant transform_[node type]_argument method \
-        and appends their results.
+        """Transforms all arguments of the Call.
 
         :param call: call to transform.
         :type call: :py:class:`psyclone.psyir.nodes.Call`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
         """
@@ -289,8 +296,8 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         :param routine: routine to be transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if routine is of the wrong type.
         """

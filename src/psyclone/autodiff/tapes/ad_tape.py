@@ -56,6 +56,7 @@ class ADTape(object, metaclass=ABCMeta):
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
     """
+    # pylint: disable=useless-object-inheritance
 
     _node_types = (Node,)
 
@@ -74,6 +75,7 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(datatype).__name__}'."
             )
 
+        # PSyIR datatype of the elements in this tape
         self.datatype = datatype
 
         # Type of the value_tape, shape will be modified as needed
@@ -82,6 +84,7 @@ class ADTape(object, metaclass=ABCMeta):
         # Symbol of the value_tape
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
 
+        # Internal list of recorded nodes
         self._recorded_nodes = []
 
     @property
@@ -89,7 +92,7 @@ class ADTape(object, metaclass=ABCMeta):
         """Names of the types of nodes that can be stored in the tape.
 
         :return: list of type names.
-        :rtype: \List[Str]`
+        :rtype: List[Str]`
         """
         return [T.__name__ for T in self._node_types]
 
@@ -191,16 +194,16 @@ class ADTape(object, metaclass=ABCMeta):
             )
 
     def record(self, node):
-        """Add the node as last element of the tape and return the ArrayReference \
-        node of the tape.
+        """Add the node as last element of the tape and return the \
+        ArrayReference node of the tape.
 
         :param node: node whose prevalue should be recorded.
         :type node: :py:class:`psyclone.psyir.nodes.Reference`
 
         :raises TypeError: if node is of the wrong type.
         :raises TypeError: if the intrinsic of node's datatype is not the \
-                                same as the intrinsic of the value_tape's elements \
-                                datatype.
+                           same as the intrinsic of the value_tape's \
+                           elements datatype.
 
         :return: the array node to the last element of the tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
@@ -249,7 +252,8 @@ class ADTape(object, metaclass=ABCMeta):
         return tape_ref
 
     def reshape(self):
-        """Change the static length of the tape array in its datatype."""
+        """Change the static length of the tape array in its datatype.
+        """
         value_tape_type = ArrayType(self.datatype, [self.length])
         self.symbol.datatype = value_tape_type
 
@@ -281,7 +285,7 @@ class ADTape(object, metaclass=ABCMeta):
         self.reshape()
 
     def extend_and_slice(self, tape):
-        """Extends the tape by the 'tape' and return \
+        """Extends the tape by the 'tape' argument and return \
         the ArrayReference corresponding to the correct slice.
 
         :param tape: tape to extend with.

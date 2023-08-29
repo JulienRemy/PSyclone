@@ -120,7 +120,7 @@ def test_ad_call_trans_validate():
     with pytest.raises(TransformationError) as info:
         ad_call_trans.validate(None)
     assert (
-        "'call' argument in ADReverseCallTrans should be a "
+        "'call' argument should be a "
         "PSyIR 'Call' but found 'NoneType'." in str(info.value)
     )
 
@@ -337,7 +337,7 @@ def test_ad_call_trans_apply():
     with pytest.raises(TransformationError) as info:
         ad_call_trans.apply(None)
     assert (
-        "'call' argument in ADReverseCallTrans should be a "
+        "'call' argument should be a "
         "PSyIR 'Call' but found 'NoneType'." in str(info.value)
     )
 

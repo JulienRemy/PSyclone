@@ -41,7 +41,7 @@ from psyclone.psyir.nodes import (
     Literal,
     UnaryOperation,
     BinaryOperation,
-    Operation
+    Operation,
 )
 from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE
 
@@ -66,21 +66,21 @@ from psyclone.autodiff import (
 class ADForwardOperationTrans(ADOperationTrans):
     """A class for automatic differentation transformations of Operation nodes \
     using forward-mode.
-    Requires an ADForwardRoutineTrans instance as context, where the derivative symbols \
-    can be found.
+    Requires an ADForwardRoutineTrans instance as context, where the \
+    derivative symbols can be found.
     This applies the chain rule to all operands and returns the derivative.
-    If some children of the Operation node being transformed are themselves \
-    Operation nodes, `apply` is used recursively.
     """
 
     def apply(self, operation, options=None):
         """Applies the transformation. This generates the derivative operation.
+        If some children of the Operation node being transformed are themselves \
+        Operation nodes, `apply` is used recursively.
 
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
@@ -121,7 +121,7 @@ class ADForwardOperationTrans(ADOperationTrans):
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
-            implemented yet.
+                                     implemented yet.
 
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
@@ -135,11 +135,13 @@ class ADForwardOperationTrans(ADOperationTrans):
 
         if isinstance(operand, Literal):
             return zero()
-        
+
         if isinstance(operand, Reference):
-            operand_d_sym = self.routine_trans.data_symbol_differential_map[operand.symbol]
+            operand_d_sym = self.routine_trans.data_symbol_differential_map[
+                operand.symbol
+            ]
             operand_d = Reference(operand_d_sym)
-        
+
         if isinstance(operand, Operation):
             operand_d = self.apply(operand)
 
@@ -148,23 +150,27 @@ class ADForwardOperationTrans(ADOperationTrans):
         if operator == UnaryOperation.Operator.MINUS:
             return minus(operand_d)
         if operator == UnaryOperation.Operator.SQRT:
-            # TODO: x=0 should print something, raise an exception or something
+            # TODO: x=0 should print something, raise an exception or something?
             return div(operand_d, mul(Literal("2", INTEGER_TYPE), operation))
         if operator == UnaryOperation.Operator.EXP:
             return mul(operation, operand_d)
         if operator == UnaryOperation.Operator.LOG:
             return div(operand_d, operand)
         if operator == UnaryOperation.Operator.LOG10:
-            return div(operand_d, mul(operand, log(Literal("10.0", REAL_TYPE))))
+            return div(
+                operand_d, mul(operand, log(Literal("10.0", REAL_TYPE)))
+            )
         if operator == UnaryOperation.Operator.COS:
             return mul(minus(sin(operand)), operand_d)
         if operator == UnaryOperation.Operator.SIN:
             return mul(cos(operand), operand_d)
         if operator == UnaryOperation.Operator.TAN:
             return mul(add(one(REAL_TYPE), square(operation)), operand_d)
-            #return div(operand_d, square(cos(operand)))
+            # return div(operand_d, square(cos(operand)))
         if operator == UnaryOperation.Operator.ACOS:
-            return minus(div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand)))))
+            return minus(
+                div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
+            )
         if operator == UnaryOperation.Operator.ASIN:
             return div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
         if operator == UnaryOperation.Operator.ATAN:
@@ -172,8 +178,10 @@ class ADForwardOperationTrans(ADOperationTrans):
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
             return mul(div(operand, operation.copy()), operand_d)
+            # NOTE: version belowed caused large errors compared to Tapenade
+            # as operand * ... / abs(operand) != operand / abs(operand) * ...
             # return div(mul(operand, operand_d), operation.copy())
-            # return sign(one(operand.datatype), operand)
+
         # if operator == UnaryOperation.Operator.CEIL:
         #    # 0             if sin(pi * operand) == 0
         #    # undefined     otherwise...
@@ -189,18 +197,20 @@ class ADForwardOperationTrans(ADOperationTrans):
 
     def differentiate_binary(self, operation):
         """Compute the local partial derivatives of both operands of the \
-            operation argument.
+        operation argument.
 
         :param operation: binary operation Node to be differentiated.
         :type operation: :py:class:`psyclone.psyir.nodes.BinarOperation`
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
-            implemented yet.
+                                     implemented yet.
 
         :return: derivative.
         :rtype: :py:class:`psyclone.psyir.nodes.Operation`
         """
+        # pylint: disable=too-many-locals, unbalanced-tuple-unpacking
+
         super().differentiate_binary(operation)
 
         operator = operation.operator
@@ -211,9 +221,13 @@ class ADForwardOperationTrans(ADOperationTrans):
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
-                operand_d_sym = self.routine_trans.data_symbol_differential_map[operand.symbol]
+                operand_d_sym = (
+                    self.routine_trans.data_symbol_differential_map[
+                        operand.symbol
+                    ]
+                )
                 operands_d.append(Reference(operand_d_sym))
-            else: #Operation
+            else:  # Operation
                 operands_d.append(self.apply(operand))
 
         lhs, rhs = operands
@@ -234,56 +248,58 @@ class ADForwardOperationTrans(ADOperationTrans):
                 exponent = Literal(whole_minus_1 + dot + decimal, rhs.datatype)
             else:
                 exponent = sub(rhs, one())
-            return add(mul(lhs_d, mul(rhs, power(lhs, exponent))),
-                       mul(rhs_d, mul(operation, log(lhs))))
+            return add(
+                mul(lhs_d, mul(rhs, power(lhs, exponent))),
+                mul(rhs_d, mul(operation, log(lhs))),
+            )
 
             # TODO: should this take cases where derivatives are undefined
             # into account, like Tapenade does?
 
-            #IF (lhs .LE. 0.0)
+            # IF (lhs .LE. 0.0)
             #    IF (rhs .EQ. 0.0 .OR. rhs .NE. INT(rhs))) THEN
             #        assigned_var_d = 0.D0
             #    ELSE
             #        assigned_var_d = rhs*lhs**(rhs-1)*lhs_d
             #    ENDIF
-            #ELSE
+            # ELSE
             #    assigned_var_d = rhs*lhs**(rhs-1)*lhs_d + lhs**rhs*LOG(lhs)*rhs_d
-            #END IF
+            # END IF
             #
-            #lhs_le_0 = BinaryOperation.create(BinaryOperation.Operator.LE,
+            # lhs_le_0 = BinaryOperation.create(BinaryOperation.Operator.LE,
             #                                  lhs.copy(),
             #                                  zero(REAL_TYPE))
-            #rhs_eq_0 = BinaryOperation.create(BinaryOperation.Operator.EQ,
+            # rhs_eq_0 = BinaryOperation.create(BinaryOperation.Operator.EQ,
             #                                  rhs.copy(),
             #                                  zero(REAL_TYPE))
-            #int_rhs = UnaryOperation.create(UnaryOperation.Operator.INT,
+            # int_rhs = UnaryOperation.create(UnaryOperation.Operator.INT,
             #                                rhs.copy())
-            #rhs_ne_int_rhs = BinaryOperation.create(BinaryOperation.Operator.NE,
+            # rhs_ne_int_rhs = BinaryOperation.create(BinaryOperation.Operator.NE,
             #                                        rhs.copy(),
             #                                        int_rhs)
-            #condition = BinaryOperation.create(BinaryOperation.Operator.OR,
+            # condition = BinaryOperation.create(BinaryOperation.Operator.OR,
             #                                   rhs_eq_0,
             #                                   rhs_ne_int_rhs)
             #
-            #dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
-            #dummy_d_zero = assign_zero(dummy_sym)
-            #dummy_d_1_rhs = mul(mul(rhs, power(lhs, exponent)), lhs_d)
-            #dummy_d_1 = assign(dummy_sym, dummy_d_1_rhs)
-            #if_block_1 = IfBlock.create(condition,
+            # dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
+            # dummy_d_zero = assign_zero(dummy_sym)
+            # dummy_d_1_rhs = mul(mul(rhs, power(lhs, exponent)), lhs_d)
+            # dummy_d_1 = assign(dummy_sym, dummy_d_1_rhs)
+            # if_block_1 = IfBlock.create(condition,
             #                            [dummy_d_zero],
             #                            [dummy_d_1])
             #
-            #log_lhs = UnaryOperation.create(UnaryOperation.Operator.LOG,
+            # log_lhs = UnaryOperation.create(UnaryOperation.Operator.LOG,
             #                                lhs.copy())
-            #dummy_d_2 = assign(dummy_sym,
+            # dummy_d_2 = assign(dummy_sym,
             #                   add(dummy_d_1_rhs,
             #                       mul(mul(operation,
             #                               log_lhs),
             #                           rhs_d)))
-            #if_block_2 = IfBlock.create(lhs_le_0,
+            # if_block_2 = IfBlock.create(lhs_le_0,
             #                            [if_block_1],
             #                            [dummy_d_2])
-            #return if_block_2
+            # return if_block_2
 
         # TODO:
         # REM? undefined for some values of lhs/rhs
