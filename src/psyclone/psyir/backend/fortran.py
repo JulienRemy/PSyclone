@@ -1535,8 +1535,7 @@ class FortranWriter(LanguageWriter):
                     return f"({fort_oper}{content})"
             if isinstance(parent, BinaryOperation):
                 parent_fort_oper = self.get_operator(parent.operator)
-                if (not self.is_intrinsic(parent_fort_oper) and
-                        node is parent.children[1]):
+                if not self.is_intrinsic(parent_fort_oper):
                     return f"({fort_oper}{content})"
             return f"{fort_oper}{content}"
 
