@@ -36,6 +36,7 @@
 """This file contains functions used to simplify PSyclone Nodes created 
 by applying 'psyclone.autodiff' transformations.
 """
+# TODO: add/substract 0 simplification (for forward-mode)
 
 from psyclone.psyir.nodes import (
     UnaryOperation,
