@@ -540,7 +540,7 @@ class ADReverseCallTrans(ADCallTrans):
         other than intent(in) as dependent variables, with possible overlaps. \
 
         :param routine: routine to be transformed.
-        :type routine: :py:class:`psyclone.psyir.node.Routine`
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[str, Any]]
