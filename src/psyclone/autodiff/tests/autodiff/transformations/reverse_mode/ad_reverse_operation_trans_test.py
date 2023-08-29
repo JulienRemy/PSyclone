@@ -33,7 +33,7 @@
 # -----------------------------------------------------------------------------
 # Authors: J. Remy, Inria
 
-"""A module to perform tests on the autodiff ADoperationTrans class.
+"""A module to perform tests on the autodiff ADReverseOperationTrans class.
 """
 
 import pytest
