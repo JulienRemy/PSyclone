@@ -100,7 +100,7 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         if not isinstance(parent_adj, DataSymbol):
             raise TransformationError(
-                f"'parent_adj' argument in ADReverseOperationTrans should be a "
+                f"'parent_adj' argument should be a "
                 f"PSyIR 'DataSymbol' but found '{type(parent_adj).__name__}'."
             )
 
