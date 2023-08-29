@@ -68,7 +68,7 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
 
         if not isinstance(operation, Operation):
             raise TransformationError(
-                f"'operation' argument in ADReverseOperationTrans should be a "
+                f"'operation' argument should be a "
                 f"PSyIR 'Operation' but found '{type(operation).__name__}'."
             )
 

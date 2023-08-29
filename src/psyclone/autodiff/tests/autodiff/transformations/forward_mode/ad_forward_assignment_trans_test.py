@@ -149,16 +149,16 @@ def test_ad_assignment_trans_apply(fortran_writer):
         _, ad_routine_trans, ad_assignment_trans = initialize_transformations()
 
         sym = DataSymbol("var", REAL_TYPE)
-        adj_sym = ad_routine_trans.create_differential_symbol(sym)
-        assert adj_sym.name == f"{AP}var{AS}"
+        d_sym = ad_routine_trans.create_differential_symbol(sym)
+        assert d_sym.name == f"{AP}var{AS}"
 
         sym2 = DataSymbol("var_2", REAL_TYPE)
-        adj_sym2 = ad_routine_trans.create_differential_symbol(sym2)
-        assert adj_sym2.name == f"{AP}var_2{AS}"
+        d_sym2 = ad_routine_trans.create_differential_symbol(sym2)
+        assert d_sym2.name == f"{AP}var_2{AS}"
 
-        return ad_assignment_trans, sym, adj_sym, sym2, adj_sym2
+        return ad_assignment_trans, sym, d_sym, sym2, d_sym2
 
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
 
     ###############
     # Literal assignment
@@ -175,7 +175,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     ##################
     # Reference assignment
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
     reference_assignment = assign(sym, sym2)
 
     transformed = ad_assignment_trans.apply(reference_assignment)
@@ -188,7 +188,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     #######################
     # Operation assignment, unary
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
     operation = minus(sym2)
     operation_assignment = assign(sym, operation)
     transformed = ad_assignment_trans.apply(operation_assignment)
@@ -201,7 +201,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(transformed, expected, fortran_writer)
 
     # Operation assignment, binary
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
     operation = add(sym, sym2)
     operation_assignment = assign(sym, operation)
 
