@@ -386,6 +386,18 @@ class ADReverseOperationTrans(ADOperationTrans):
             else:
                 exponent = sub(rhs, one())
             return [mul(rhs, power(lhs, exponent)), mul(operation, log(lhs))]
+            # TODO: should this take cases where derivatives are undefined
+            # into account, like Tapenade does?
+            
+            #IF (x .LE. 0.0) THEN
+            #    IF (y .EQ. 0.0 .OR. y .NE. INT(y))) THEN
+            #        xb = 0.D0
+            #    END IF
+            #    yb = 0.D0
+            #ELSE
+            #    xb = y*x**(y-1)*zb
+            #    yb = x**y*LOG(x)*zb
+            #END IF
         # TODO:
         # REM? undefined for some values of lhs/rhs
         # MIN if block

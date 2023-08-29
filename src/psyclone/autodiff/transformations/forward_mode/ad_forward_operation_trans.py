@@ -37,29 +37,24 @@
 differentiation of PSyIR Operation nodes."""
 
 from psyclone.psyir.nodes import (
-    Assignment,
     Reference,
     Literal,
     UnaryOperation,
     BinaryOperation,
-    Operation,
+    Operation
 )
-from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, REAL_TYPE
-from psyclone.psyir.transformations import TransformationError
+from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE
 
 from psyclone.autodiff.transformations import ADOperationTrans
 from psyclone.autodiff import (
     one,
     minus,
-    inverse,
     power,
     sqrt,
     log,
     mul,
     sub,
     add,
-    increment,
-    assign,
     sin,
     cos,
     square,
@@ -176,7 +171,8 @@ class ADForwardOperationTrans(ADOperationTrans):
             return div(operand_d, add(one(REAL_TYPE), square(operand)))
         if operator == UnaryOperation.Operator.ABS:
             # This could also be implemented using an if block
-            return div(mul(operand, operand_d), operation.copy())
+            return mul(div(operand, operation.copy()), operand_d)
+            # return div(mul(operand, operand_d), operation.copy())
             # return sign(one(operand.datatype), operand)
         # if operator == UnaryOperation.Operator.CEIL:
         #    # 0             if sin(pi * operand) == 0
@@ -240,6 +236,54 @@ class ADForwardOperationTrans(ADOperationTrans):
                 exponent = sub(rhs, one())
             return add(mul(lhs_d, mul(rhs, power(lhs, exponent))),
                        mul(rhs_d, mul(operation, log(lhs))))
+
+            # TODO: should this take cases where derivatives are undefined
+            # into account, like Tapenade does?
+
+            #IF (lhs .LE. 0.0)
+            #    IF (rhs .EQ. 0.0 .OR. rhs .NE. INT(rhs))) THEN
+            #        assigned_var_d = 0.D0
+            #    ELSE
+            #        assigned_var_d = rhs*lhs**(rhs-1)*lhs_d
+            #    ENDIF
+            #ELSE
+            #    assigned_var_d = rhs*lhs**(rhs-1)*lhs_d + lhs**rhs*LOG(lhs)*rhs_d
+            #END IF
+            #
+            #lhs_le_0 = BinaryOperation.create(BinaryOperation.Operator.LE,
+            #                                  lhs.copy(),
+            #                                  zero(REAL_TYPE))
+            #rhs_eq_0 = BinaryOperation.create(BinaryOperation.Operator.EQ,
+            #                                  rhs.copy(),
+            #                                  zero(REAL_TYPE))
+            #int_rhs = UnaryOperation.create(UnaryOperation.Operator.INT,
+            #                                rhs.copy())
+            #rhs_ne_int_rhs = BinaryOperation.create(BinaryOperation.Operator.NE,
+            #                                        rhs.copy(),
+            #                                        int_rhs)
+            #condition = BinaryOperation.create(BinaryOperation.Operator.OR,
+            #                                   rhs_eq_0,
+            #                                   rhs_ne_int_rhs)
+            #
+            #dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
+            #dummy_d_zero = assign_zero(dummy_sym)
+            #dummy_d_1_rhs = mul(mul(rhs, power(lhs, exponent)), lhs_d)
+            #dummy_d_1 = assign(dummy_sym, dummy_d_1_rhs)
+            #if_block_1 = IfBlock.create(condition,
+            #                            [dummy_d_zero],
+            #                            [dummy_d_1])
+            #
+            #log_lhs = UnaryOperation.create(UnaryOperation.Operator.LOG,
+            #                                lhs.copy())
+            #dummy_d_2 = assign(dummy_sym,
+            #                   add(dummy_d_1_rhs,
+            #                       mul(mul(operation,
+            #                               log_lhs),
+            #                           rhs_d)))
+            #if_block_2 = IfBlock.create(lhs_le_0,
+            #                            [if_block_1],
+            #                            [dummy_d_2])
+            #return if_block_2
 
         # TODO:
         # REM? undefined for some values of lhs/rhs
