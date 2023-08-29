@@ -48,10 +48,12 @@ from psyclone.autodiff.transformations import ADContainerTrans
 class ADReverseContainerTrans(ADContainerTrans):
     """A class for automatic differentation transformation of Container nodes \
     in reverse-mode.
-    This is the transformation to apply on the PSyIR AST generated from a source.
+    This is the transformation to apply on the PSyIR AST generated from a \
+    source.
     """
 
     def __init__(self):
+        # pylint: disable=use-dict-literal
         super().__init__()
 
         # This stores {RoutineSymbol: ADValueTape}
@@ -62,11 +64,13 @@ class ADReverseContainerTrans(ADContainerTrans):
         """Add a new routine transformations to the list.
 
         :param routine_trans: routine transformation.
-        :type routine_trans: :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`
+        :type routine_trans: \
+            :py:class:`psyclone.autodiff.transformations.ADReverseRoutineTrans`
 
         :raises TypeError: if routine_trans is of the wrong type.
         """
         # Avoid circular import
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADReverseRoutineTrans
 
         if not isinstance(routine_trans, ADReverseRoutineTrans):
@@ -82,14 +86,15 @@ class ADReverseContainerTrans(ADContainerTrans):
 
         :param original_symbol: routine symbol of the original.
         :type original_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
-        :param transformed_symbols: list of three transformed routine sybmols.
-        :type transformed_symbols: list[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]
+        :param transformed_symbols: List of three transformed routine sybmols.
+        :type transformed_symbols: \
+                        List[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]
 
         :raises TypeError: if original_symbol is of the wrong type.
         :raises TypeError: if transformed_symbol is of the wrong type.
         :raises ValueError: if the length of transformed_symbol is not 3.
         :raises TypeError: if any of the elements of transformed_symbol are \
-            of the wrong type.
+                           of the wrong type.
         """
         if not isinstance(original_symbol, RoutineSymbol):
             raise TypeError(
@@ -126,8 +131,8 @@ class ADReverseContainerTrans(ADContainerTrans):
         """Returns the map between original routine symbols and value_tapes.
 
         :return: dictionnary with the original routine symbols as keys \
-            and the value_tape as value.
-        :rtype: dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+                 and the value_tape as value.
+        :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
                      :py:class:`psyclone.autodiff.ADValueTape`]
         """
         return self._value_tape_map
@@ -191,33 +196,37 @@ class ADReverseContainerTrans(ADContainerTrans):
         :param container: Container Node to the transformed.
         :type container: :py:class:`psyclone.psyir.nodes.Container`
         :param routine_name: name of the Routine to be transformed.
-        :type routine_name: `str`
+        :type routine_name: `Str`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
-        :type dependent_vars: `List[str]`
+                               differentiated.
+        :type dependent_vars: `List[Str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
-        :type independent_vars: `List[str]`
+                                 differentiate with respect to.
+        :type independent_vars: `List[Str]`
         :param reversal_schedule: reversal schedule for routined called \
-            inside the one to transform (and inside them, etc.).
+                                  inside the one to transform 
+                                  (and inside them, etc.).
         :type reversal_schedule: :py:class:`psyclone.autodiff.ADReversalSchedule`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
-        :raises TransformationError: if the transformation has already been applied.
+        :raises TransformationError: if the transformation has already been \
+                                     applied.
         :raises TransformationError: if container is of the wrong type.
         :raises TypeError: if routine_name is of the wrong type.
         :raises TypeError: if dependent_vars is of the wrong type.
         :raises TypeError: if at least one element of dependent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises TypeError: if independent_vars is of the wrong type.
         :raises TypeError: if at least one element of independent_vars is \
-            of the wrong type.
+                           of the wrong type.
         :raises TypeError: if reversal_schedule is of the wrong type.
         :raises TransformationError: if no Routine named routine_name can \
-            be found in the container.
+                                     be found in the container.
         """
+        # pylint: disable=arguments-renamed, too-many-arguments
+
         super().validate(
             container, routine_name, dependent_vars, independent_vars, options
         )
@@ -244,36 +253,40 @@ class ADReverseContainerTrans(ADContainerTrans):
 
         Options:
         - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
-            to False.
+                           to False.
         - bool 'verbose' : toggles explanatory comments. Defaults to False.
         - bool 'simplify': True to apply simplifications after applying AD \
-            transformations. Defaults to True.
+                           transformations. Defaults to True.
         - int 'simplify_n_times': number of time to apply simplification \
-            rules to BinaryOperation nodes. Defaults to 5.
+                                  rules to BinaryOperation nodes. Defaults to 5.
         - bool 'inline_operation_adjoints': True to inline all possible \
-            operation adjoints definitions. Defaults to True.
+                                            operation adjoints definitions. \
+                                            Defaults to True.
 
         :param container: Container Node to the transformed.
         :type container: :py:class:`psyclone.psyir.nodes.Container`
         :param routine_name: name of the Routine to be transformed.
-        :type routine_name: `str`
+        :type routine_name: `Str`
         :param dependent_vars: list of dependent variables names to be \
-            differentiated.
-        :type dependent_vars: `List[str]`
+                               differentiated.
+        :type dependent_vars: `List[Str]`
         :param independent_vars: list of independent variables names to \
-            differentiate with respect to.
+                                 differentiate with respect to.
         :type independent_vars: `List[str]`
         :param reversal_schedule: reversal schedule for routined called \
-            inside the one to transform (and inside them, etc.).
+                                  inside the one to transform \
+                                  (and inside them, etc.).
         :type reversal_schedule: :py:class:`psyclone.autodiff.ADReversalSchedule`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: a copied and modified container with all necessary \
-            Routine definitions.
+                 Routine definitions.
         :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
+        # pylint: disable=arguments-renamed, too-many-arguments
+
         self.validate(
             container,
             routine_name,
@@ -299,17 +312,20 @@ class ADReverseContainerTrans(ADContainerTrans):
         index = routine_names.index(routine_name)
         routine = routines[index]
 
-        # Symbol
-        # routine_symbol = own_routine_symbol(routine)
-
         # Create the ADReverseRoutineTrans for it
+        # Import here to avoid circular dependency
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADReverseRoutineTrans
 
         routine_trans = ADReverseRoutineTrans(self)
 
         # Transform the Routine
         routine_trans.apply(
-            routine, dependent_vars, independent_vars, value_tape=None, options=options
+            routine,
+            dependent_vars,
+            independent_vars,
+            value_tape=None,
+            options=options,
         )
         # This adds all necessary entries to self.container and to the maps
 

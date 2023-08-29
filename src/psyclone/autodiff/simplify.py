@@ -82,7 +82,7 @@ def simplify_binary_operation(binary_operation, times=1):
         )
     if times < 1:
         raise ValueError(
-            f"'times' argument should be at least '1' " f"but found '{times}'."
+            f"'times' argument should be at least '1' but found '{times}'."
         )
 
     result = binary_operation
@@ -108,7 +108,7 @@ def simplify_binary_operation(binary_operation, times=1):
                 and isinstance(other_operand, BinaryOperation)
                 and (other_operand.operator is BinaryOperation.Operator.MUL)
             ):
-                for j, suboperand in enumerate(other_operand.children):
+                for suboperand in other_operand.children:
                     if suboperand == operand:
                         result = simplify_add_sub_factorize(binary_operation)
 
@@ -122,7 +122,6 @@ def simplify_binary_operation(binary_operation, times=1):
         result = simplify_binary_operation(result, times - 1)
 
     return result
-    ###############################
 
 
 def _typecheck_add(binary_operation):
@@ -158,16 +157,21 @@ def simplify_add(binary_operation):
     # (-x) + (-y) => -(x+y)
     if (
         isinstance(binary_operation.children[0], UnaryOperation)
-        and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
+        and (
+            binary_operation.children[0].operator
+            is UnaryOperation.Operator.MINUS
+        )
         and isinstance(binary_operation.children[1], UnaryOperation)
-        and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+        and (
+            binary_operation.children[1].operator
+            is UnaryOperation.Operator.MINUS
+        )
     ):
         return simplify_add_minus_minus(binary_operation)
 
     # x + (-y) => x - y
     # (-x) + y => y - x
-    for i, operand in enumerate(binary_operation.children):
-        other_operand = binary_operation.children[i - 1]
+    for operand in binary_operation.children:
         if isinstance(operand, UnaryOperation) and (
             operand.operator is UnaryOperation.Operator.MINUS
         ):
@@ -178,7 +182,7 @@ def simplify_add(binary_operation):
 
 # x + x => 2 * x
 def simplify_add_twice_to_mul_by_2(binary_operation):
-    """Simplifies a binary operation with operator ADD and both operands
+    """Simplifies a binary operation with operator ADD and both operands \
     being of type 'Reference' and equal.
 
     :param binary_operation: operation to simplify.
@@ -215,7 +219,7 @@ def simplify_add_twice_to_mul_by_2(binary_operation):
 
 # (-x) + (-y) => -(x+y)
 def simplify_add_minus_minus(binary_operation):
-    """Simplifies a binary operation with operator ADD, both operands being
+    """Simplifies a binary operation with operator ADD, both operands being \
     unary operations with operator MINUS.
 
     :param binary_operation: operation to simplify.
@@ -233,9 +237,15 @@ def simplify_add_minus_minus(binary_operation):
     if not (
         (
             isinstance(binary_operation.children[0], UnaryOperation)
-            and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[0].operator
+                is UnaryOperation.Operator.MINUS
+            )
             and isinstance(binary_operation.children[1], UnaryOperation)
-            and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[1].operator
+                is UnaryOperation.Operator.MINUS
+            )
         )
     ):
         raise ValueError(
@@ -260,7 +270,7 @@ def simplify_add_minus_minus(binary_operation):
 # x + (-y) => x - y
 # (-x) + y => y - x
 def simplify_add_plus_minus_or_minus_plus(binary_operation):
-    """Simplifies a binary operation with operator ADD, one operand being
+    """Simplifies a binary operation with operator ADD, one operand being \
     a Reference and the other being a unary operation with operator MINUS.
 
     :param binary_operation: operation to simplify.
@@ -278,16 +288,23 @@ def simplify_add_plus_minus_or_minus_plus(binary_operation):
     if not (
         (
             isinstance(binary_operation.children[0], UnaryOperation)
-            and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[0].operator
+                is UnaryOperation.Operator.MINUS
+            )
         )
         ^ (
             isinstance(binary_operation.children[1], UnaryOperation)
-            and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[1].operator
+                is UnaryOperation.Operator.MINUS
+            )
         )
     ):
         raise ValueError(
             f"Exactly one of 'binary_operation' argument children should have "
-            f"type 'UnaryOperation' and operator 'UnaryOperation.Operator.MINUS' "
+            f"type 'UnaryOperation' and operator "
+            f"'UnaryOperation.Operator.MINUS' "
             f"but found '{binary_operation.children[0].view()}' of type "
             f"'{type(binary_operation.children[0]).__name__}' and "
             f"'{binary_operation.children[1].view()}' of type "
@@ -304,7 +321,6 @@ def simplify_add_plus_minus_or_minus_plus(binary_operation):
                 other_operand.copy(),
                 operand.children[0].copy(),
             )
-            # binary_operation.replace_with(new_sub)
 
 
 def _typecheck_sub(binary_operation):
@@ -342,14 +358,16 @@ def simplify_sub(binary_operation):
     # (-x) - y => -(x+y)
     if (
         isinstance(binary_operation.children[0], UnaryOperation)
-        and binary_operation.children[0].operator is UnaryOperation.Operator.MINUS
+        and binary_operation.children[0].operator
+        is UnaryOperation.Operator.MINUS
     ):
         return simplify_sub_minus_plus(binary_operation)
 
     # x - (-y) => x + y
     if (
         isinstance(binary_operation.children[1], UnaryOperation)
-        and binary_operation.children[1].operator is UnaryOperation.Operator.MINUS
+        and binary_operation.children[1].operator
+        is UnaryOperation.Operator.MINUS
     ):
         return simplify_sub_plus_minus(binary_operation)
 
@@ -358,7 +376,7 @@ def simplify_sub(binary_operation):
 
 # x - x => 0
 def simplify_sub_itself_to_zero(binary_operation):
-    """Simplifies a binary operation with operator SUB, both operands being
+    """Simplifies a binary operation with operator SUB, both operands being \
     of type 'Reference' and equal.
 
     :param binary_operation: operation to simplify.
@@ -391,7 +409,7 @@ def simplify_sub_itself_to_zero(binary_operation):
 
 # (-x) - y => -(x+y)
 def simplify_sub_minus_plus(binary_operation):
-    """Simplifies a binary operation with operator SUB, the first operand
+    """Simplifies a binary operation with operator SUB, the first operand \
     being a unary operation with operator MINUS.
 
     :param binary_operation: operation to simplify.
@@ -408,11 +426,13 @@ def simplify_sub_minus_plus(binary_operation):
 
     if not (
         isinstance(binary_operation.children[0], UnaryOperation)
-        and binary_operation.children[0].operator is UnaryOperation.Operator.MINUS
+        and binary_operation.children[0].operator
+        is UnaryOperation.Operator.MINUS
     ):
         raise ValueError(
             f"'binary_operation' argument should have first child "
-            f"of type 'UnaryOperation' with operator 'UnaryOperation.Operator.MINUS' "
+            f"of type 'UnaryOperation' with operator "
+            f"'UnaryOperation.Operator.MINUS' "
             f"but found '{binary_operation.children[0].view()}' "
             f"of type '{type(binary_operation.children[0]).__name__}'."
         )
@@ -429,7 +449,7 @@ def simplify_sub_minus_plus(binary_operation):
 
 # x - (-y) => x + y
 def simplify_sub_plus_minus(binary_operation):
-    """Simplifies a binary operation with operator SUB, the second operand
+    """Simplifies a binary operation with operator SUB, the second operand \
     being a unary operation with operator MINUS.
 
     :param binary_operation: operation to simplify.
@@ -446,11 +466,13 @@ def simplify_sub_plus_minus(binary_operation):
 
     if not (
         isinstance(binary_operation.children[1], UnaryOperation)
-        and binary_operation.children[1].operator is UnaryOperation.Operator.MINUS
+        and binary_operation.children[1].operator
+        is UnaryOperation.Operator.MINUS
     ):
         raise ValueError(
             f"'binary_operation' argument should have second child "
-            f"of type 'UnaryOperation' with operator 'UnaryOperation.Operator.MINUS' "
+            f"of type 'UnaryOperation' with operator "
+            f"'UnaryOperation.Operator.MINUS' "
             f"but found '{binary_operation.children[1].view()}' "
             f"of type '{type(binary_operation.children[1]).__name__}'."
         )
@@ -481,8 +503,8 @@ def _typecheck_add_sub(binary_operation):
 # x +- x * a => x * (1 +- a)
 # x * a +- x => x * (a +- 1)
 def simplify_add_sub_factorize(binary_operation):
-    """Simplifies a binary operation with operator ADD or SUB, one operand (1)
-    being of type Reference and the other operand being a binary operation
+    """Simplifies a binary operation with operator ADD or SUB, one operand (1) \
+    being of type Reference and the other operand being a binary operation \
     with one suboperand equal to (1).
 
     :param binary_operation: operation to simplify.
@@ -495,6 +517,8 @@ def simplify_add_sub_factorize(binary_operation):
     :return: the simplified operation.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
+    # pylint: disable=too-many-branches, too-many-nested-blocks, use-a-generator
+
     _typecheck_add_sub(binary_operation)
 
     if not (
@@ -515,28 +539,36 @@ def simplify_add_sub_factorize(binary_operation):
         if isinstance(operand, Reference):
             if not isinstance(other_operand, BinaryOperation):
                 raise TypeError(
-                    f"'binary_operation' argument should have one child "
-                    f"of type 'Reference' and the other of type 'BinaryOperation' "
+                    f"'binary_operation' argument should have one child of "
+                    f"type 'Reference' and the other of type 'BinaryOperation' "
                     f"but found '{operand.view()}' of type 'Reference' and "
                     f"'{other_operand.view()}'"
                     f"of type '{type(other_operand).__name__}'."
                 )
             if other_operand.operator is not BinaryOperation.Operator.MUL:
                 raise ValueError(
-                    f"'binary_operation' argument should have one child "
-                    f"of type 'Reference' and the other of type 'BinaryOperation' "
-                    f"with operator 'BinaryOperation.Operator.MUL' but found '{operand.view()}' of type 'Reference' and "
-                    f"'{other_operand.view()}' with operator '{other_operand.operator}'."
+                    f"'binary_operation' argument should have one child of "
+                    f"type 'Reference' and the other of type 'BinaryOperation' "
+                    f"with operator 'BinaryOperation.Operator.MUL' but found "
+                    f"'{operand.view()}' of type 'Reference' and "
+                    f"'{other_operand.view()}' with operator "
+                    f"'{other_operand.operator}'."
                 )
             if not any(
-                [suboperand == operand for suboperand in other_operand.children]
+                [
+                    suboperand == operand
+                    for suboperand in other_operand.children
+                ]
             ):
+                suboperands_views = [
+                    suboperand.view() for suboperand in other_operand.children
+                ]
                 raise ValueError(
-                    f"'binary_operation' argument should have one child 'operand' "
-                    f"of type 'Reference' and the other of type 'BinaryOperation' "
-                    f"with an operand equal to 'operand' "
+                    f"'binary_operation' argument should have one child "
+                    f"'operand' of type 'Reference' and the other of type "
+                    f"'BinaryOperation' with an operand equal to 'operand' "
                     f"but found '{operand.view()}' of type 'Reference' and "
-                    f"{[suboperand.view() for suboperand in other_operand.children]}."
+                    f"{suboperands_views}."
                 )
 
     for i, operand in enumerate(binary_operation.children):
@@ -555,7 +587,10 @@ def simplify_add_sub_factorize(binary_operation):
                             dot,
                             decimal,
                         ) = other_suboperand.value.partition(".")
-                        if binary_operation.operator is BinaryOperation.Operator.ADD:
+                        if (
+                            binary_operation.operator
+                            is BinaryOperation.Operator.ADD
+                        ):
                             new_whole = str(int(whole) + 1)
                             factor = Literal(
                                 new_whole + dot + decimal,
@@ -651,10 +686,16 @@ def simplify_mul_div(binary_operation):
     # (-x) */ y or x */ (-y) => -(x */ y)
     if (
         isinstance(binary_operation.children[0], UnaryOperation)
-        and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
+        and (
+            binary_operation.children[0].operator
+            is UnaryOperation.Operator.MINUS
+        )
     ) ^ (
         isinstance(binary_operation.children[1], UnaryOperation)
-        and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+        and (
+            binary_operation.children[1].operator
+            is UnaryOperation.Operator.MINUS
+        )
     ):
         return simplify_mul_div_plus_minus_or_minus_plus(binary_operation)
 
@@ -682,7 +723,7 @@ def _typecheck_minus(unary_operation):
 
 # (-x) */ (-y) => x */ y
 def simplify_mul_div_minus_minus(binary_operation):
-    """Simplifies a binary operation with operator MUL or DIV, both operands
+    """Simplifies a binary operation with operator MUL or DIV, both operands \
     being unary operations with operator MINUS.
 
     :param binary_operation: operation to simplify.
@@ -700,15 +741,16 @@ def simplify_mul_div_minus_minus(binary_operation):
     for operand in binary_operation.children:
         _typecheck_minus(operand)
 
-    new_operands = [operand.children[0].copy() for operand in binary_operation.children]
+    new_operands = [
+        operand.children[0].copy() for operand in binary_operation.children
+    ]
     return BinaryOperation.create(binary_operation.operator, *new_operands)
-    # binary_operation.replace_with(new_binary_operation)
 
 
 # (-x) */ y or x */ (-y) => -(x */ y)
 def simplify_mul_div_plus_minus_or_minus_plus(binary_operation):
-    """Simplifies a binary operation with operator MUL or DIV, exactly one operand
-    being a unary operation with operator MINUS.
+    """Simplifies a binary operation with operator MUL or DIV, exactly one \
+    operand being a unary operation with operator MINUS.
 
     :param binary_operation: operation to simplify.
     :type binary_operation: :py:class:`psyclone.psyir.nodes.BinaryOperation`
@@ -725,16 +767,23 @@ def simplify_mul_div_plus_minus_or_minus_plus(binary_operation):
     if not (
         (
             isinstance(binary_operation.children[0], UnaryOperation)
-            and (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[0].operator
+                is UnaryOperation.Operator.MINUS
+            )
         )
         ^ (
             isinstance(binary_operation.children[1], UnaryOperation)
-            and (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+            and (
+                binary_operation.children[1].operator
+                is UnaryOperation.Operator.MINUS
+            )
         )
     ):
         raise ValueError(
             f"Exactly one of 'binary_operation' argument children should have "
-            f"type 'UnaryOperation' and operator 'UnaryOperation.Operator.MINUS' "
+            f"type 'UnaryOperation' and operator "
+            f"'UnaryOperation.Operator.MINUS' "
             f"but found '{binary_operation.children[0].view()}' of type "
             f"'{type(binary_operation.children[0]).__name__}' and "
             f"'{binary_operation.children[1].view()}' of type "
@@ -755,17 +804,21 @@ def simplify_mul_div_plus_minus_or_minus_plus(binary_operation):
         binary_operation.children[1], UnaryOperation
     ):
         if not (
-            (binary_operation.children[0].operator is UnaryOperation.Operator.MINUS)
-            ^ (binary_operation.children[1].operator is UnaryOperation.Operator.MINUS)
+            (
+                binary_operation.children[0].operator
+                is UnaryOperation.Operator.MINUS
+            )
+            ^ (
+                binary_operation.children[1].operator
+                is UnaryOperation.Operator.MINUS
+            )
         ):
             raise ValueError(
-                f"Exactly one of 'binary_operation' argument children should have "
-                f"operator 'UnaryOperation.Operator.MINUS' but found "
-                f"'{binary_operation.children[0].operator}' and '{binary_operation.children[1].operator}'."
+                f"Exactly one of 'binary_operation' argument children should "
+                f"have operator 'UnaryOperation.Operator.MINUS' but found "
+                f"'{binary_operation.children[0].operator}' "
+                f"and '{binary_operation.children[1].operator}'."
             )
-    # for operand in binary_operation.children:
-    #    if isinstance(operand, UnaryOperation):
-    #        _typecheck_minus(operand)
 
     for i, operand in enumerate(binary_operation.children):
         if isinstance(operand, UnaryOperation) and (
@@ -779,13 +832,9 @@ def simplify_mul_div_plus_minus_or_minus_plus(binary_operation):
             new_binary_operation = BinaryOperation.create(
                 binary_operation.operator, *new_operands
             )
-            # minus_operation = UnaryOperation.create(
-            #    UnaryOperation.Operator.MINUS, new_binary_operation
-            # )
             return UnaryOperation.create(
                 UnaryOperation.Operator.MINUS, new_binary_operation
             )
-            # binary_operation.replace_with(minus_operation)
 
     raise ValueError(
         f"'simplify_mul_div_plus_minus_or_minus_plus' called on argument "
@@ -831,24 +880,26 @@ def _valuecheck_at_least_one_literal_operand(binary_operation, values):
             or (binary_operation.children[1].value in values)
         ):
             raise ValueError(
-                f"At least one of 'binary_operation' argument children should be "
-                f"a Literal with value in {values} but found "
-                f"'{binary_operation.children[0].value}' and '{binary_operation.children[1].value}'."
+                f"At least one of 'binary_operation' argument children should "
+                f"be a Literal with value in {values} but found "
+                f"'{binary_operation.children[0].value}' and "
+                f"'{binary_operation.children[1].value}'."
             )
     else:
-        for i, operand in enumerate(binary_operation.children):
+        for operand in binary_operation.children:
             if isinstance(operand, Literal):
                 if operand.value not in values:
                     raise ValueError(
-                        f"At least one of 'binary_operation' argument children should be "
-                        f"a Literal with value in {values} but found "
-                        f"'{binary_operation.children[0].view()}' and '{binary_operation.children[1].view()}'."
+                        f"At least one of 'binary_operation' argument children "
+                        f"should be a Literal with value in {values} but found "
+                        f"'{binary_operation.children[0].view()}' and "
+                        f"'{binary_operation.children[1].view()}'."
                     )
 
 
 # x * 1 or 1 * x => x
 def simplify_mul_by_one(binary_operation):
-    """Simplifies a binary operation with operator MUL or DIV, one operand
+    """Simplifies a binary operation with operator MUL or DIV, one operand \
     being of type Literal with value '1'.
 
     :param binary_operation: operation to simplify.
@@ -868,12 +919,9 @@ def simplify_mul_by_one(binary_operation):
 
     for i, operand in enumerate(binary_operation.children):
         if isinstance(operand, Literal):
-            # NOTE: not 1.0
+            # NOTE: not 1.0, sometimes used to "cast" to REAL
             if operand.value == "1":
                 return binary_operation.children[1 - i].copy()
-                # binary_operation.replace_with(
-                #    binary_operation.children[1 - i].copy()
-                # )
 
     raise ValueError(
         f"'simplify_mul_by_one' called on argument "
@@ -884,7 +932,7 @@ def simplify_mul_by_one(binary_operation):
 
 # x * 0 or 0 * x => 0
 def simplify_mul_by_zero(binary_operation):
-    """Simplifies a binary operation with operator MUL or DIV, one operand
+    """Simplifies a binary operation with operator MUL or DIV, one operand \
     being of type Literal with value '0', '0.' or '0.0'.
 
     :param binary_operation: operation to simplify.
@@ -900,9 +948,11 @@ def simplify_mul_by_zero(binary_operation):
     _typecheck_mul_div(binary_operation)
     _typecheck_at_least_one_literal_operand(binary_operation)
 
-    _valuecheck_at_least_one_literal_operand(binary_operation, ["0", "0.", "0.0"])
+    _valuecheck_at_least_one_literal_operand(
+        binary_operation, ["0", "0.", "0.0"]
+    )
 
-    for i, operand in enumerate(binary_operation.children):
+    for operand in binary_operation.children:
         if isinstance(operand, Literal):
             if operand.value in ("0", "0.0", "0."):
                 return Literal("0", INTEGER_TYPE)
@@ -925,7 +975,7 @@ def _typecheck_assignment(assignment):
 
 def simplify_assignment(assignment):
     """Simplifies an assignment.
-    Returns None for a simplified self-assignment whose original
+    Returns None for a simplified self-assignment whose original \
     should be detached from the AST.
 
     :param assignment: assignment to simplify.
@@ -968,6 +1018,7 @@ def simplify_self_assignment(assignment):
             f"rhs '{assignment.rhs.view()}'."
         )
 
+    # Explicit return to be clear, can't disable pylint warning?
     return None
 
 
@@ -978,7 +1029,7 @@ def simplify_node(node, times=1):
     :param node: node to simplify.
     :type node: :py:class:`psyclone.psyir.nodes.Node`
     :param times: number of times operation simplification should be
-        applied, optional, default to 1.
+                  applied, optional, defaults to 1.
     :type times: Optional[int]
 
     :raises TypeError: if node is of the wrong type.

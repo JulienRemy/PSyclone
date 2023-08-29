@@ -70,12 +70,10 @@ from psyclone.autodiff import (
 class ADReverseOperationTrans(ADOperationTrans):
     """A class for automatic differentation transformations of Operation nodes \
     using reverse-mode.
-    Requires an ADReverseRoutineTrans instance as context, where the adjoint symbols \
-    can be found.
+    Requires an ADReverseRoutineTrans instance as context, where the adjoint \
+    symbols can be found.
     This applies the chain rule to all operands and returns the recording and \
     returning motions that correspond.
-    If some children of the Operation node being transformed are themselves \
-    Operation nodes, `apply` is used recursively.
     """
 
     def validate(self, operation, parent_adj, options=None):
@@ -84,18 +82,21 @@ class ADReverseOperationTrans(ADOperationTrans):
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param parent_adj: symbol of the adjoint of the parent Node, where \
-            the parent node can be the LHS of an Assignment, an enclosing \
-                Operation, etc.
+                           the parent node can be the LHS of an Assignment, 
+                           an enclosing Operation, etc.
         :type parent_adj: :py:class:`psyclone.psyir.symbols.DataSymbol`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if operation is of the wrong type.
         :raises TransformationError: if parent_adj is of the wrong type.
         :raises TransformationError: if parent_adj is not found among the \
-            adjoint symbols of the context ADReverseRoutineTrans.
+                                     adjoint symbols of the contextual \
+                                     `ADReverseRoutineTrans`.
         """
+        # pylint: disable=arguments-renamed
+
         super().validate(operation, options)
 
         if not isinstance(parent_adj, DataSymbol):
@@ -115,6 +116,8 @@ class ADReverseOperationTrans(ADOperationTrans):
         """Applies the transformation. This generates the returning motion \
         statements that increment adjoints as required for reverse-mode \
         automatic differentiation.
+        If some children of the Operation node being transformed are \
+        themselves Operation nodes, `apply` is used recursively.
 
         The `parent_adj` argument is the `DataSymbol` of the adjoint of the \
         parent node of the `operation` node, to use in incrementing the \
@@ -136,33 +139,36 @@ class ADReverseOperationTrans(ADOperationTrans):
         *eg* `a = a + ... * (a + ...)`) or not.
 
         The adjoints incrementations are returned as two lists:
-        - this first contains the adjoint incrementations of *non-iterative* type,
+        - this first contains the adjoint incrementations of \
+            *non-iterative* type,
         - the second the adjoint incrementations of *iterative* type.
 
         Note that is only returns **returning motion** statements. Indeed \
         operation results are not recorded to the tape for now.
 
         Options:
-        - bool 'verbose' : toggles preceding and inline comments around the adjoining \
-            of the operation in the returning motion.
+        - bool 'verbose' : toggles preceding and inline comments around the \
+                           adjoining of the operation in the returning motion.
 
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
         :param parent_adj: symbol of the adjoint of the parent Node, where \
-            the parent node can be the LHS of an Assignment, an enclosing \
-                Operation, etc.
+                           the parent node can be the LHS of an Assignment, \
+                           an enclosing Operation, etc.
         :type parent_adj: :py:class:`psyclone.psyir.symbols.DataSymbol`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: couple composed of the **returning** motion adjoints \
-            incrementations for the operation being transformed and \
-            the **iterative** incrementations to an ancestor assignment \
-            LHS adjoint if it exists.
+                 incrementations for the operation being transformed and \
+                 the **iterative** incrementations to an ancestor assignment \
+                 LHS adjoint if it exists.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Assignment`], \
                 List[:py:class:`psyclone.psyir.nodes.Assignment`]
         """
+        # pylint: disable=arguments-renamed, too-many-locals
+
         self.validate(operation, parent_adj, options)
 
         # verbose option adds comments to the first and last returning statements
@@ -173,7 +179,8 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         # This is None if the operation is not on the RHS of an Assignment node
         ancestor_assignment = operation.ancestor(Assignment)
-        # List storing incrementations to the LHS adjoint of the ancestor assignment
+        # List storing incrementations to the LHS adjoint of the 
+        # ancestor assignment.
         # Used if the assignment is iterative. eg. var = operations(var, ...)
         assignment_lhs_adj_incr = []
 
@@ -191,13 +198,16 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            adj = self.routine_trans.data_symbol_differential_map[first_operand.symbol]
+            adj = self.routine_trans.data_symbol_differential_map[
+                first_operand.symbol
+            ]
 
             parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
             adj_incr = increment(adj, parent_adj_mul)
 
-            # If this operand is the LHS of an Assignment of which this operation node
-            # is a descendant, the incrementation to the adjoint will be done last
+            # If this operand is the LHS of an Assignment of which this 
+            # operation node is a descendant, the incrementation to the adjoint 
+            # will be done last
             if (ancestor_assignment is not None) and (
                 ancestor_assignment.lhs == first_operand
             ):
@@ -212,16 +222,20 @@ class ADReverseOperationTrans(ADOperationTrans):
             # Increment the adjoints of the operands where needed
             for operand, partial in zip(operation.children, partials):
                 if isinstance(operand, Literal):
-                    # If the operand is a Literal, it has no adjoint to increment
+                    # If the operand is a Literal, it has no adjoint 
+                    # to increment
                     pass
                 elif isinstance(operand, Reference):
                     # If the operand is a Reference, increment its adjoint
-                    adj = self.routine_trans.data_symbol_differential_map[operand.symbol]
+                    adj = self.routine_trans.data_symbol_differential_map[
+                        operand.symbol
+                    ]
                     parent_adj_mul = mul(parent_adj, partial)
                     adj_incr = increment(adj, parent_adj_mul)
 
-                    # If this operand is the LHS of an Assignment of which this operation node
-                    # is a descendant, the incrementation to the adjoint will be done last
+                    # If this operand is the LHS of an Assignment of which this 
+                    # operation node is a descendant, the incrementation to the 
+                    # adjoint will be done last
                     if (ancestor_assignment is not None) and (
                         ancestor_assignment.lhs == operand
                     ):
@@ -232,7 +246,8 @@ class ADReverseOperationTrans(ADOperationTrans):
                         returning.append(adj_incr)
 
                 elif isinstance(operand, Operation):
-                    # If the operand is an Operation, create and assign its adjoint
+                    # If the operand is an Operation, create and assign its 
+                    # adjoint
                     # TODO: correct datatype
                     op_adj = self.routine_trans.new_operation_adjoint(
                         self.routine_trans._default_differential_datatype
@@ -241,8 +256,11 @@ class ADReverseOperationTrans(ADOperationTrans):
                     adj_assign = assign(op_adj, parent_adj_mul)
                     returning.append(adj_assign)
 
-                    # then recursively apply the transformation and collect the statements
-                    op_returning, op_lhs_adj_incr = self.apply(operand, op_adj, options)
+                    # then recursively apply the transformation and collect the 
+                    # statements
+                    op_returning, op_lhs_adj_incr = self.apply(
+                        operand, op_adj, options
+                    )
                     returning.extend(op_returning)
                     assignment_lhs_adj_incr.extend(op_lhs_adj_incr)
 
@@ -256,7 +274,8 @@ class ADReverseOperationTrans(ADOperationTrans):
                     )
 
         # Verbose mode adds comments to the first and last returning statements
-        # TODO: writer should be initialization argument of the (container?) transformation
+        # TODO: writer should be initialization argument of the (container?) 
+        # transformation
         if verbose and len(returning) != 0:
             from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -298,11 +317,13 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
-            implemented yet.
+                                     implemented yet.
 
         :return: local derivative of operation.
         :rtype: :py:class:`psyclone.psyir.nodes.Node`
         """
+        # pylint: disable=too-many-return-statements, too-many-branches
+
         super().differentiate_unary(operation)
 
         operator = operation.operator
@@ -313,7 +334,7 @@ class ADReverseOperationTrans(ADOperationTrans):
         if operator == UnaryOperation.Operator.MINUS:
             return minus(one(REAL_TYPE))
         if operator == UnaryOperation.Operator.SQRT:
-            # TODO: x=0 should print something, raise an exception or something
+            # TODO: x=0 should print something, raise an exception or something?
             return inverse(mul(Literal("2", INTEGER_TYPE), operation))
         if operator == UnaryOperation.Operator.EXP:
             return operation.copy()
@@ -327,7 +348,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             return cos(operand)
         if operator == UnaryOperation.Operator.TAN:
             return add(one(REAL_TYPE), square(operation))
-            #return inverse(square(cos(operand)))
+            # return inverse(square(cos(operand)))
         if operator == UnaryOperation.Operator.ACOS:
             return minus(inverse(sqrt(sub(one(REAL_TYPE), square(operand)))))
         if operator == UnaryOperation.Operator.ASIN:
@@ -360,7 +381,7 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
-            implemented yet.
+                                     implemented yet.
 
         :return: list of local partial derivatives of operation.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
@@ -388,16 +409,16 @@ class ADReverseOperationTrans(ADOperationTrans):
             return [mul(rhs, power(lhs, exponent)), mul(operation, log(lhs))]
             # TODO: should this take cases where derivatives are undefined
             # into account, like Tapenade does?
-            
-            #IF (x .LE. 0.0) THEN
+
+            # IF (x .LE. 0.0) THEN
             #    IF (y .EQ. 0.0 .OR. y .NE. INT(y))) THEN
             #        xb = 0.D0
             #    END IF
             #    yb = 0.D0
-            #ELSE
+            # ELSE
             #    xb = y*x**(y-1)*zb
             #    yb = x**y*LOG(x)*zb
-            #END IF
+            # END IF
         # TODO:
         # REM? undefined for some values of lhs/rhs
         # MIN if block

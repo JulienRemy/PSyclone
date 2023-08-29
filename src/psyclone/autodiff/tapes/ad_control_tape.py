@@ -100,16 +100,16 @@ class ADControlTape(ADTape):
         super().__init__(control_tape_name, datatype)
 
     def record(self, node):
-        """Add the boolean reference or operation result as last element of the \
-        tape and return the Assignment node to record it to the tape.
+        """Add the boolean reference or operation result as last element of \
+        the tape and return the Assignment node to record it to the tape.
 
         :param node: node whose prevalue should be recorded.
         :type reference: :py:class:`psyclone.psyir.nodes.Reference`
 
         :raises TypeError: if node is of the wrong type.
         :raises TypeError: if the intrinsic of node's datatype is not the \
-                                same as the intrinsic of the value_tape's elements \
-                                datatype.
+                           same as the intrinsic of the value_tape's \
+                           elements datatype.
         :raises NotImplementedError: if the reference's datatype is ArrayType.
 
         :return: an Assignment node for recording.
