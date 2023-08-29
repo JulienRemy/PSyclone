@@ -190,8 +190,8 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     atan = UnaryOperation.create(UnaryOperation.Operator.ATAN, ref.copy())
     abs_val = UnaryOperation.create(UnaryOperation.Operator.ABS, ref.copy())
 
-    assert fortran_writer(ad_operation_trans.differentiate_unary(plus)) == "1"
-    assert fortran_writer(ad_operation_trans.differentiate_unary(minus)) == "-1"
+    assert fortran_writer(ad_operation_trans.differentiate_unary(plus)) == "1.0"
+    assert fortran_writer(ad_operation_trans.differentiate_unary(minus)) == "-1.0"
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(sqrt))
         == "1.0 / (2 * SQRT(var))"
@@ -210,15 +210,15 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(acos))
-        == "-1.0 / SQRT(1 - var ** 2)"
+        == "-1.0 / SQRT(1.0 - var ** 2)"
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(asin))
-        == "1.0 / SQRT(1 - var ** 2)"
+        == "1.0 / SQRT(1.0 - var ** 2)"
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(atan))
-        == "1.0 / (1 + var ** 2)"
+        == "1.0 / (1.0 + var ** 2)"
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(abs_val))
@@ -261,8 +261,8 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
 
     ops = (add, sub, mul, div, power, power_literal)
     expected = (
-        ("1", "1"),
-        ("1", "-1"),
+        ("1.0", "1.0"),
+        ("1.0", "-1.0"),
         ("var2", "var1"),
         ("1.0 / var2", "-var1 / var2 ** 2"),
         ("var2 * var1 ** (var2 - 1)", "var1 ** var2 * LOG(var1)"),
@@ -325,7 +325,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     returning, assignment_lhs_incr = ad_operation_trans.apply(unary, adj_sym)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 0
-    expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-1)\n"  # , "{AP}var{AS} = 0.0\n")
+    expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-1.0)\n"  # , "{AP}var{AS} = 0.0\n")
     assert fortran_writer(returning[0]) == expected
 
     binary = BinaryOperation.create(
@@ -335,8 +335,8 @@ def test_ad_operation_trans_apply(fortran_writer):
     assert len(returning) == 2
     assert len(assignment_lhs_incr) == 0
     expected = (
-        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * 1\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var{AS} * (-1)\n",
+        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * 1.0\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var{AS} * (-1.0)\n",
     )
     compare(returning, expected, fortran_writer)
 
@@ -380,7 +380,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     expected = (
         f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-var3)\n",
         f"{OA} = {AP}var{AS} * var2\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1)\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1.0)\n",
     )
     compare(returning, expected, fortran_writer)
 
@@ -399,7 +399,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     expected = (
         f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-var3 * var2)\n",
         f"{OA} = {AP}var{AS} * var2\n",
-        f"{OA}_1 = {OA} * (-1)\n",
+        f"{OA}_1 = {OA} * (-1.0)\n",
         f"{AP}var3{AS} = {AP}var3{AS} + {OA}_1 * var2\n",
         f"{AP}var2{AS} = {AP}var2{AS} + {OA}_1 * var3\n",
     )
@@ -418,7 +418,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     returning, assignment_lhs_incr = ad_operation_trans.apply(unary, adj_sym2)
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 1
-    expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-1)\n"  # , "{AP}var{AS} = 0.0\n")
+    expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-1.0)\n"  # , "{AP}var{AS} = 0.0\n")
     assert fortran_writer(assignment_lhs_incr[0]) == expected
 
     binary = BinaryOperation.create(
@@ -430,8 +430,8 @@ def test_ad_operation_trans_apply(fortran_writer):
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, adj_sym2)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
-    expected_ret = (f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * (-1)\n",)
-    expected_lhs = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1\n",)
+    expected_ret = (f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * (-1.0)\n",)
+    expected_lhs = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0\n",)
     compare(returning, expected_ret, fortran_writer)
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
 
@@ -445,8 +445,8 @@ def test_ad_operation_trans_apply(fortran_writer):
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, adj_sym2)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
-    expected_ret = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1\n",)
-    expected_lhs = (f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * (-1)\n",)
+    expected_ret = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0\n",)
+    expected_lhs = (f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * (-1.0)\n",)
     compare(returning, expected_ret, fortran_writer)
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
 
@@ -461,7 +461,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 1
     expected_lhs = (
-        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (1 + (-1))\n",
+        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (1.0 + (-1.0))\n",
         #f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-1)\n",
     )
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
@@ -483,7 +483,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     assert len(assignment_lhs_incr) == 1
     expected_ret = (
         f"{OA} = {AP}var2{AS} * var2\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1)\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1.0)\n",
     )
     expected_lhs = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-var3)\n",)
     compare(returning, expected_ret, fortran_writer)
@@ -502,11 +502,11 @@ def test_ad_operation_trans_apply(fortran_writer):
     assert len(returning) == 2
     assert len(assignment_lhs_incr) == 2
     expected_ret = (
-        f"{OA} = {AP}var2{AS} * 1\n",
+        f"{OA} = {AP}var2{AS} * 1.0\n",
         f"{AP}var3{AS} = {AP}var3{AS} + {OA} * var2\n",
     )
     expected_lhs = (
-        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1\n",
+        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0\n",
         f"{AP}var2{AS} = {AP}var2{AS} + {OA} * var3\n",
     )
     compare(returning, expected_ret, fortran_writer)

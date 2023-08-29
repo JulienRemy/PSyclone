@@ -59,6 +59,8 @@ TeP = ADReverseRoutineTrans._temp_name_prefix
 TeS = ADReverseRoutineTrans._temp_name_postfix
 
 
+
+
 def compare(nodes, strings, fortran_writer):
     assert len(nodes) == len(strings)
     for node, expected_line in zip(nodes, strings):
@@ -232,7 +234,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
     assert len(returning) == 2
     expected_rec = ("var = -var_2\n",)
     expected_ret = (
-        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * (-1)\n",
+        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * (-1.0)\n",
         f"{AP}var{AS} = 0.0\n",
     )
     compare(recording, expected_rec, fortran_writer)
@@ -251,7 +253,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
     assert len(returning) == 1
     expected_rec = ("var = -var\n",)
     expected_ret = (
-        f"{AP}var{AS} = {AP}var{AS} * (-1)\n",
+        f"{AP}var{AS} = {AP}var{AS} * (-1.0)\n",
     )
     compare(recording, expected_rec, fortran_writer)
     compare(returning, expected_ret, fortran_writer)
@@ -269,8 +271,8 @@ def test_ad_assignment_trans_apply(fortran_writer):
     assert len(returning) == 2
     expected_rec = ("var = var + var_2\n",)
     expected_ret = (
-        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1\n",
-        f"{AP}var{AS} = {AP}var{AS} * 1\n",
+        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1.0\n",
+        f"{AP}var{AS} = {AP}var{AS} * 1.0\n",
     )
     compare(recording, expected_rec, fortran_writer)
     compare(returning, expected_ret, fortran_writer)
@@ -288,8 +290,8 @@ def test_ad_assignment_trans_apply(fortran_writer):
     assert len(returning) == 2
     expected_rec = ("var = var_2 + var\n",)
     expected_ret = (
-        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1\n",
-        f"{AP}var{AS} = {AP}var{AS} * 1\n",
+        f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1.0\n",
+        f"{AP}var{AS} = {AP}var{AS} * 1.0\n",
     )
     compare(recording, expected_rec, fortran_writer)
     compare(returning, expected_ret, fortran_writer)
@@ -307,9 +309,9 @@ def test_ad_assignment_trans_apply(fortran_writer):
     assert len(returning) == 1
     expected_rec = ("var = var + var\n",)
     expected_ret = (
-        #f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1\n",
-        f"{AP}var{AS} = {AP}var{AS} * (1 + 1)\n",
-        #f"{AP}var{AS} = {AP}var{AS} + {AP}var{AS} * 1\n",
+        #f"{AP}var_2{AS} = {AP}var_2{AS} + {AP}var{AS} * 1.0\n",
+        f"{AP}var{AS} = {AP}var{AS} * (1.0 + 1.0)\n",
+        #f"{AP}var{AS} = {AP}var{AS} + {AP}var{AS} * 1.0\n",
     )
     compare(recording, expected_rec, fortran_writer)
     compare(returning, expected_ret, fortran_writer)
