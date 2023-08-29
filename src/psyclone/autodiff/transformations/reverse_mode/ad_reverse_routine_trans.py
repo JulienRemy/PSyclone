@@ -486,7 +486,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         This only considers it appearing as lhs of assignments.
 
         :param reference: reference to check.
-        :type reference: :py:class:`psyclone.psyir.node.Reference`
+        :type reference: :py:class:`psyclone.psyir.nodes.Reference`
 
         :raises TypeError: if reference is of the wrong type.
 
@@ -516,7 +516,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         routine.
 
         :param reference: reference to check.
-        :type reference: :py:class:`psyclone.psyir.node.Reference`
+        :type reference: :py:class:`psyclone.psyir.nodes.Reference`
 
         :raises TypeError: if reference is of the wrong type.
 

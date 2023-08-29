@@ -120,7 +120,7 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         """Returns the transformed routines as a list.
 
         :return: list of transformed routines.
-        :rtype: List[:py:class:`psyclone.psyir.node.Routine`]
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Routine`]
         """
         return self.called_routine_trans.transformed
 
@@ -130,7 +130,7 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         list.
 
         :return: list of transformed routine symbols.
-        :rtype: List[:py:class:`psyclone.psyir.symbol.RoutineSymbol`]
+        :rtype: List[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]
         """
         return self.called_routine_trans.transformed_symbols
 
@@ -287,7 +287,7 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
         """Transforms the routine found in a Call.
 
         :param routine: routine to be transformed.
-        :type routine: :py:class:`psyclone.psyir.node.Routine`
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[str, Any]]

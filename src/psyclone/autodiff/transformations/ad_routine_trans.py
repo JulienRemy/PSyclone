@@ -270,7 +270,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         the reversing routine.
 
         :return: list of transformed routine symbols.
-        :rtype: List[:py:class:`psyclone.psyir.symbol.RoutineSymbol`]
+        :rtype: List[:py:class:`psyclone.psyir.symbols.RoutineSymbol`]
         """
         return [own_routine_symbol(routine) for routine in self.transformed]
 

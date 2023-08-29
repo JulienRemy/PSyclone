@@ -69,7 +69,7 @@ class ADContainerTrans(ADTrans, metaclass=ABCMeta):
         """Returns the container being transformed.
 
         :return: container.
-        :rtype: :py:class:`psyclone.psyir.node.Container`
+        :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
         return self._container
 

@@ -64,7 +64,7 @@ class ADForwardCallTrans(ADCallTrans):
         """Returns the transformed routine as a list.
 
         :return: list of transformed routines.
-        :rtype: List[:py:class:`psyclone.psyir.node.Routine`]
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Routine`]
         """
         return self.called_routine_trans.transformed
 
@@ -73,7 +73,7 @@ class ADForwardCallTrans(ADCallTrans):
         """Returns the routine symbol transformed routine.
 
         :return: transformed routine symbol.
-        :rtype: :py:class:`psyclone.psyir.symbol.RoutineSymbol`
+        :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
         """
         return self.called_routine_trans.transformed_symbol
 
@@ -266,7 +266,7 @@ class ADForwardCallTrans(ADCallTrans):
         other than intent(in) as dependent variables, with possible overlaps. \
 
         :param routine: routine to be transformed.
-        :type routine: :py:class:`psyclone.psyir.node.Routine`
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[str, Any]]
