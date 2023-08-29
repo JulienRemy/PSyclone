@@ -33,8 +33,7 @@
 # -----------------------------------------------------------------------------
 # Author J. Remy, Inria
 
-"""PSyclone automatic differentiation module. Contains all visitors, transformations
-and tools (in subdirectories).
+"""PSyclone automatic differentiation module.
 """
 
 from psyclone.autodiff.ad_reversal_schedule import (

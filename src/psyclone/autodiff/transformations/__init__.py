@@ -37,11 +37,17 @@
 """
 
 from psyclone.autodiff.transformations.ad_trans import ADTrans
-from psyclone.autodiff.transformations.ad_container_trans import ADContainerTrans
+from psyclone.autodiff.transformations.ad_container_trans import (
+    ADContainerTrans,
+)
 from psyclone.autodiff.transformations.ad_routine_trans import ADRoutineTrans
 from psyclone.autodiff.transformations.ad_element_trans import ADElementTrans
-from psyclone.autodiff.transformations.ad_assignment_trans import ADAssignmentTrans
-from psyclone.autodiff.transformations.ad_operation_trans import ADOperationTrans
+from psyclone.autodiff.transformations.ad_assignment_trans import (
+    ADAssignmentTrans,
+)
+from psyclone.autodiff.transformations.ad_operation_trans import (
+    ADOperationTrans,
+)
 from psyclone.autodiff.transformations.ad_call_trans import ADCallTrans
 
 from psyclone.autodiff.transformations.reverse_mode.ad_reverse_container_trans import (
@@ -76,11 +82,10 @@ from psyclone.autodiff.transformations.forward_mode.ad_forward_call_trans import
     ADForwardCallTrans,
 )
 
-# from psyclone.autodiff.transformations.ad_adjoint_symbol_trans import ADAdjointSymbolTrans
-
 # The entities in the __all__ list are made available to import directly from
 # this package e.g. 'from psyclone.autodiff.transformations import ADContainerTrans'
 __all__ = [
+    # Abstract transformations
     "ADTrans",
     "ADContainerTrans",
     "ADRoutineTrans",
@@ -88,12 +93,15 @@ __all__ = [
     "ADAssignmentTrans",
     "ADOperationTrans",
     "ADCallTrans",
-    #'ADAdjointSymbolTrans',
+    
+    # Reverse-mode transformations
     "ADReverseContainerTrans",
     "ADReverseRoutineTrans",
     "ADReverseAssignmentTrans",
     "ADReverseOperationTrans",
     "ADReverseCallTrans",
+
+    # Forward-mode transformations
     "ADForwardContainerTrans",
     "ADForwardRoutineTrans",
     "ADForwardAssignmentTrans",
