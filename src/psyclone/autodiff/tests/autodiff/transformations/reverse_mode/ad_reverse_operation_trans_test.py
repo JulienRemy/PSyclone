@@ -110,14 +110,14 @@ def test_ad_operation_trans_validate():
     with pytest.raises(TransformationError) as info:
         ad_operation_trans.validate(None, None)
     assert (
-        "'operation' argument in ADReverseOperationTrans should be a "
+        "'operation' argument should be a "
         "PSyIR 'Operation' but found 'NoneType'." in str(info.value)
     )
 
     with pytest.raises(TransformationError) as info:
         ad_operation_trans.validate(unary_op, None)
     assert (
-        "'parent_adj' argument in ADReverseOperationTrans should be a "
+        "'parent_adj' argument should be a "
         "PSyIR 'DataSymbol' but found 'NoneType'." in str(info.value)
     )
 
