@@ -34,24 +34,28 @@
 # Author J. Remy, Inria
 
 """This module provides an abstract Transformation for reverse-mode automatic 
-differentiation in 'psyclone.autodiff'. This is the parent class of all 
-'AD...Trans' classes."""
+differentiation in `psyclone.autodiff`. This is the parent class of all 
+`AD...Trans` classes."""
 
 from abc import ABCMeta
 
 from psyclone.psyGen import Transformation
+
 
 class ADTrans(Transformation, metaclass=ABCMeta):
     """An abstract base class for all `psyclone.autodiff` transformations.
     Default options for `apply` are defined here, as a class attribute, \
     as well as option unpacking from a `dict`.
     """
-    _default_options = {'verbose': False,
-                        'jacobian': False,
-                        'simplify': True,
-                        'simplify_n_times': 5,
-                        'inline_operation_adjoints': True}
-    
+
+    _default_options = {
+        "verbose": False,
+        "jacobian": False,
+        "simplify": True,
+        "simplify_n_times": 5,
+        "inline_operation_adjoints": True,
+    }
+
     @property
     def default_options(self):
         """The default options of this transformation.
@@ -60,12 +64,12 @@ class ADTrans(Transformation, metaclass=ABCMeta):
         :rtype: dict[str]
         """
         return self._default_options
-    
+
     @default_options.setter
     def default_options(self, default_options):
         self.typecheck_options(default_options)
         self._default_options = default_options
-    
+
     @staticmethod
     def typecheck_options(options):
         """Check if an options dictionnary is of the right type, \
@@ -90,7 +94,7 @@ class ADTrans(Transformation, metaclass=ABCMeta):
                         f"with keys of type 'str' but found a key "
                         f"'{key}' of type '{type(key).__name__}'."
                     )
-                
+
     def unpack_option(self, name, options):
         """Get the option with key 'name', from the 'options' dict \
         if it's in it, or then from the instance 'default_options' dict \
@@ -103,7 +107,8 @@ class ADTrans(Transformation, metaclass=ABCMeta):
 
         :raises TypeError: if name is of the wrong type.
         :raises TypeError: if options is of the wrong type.
-        :raises TypeError: if options is not None and one of its keys is of the wrong type.
+        :raises TypeError: if options is not None and one of its keys is of \
+            the wrong type.
         :raises KeyError: if name is not a key of options and defaults is None.
         :raises KeyError: if name is neither a key of options not of defaults.
         :return: the value of the option.
@@ -119,22 +124,22 @@ class ADTrans(Transformation, metaclass=ABCMeta):
 
         if (options is not None) and (name in options):
             return options[name]
-        else:
-            if name not in self.default_options:
-                raise KeyError(
-                    f"'name' argument '{name}' "
-                    f"is neither a key of 'options' nor "
-                    f"of 'self.default_options'."
-                )
-            return self.default_options[name]
-        
+
+        if name not in self.default_options:
+            raise KeyError(
+                f"'name' argument '{name}' "
+                f"is neither a key of 'options' nor "
+                f"of 'self.default_options'."
+            )
+        return self.default_options[name]
+
     def validate(self, node, options=None):
         """Validates the options arguments.
 
         :param node: node to transform.
         :type node: depends on the ADTrans subclass.
         :param options: a dictionary with options for transformations.
-        :type options: Optional[Dict[str, Any]]
+        :type options: Optional[Dict[Str, Any]]
         """
         super().validate(node, options)
         self.typecheck_options(options)

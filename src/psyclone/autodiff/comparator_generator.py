@@ -35,16 +35,20 @@
 
 """This file contains a Fortran subroutine generator class for the purpose of \
 comparing numerical results of programs transformed using `psyclone.autodiff` \
-with Tapenade (3.16) in forward- and reverse-mode (without `vector`/`multi` mode).
+with Tapenade (3.16) in forward- and reverse-mode (without `vector`/`multi` \
+mode).
 Both tools are used to transform a subroutine, which possible nested calls and \
 fill Jacobians for all dependent and independent variables. 
 These are then compared in a Fortran subroutine, which is called from Python \
 using `numpy.f2py`.
-NOTE: this is a work in progress.
 """
+# pylint: disable=unused-import
 
 import subprocess
 from importlib import import_module
+
+# NOTE: this is unused but called using subprocess
+from numpy import f2py
 
 from psyclone.autodiff.transformations import (
     ADReverseContainerTrans,
@@ -67,7 +71,6 @@ from psyclone.psyir.nodes import (
 from psyclone.psyir.symbols import (
     ArrayType,
     REAL_DOUBLE_TYPE,
-    REAL_SINGLE_TYPE,
     INTEGER_TYPE,
     RoutineSymbol,
 )
@@ -76,21 +79,21 @@ from psyclone.line_length import FortLineLength
 
 from psyclone.autodiff import SubroutineGenerator
 
-# NOTE: this is unused but called using subprocess
-from numpy import f2py
-
 
 class ComparatorGenerator(object):
     """This class is a Fortran subroutine generator for the purpose of \
-    comparing numerical results of programs transformed using `psyclone.autodiff` \
-    with Tapenade (3.16) in forward- and reverse-mode (without `vector`/`multi` mode).
-    Both tools are used to transform a subroutine, with possible nested calls and \
-    fill Jacobians for all dependent and independent variables. 
-    These are then compared in a Fortran subroutine, which is called from Python \
-    using `numpy.f2py`.
-    NOTE: this is a work in progress.
+    comparing numerical results of programs transformed using \
+    `psyclone.autodiff` with Tapenade (3.16) in forward- and reverse-mode \
+    (without `vector`/`multi` mode).
+    Both tools are used to transform a subroutine, with possible nested calls \
+    and fill Jacobians for all dependent and independent variables. 
+    These are then compared in a Fortran subroutine, which is called from \
+    Python using `numpy.f2py`.
     """
 
+    # pylint: disable=useless-object-inheritance, too-few-public-methods
+
+    # TODO: specify Fortran version
     # _fortran_version = "fortran90"
 
     _default_scalar_datatype = REAL_DOUBLE_TYPE
@@ -109,21 +112,22 @@ class ComparatorGenerator(object):
         :param file_container: PSyIR file container containing the routine.
         :type file_container: :py:class:`psyclone.psyir.nodes.FileContainer`
         :param routine_name: name of the routine.
-        :type routine_name: str
+        :type routine_name: Str
         :param dependent_vars: list of names of dependent variables.
-        :type dependent_vars: list[str]
+        :type dependent_vars: List[Str]
         :param independent_vars: list of names of independent variables.
-        :type independent_vars: list[str]
+        :type independent_vars: List[Str]
         :param reversal_schedule: AD reversal schedule.
         :type reversal_schedule: :py:class:`psyclone.autodiff.ADReversalSchedule`
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: a copied and modified container with all necessary \
-            Routine definitions.
+                 Routine definitions.
         :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
+        # pylint: disable=too-many-arguments
 
         container_trans = ADReverseContainerTrans()
         return container_trans.apply(
@@ -137,24 +141,28 @@ class ComparatorGenerator(object):
 
     @staticmethod
     def _apply_forward_autodiff(
-        file_container, routine_name, dependent_vars, independent_vars, options=None
+        file_container,
+        routine_name,
+        dependent_vars,
+        independent_vars,
+        options=None,
     ):
         """Applies an ADForwardContainerTrans from psyclone.autodiff.
 
         :param file_container: PSyIR file container containing the routine.
         :type file_container: :py:class:`psyclone.psyir.nodes.FileContainer`
         :param routine_name: name of the routine.
-        :type routine_name: str
+        :type routine_name: Str
         :param dependent_vars: list of names of dependent variables.
-        :type dependent_vars: list[str]
+        :type dependent_vars: List[Str]
         :param independent_vars: list of names of independent variables.
-        :type independent_vars: list[str]
+        :type independent_vars: List[Str]
         :param options: a dictionary with options for transformations, \
-            defaults to None.
-        :type options: Optional[Dict[str, Any]]
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :return: a copied and modified container with all necessary \
-            Routine definitions.
+                 Routine definitions.
         :rtype: :py:class:`psyclone.psyir.nodes.Container`
         """
 
@@ -168,12 +176,7 @@ class ComparatorGenerator(object):
         )
 
     @staticmethod
-    def _check_args(
-        tapenade_path,
-        file_path,
-        output_type,
-        mode
-    ):
+    def _check_args(tapenade_path, file_path, output_type, mode):
         # Other arguments will be checked when transforming
 
         if not isinstance(tapenade_path, str):
@@ -219,7 +222,8 @@ class ComparatorGenerator(object):
                 f"but found '{mode}'."
             )
 
-
+    # TODO: doc this
+    # TODO: this is a mess.
     @classmethod
     def compare(
         cls,
@@ -231,7 +235,7 @@ class ComparatorGenerator(object):
         output_type,
         options,
         mode,
-        reversal_schedule=None
+        reversal_schedule=None,
     ):
         # Other arguments will be checked when transforming
         cls._check_args(tapenade_path, file_path, output_type, mode)
@@ -249,7 +253,7 @@ class ComparatorGenerator(object):
                 dependent_vars,
                 independent_vars,
                 options,
-                )
+            )
         else:
             autodiff_result = cls._apply_reverse_autodiff(
                 file_container,
@@ -261,13 +265,18 @@ class ComparatorGenerator(object):
             )
 
         # Apply Tapenade
-        head = (
-            f"{routine_name}({' '.join(dependent_vars)})/({' '.join(independent_vars)})"
-        )
+        head = f"{routine_name}({' '.join(dependent_vars)})"
+        head += f"/({' '.join(independent_vars)})"
         tapenade_mode = "-tangent" if mode == "forward" else "-reverse"
 
         subprocess.run(
-            [tapenade_path + "/bin/tapenade", file_path, "-head", head, tapenade_mode],
+            [
+                tapenade_path + "/bin/tapenade",
+                file_path,
+                "-head",
+                head,
+                tapenade_mode,
+            ],
             text=True,
             check=True,
             capture_output=True,
@@ -277,21 +286,28 @@ class ComparatorGenerator(object):
         # TODO: detect the dot, this is messy...
         dot_index = -4  # file_path.find('.', -1, 0)
         tapenade_postfix = "_d" if mode == "forward" else "_b"
-        tapenade_output_file_path = file_path[:dot_index] + tapenade_postfix + file_path[dot_index:]
+        tapenade_output_file_path = (
+            file_path[:dot_index] + tapenade_postfix + file_path[dot_index:]
+        )
 
         # create the comparator subroutine
         comparator = SubroutineGenerator(routine_name + "_comp")
 
         # Deal with the input subroutine arguments
-        # These are the arguments of the comparator subroutine, same as those of the input routine
+        # These are the arguments of the comparator subroutine,
+        # same as those of the input routine
         comparator_arguments = []
-        # These are variables storing the original values of the comparator arguments
+        # These are variables storing the original values of the
+        # comparator arguments
         saved_arguments = []
-        # These are the arguments used in calling the autodiff or Tapenade routine
+        # These are the arguments used in calling the autodiff or
+        # Tapenade routine
         call_args = []
-        # These are the symbols of the derivatives/adjoints of the dependent vars
+        # These are the symbols of the derivatives/adjoints of the
+        # dependent vars
         dependent_diffs = []
-        # These are the symbols of the derivatives/adjoints of the independent vars
+        # These are the symbols of the derivatives/adjoints of the
+        # independent vars
         independent_diffs = []
 
         # The input subroutine, as a PSyIR Routine
@@ -302,8 +318,10 @@ class ComparatorGenerator(object):
                 input_subroutine = routine
                 break
         if input_subroutine is None:
-            raise ValueError(f"No routine named '{routine_name}' was found "
-                             f"in the file '{file_path}'.")
+            raise ValueError(
+                f"No routine named '{routine_name}' was found "
+                f"in the file '{file_path}'."
+            )
 
         # Now go through the input routine arguments
         for original_arg in input_subroutine.symbol_table.argument_list:
@@ -311,7 +329,8 @@ class ComparatorGenerator(object):
             # these are also used in calling the transformed routines
 
             comparator_var = None
-            # Intent(out) arguments of the input routine are variables of the comparator
+            # Intent(out) arguments of the input routine are variables of 
+            # the comparator
             if original_arg.interface.access is ArgumentInterface.Access.WRITE:
                 comparator_var = comparator.new_variable(
                     original_arg.name, original_arg.datatype
@@ -327,11 +346,12 @@ class ComparatorGenerator(object):
                 comparator_arguments.append(comparator_var)
                 call_args.append(comparator_var)
 
-            # Add variables to save the values of arguments to the comparator subroutine
-            # and save them, except for intent(in) which cannot be modified
+            # Add variables to save the values of arguments to the comparator
+            # subroutine and save them, 
+            # except for intent(in) which cannot be modified.
             # We will restore the values to 'comparator_arg' before each call
-            # If intent(in), None so that the comparator_arguments and saved_arguments list
-            # still correspond
+            # If intent(in), None so that the comparator_arguments and
+            # saved_arguments list still correspond.
             if original_arg.interface.access in (
                 ArgumentInterface.Access.READ,
                 ArgumentInterface.Access.WRITE,
@@ -344,9 +364,11 @@ class ComparatorGenerator(object):
                 comparator.new_assignment(saved_arg, comparator_var)
                 saved_arguments.append(saved_arg)
 
-            # If this is a (in)dependent variable, it has a derivative / an adjoint
+            # If this is a (in)dependent variable,
+            # it has a derivative / an adjoint
             if original_arg.name in dependent_vars + independent_vars:
-                # Create the name of the derivative/adjoint and a new variable for it
+                # Create the name of the derivative/adjoint
+                # and a new variable for it
                 # TODO: correct datatype
                 if mode == "forward":
                     arg_diff_name = (
@@ -375,9 +397,11 @@ class ComparatorGenerator(object):
 
         # Now deal with the Jacobians we are going to generate by calling
         # the transformed routines repeatedly
-        # Create an ArrayType of correct dimensions for the autodiff/Tapenade Jacobians
+        # Create an ArrayType of correct dimensions for the 
+        # autodiff/Tapenade Jacobians
         jacobian_datatype = ArrayType(
-            cls._default_scalar_datatype, [len(independent_vars), len(dependent_vars)]
+            cls._default_scalar_datatype,
+            [len(independent_vars), len(dependent_vars)],
         )
 
         # Create variables for them, as intent(out) argument or local variable
@@ -412,10 +436,11 @@ class ComparatorGenerator(object):
                 routine_name + tapenade_postfix,
             )
 
-        # Now for both the autodiff and Tapenade (jacobian, reversing routine) pair
+        # Now for both the autodiff and Tapenade 
+        # (jacobian, reversing routine) pair
         for J, transformed_name in zip(jacobians, transformed_names):
-
-            # Depending on the mode, we assign 1 to the (in)dependent variables one by one
+            # Depending on the mode, we assign 1 to the (in)dependent variables
+            # one by one
             if mode == "forward":
                 first_diffs = independent_diffs
                 second_diffs = dependent_diffs
@@ -432,29 +457,36 @@ class ComparatorGenerator(object):
                     if saved_arg is not None:
                         comparator.new_assignment(comparator_arg, saved_arg)
 
-                # Assign 1 to independent derivative/dependent adjoint for this column/row
-                comparator.new_assignment(first_diff, Literal("1.0", first_diff.datatype))
+                # Assign 1 to independent derivative/dependent adjoint 
+                # for this column/row
+                comparator.new_assignment(
+                    first_diff, Literal("1.0", first_diff.datatype)
+                )
                 # Assign 0 to all others
                 for other_first_diff in first_diffs:
                     if other_first_diff != first_diff:
                         comparator.new_assignment(
-                            other_first_diff, Literal("0.0", other_first_diff.datatype)
+                            other_first_diff,
+                            Literal("0.0", other_first_diff.datatype),
                         )
 
-                # Assign 0 to all dependent derivatives/independent adjoints but the indepdent/dependent one
+                # Assign 0 to all dependent derivatives/independent adjoints 
+                # but the indepdent/dependent one
                 for second_diff in second_diffs:
                     if first_diff != second_diff:
                         comparator.new_assignment(
                             second_diff, Literal("0.0", first_diff.datatype)
                         )
 
-                # Create a RoutineSymbol for the autodiff/Tapenade routine and a call to it
+                # Create a RoutineSymbol for the autodiff/Tapenade routine 
+                # and a call to it
                 transformed_symbol = RoutineSymbol(transformed_name)
                 call_arg_refs = [Reference(sym) for sym in call_args]
                 call = Call.create(transformed_symbol, call_arg_refs)
                 comparator.subroutine.addchild(call)
 
-                # Assign the dependent derivatives/independent adjoints returns to elements of the Jacobian matrix
+                # Assign the dependent derivatives/independent adjoints 
+                # returns to elements of the Jacobian matrix
                 for second_dim, second_diff in enumerate(second_diffs):
                     if mode == "forward":
                         row = second_dim
@@ -482,7 +514,9 @@ class ComparatorGenerator(object):
                 Reference(J_tapenade),
             )
             # This is abs(J_..._autodiff - J_..._tapenade)
-            J_abs_diff = UnaryOperation.create(UnaryOperation.Operator.ABS, J_diff)
+            J_abs_diff = UnaryOperation.create(
+                UnaryOperation.Operator.ABS, J_diff
+            )
 
             # Assign it to an intent(out) argument or not
             if output_type == "Jacobians_error":
@@ -523,7 +557,9 @@ class ComparatorGenerator(object):
 
         line_length = FortLineLength()
 
-        comparator_file_path = file_path[:dot_index] + "_comp" + file_path[dot_index:]
+        comparator_file_path = (
+            file_path[:dot_index] + "_comp" + file_path[dot_index:]
+        )
         # Write to the file
         with open(comparator_file_path, "w") as comparator_file:
             autodiff_string = fwriter(autodiff_result)
@@ -531,12 +567,16 @@ class ComparatorGenerator(object):
             comparator_file.write("! psyclone.autodiff produced:\n")
             comparator_file.write(autodiff_string)
 
-            comparator_file.write("\n\n\n! ===================================== \n")
+            comparator_file.write(
+                "\n\n\n! ===================================== \n"
+            )
             comparator_file.write("! Tapenade produced:\n")
             with open(tapenade_output_file_path, "r") as tapenade_file:
                 comparator_file.write(tapenade_file.read())
 
-            comparator_file.write("\n\n\n! ===================================== \n")
+            comparator_file.write(
+                "\n\n\n! ===================================== \n"
+            )
             comparator_file.write("! Comparator subroutine:\n")
             comparator_string = comparator.write()
             comparator_string = line_length.process(comparator_string)
@@ -550,7 +590,9 @@ class ComparatorGenerator(object):
         module_name_postfix = 0
         while not correct_module_name:
             try:
-                import_module(routine_name + "_comp_" + str(module_name_postfix))
+                import_module(
+                    routine_name + "_comp_" + str(module_name_postfix)
+                )
             except ModuleNotFoundError:
                 correct_module_name = True
             else:
@@ -578,45 +620,3 @@ class ComparatorGenerator(object):
         return getattr(module, routine_name + "_comp"), [
             arg.name for arg in comparator_arguments
         ]
-
-
-"""
-if __name__ == "__main__":
-    from psyclone.autodiff.ad_reversal_schedule import ADSplitReversalSchedule
-
-    schedule = ADSplitReversalSchedule()
-    output_types = ("Jacobians_values", "Jacobians_error", "L1_error", "Linf_error")
-    output_type = output_types[3]
-    foo_comp, arg_names = ComparatorGenerator.compare(
-        "./tests/autodiff/numerical_tests/tapenade_3.16",
-        "./tests/autodiff/numerical_tests/routine.f90",        #f2py_result = f2py.compile(
-        #    sourcecode, modulename=module_and_function_name, extension=".f90"
-        #)
-        #if f2py_result != 0:
-        #    raise ValueError("f2py compilation failed.")
-        "routine_unary",
-        ["f"],
-        ["x"],
-        output_type,
-        {"verbose": True},
-        "forward",
-        schedule,
-    )
-
-    # from numpy import f2py
-    # with open('foo_bar_comp.f90', 'r') as sourcefile:
-    #    sourcecode = sourcefile.read()
-    # f2py_result = f2py.compile(sourcecode, modulename='TEST', extension='.f90')
-    # if f2py_result != 0:
-    #    raise ValueError("")
-    ##f2py.run_main(['-c', '-m TEST', 'foo_bar_comp.f90'])
-    print(foo_comp.__doc__)
-
-    if output_type == "Jacobians_values":
-        J_autodiff, J_tapenade = foo_comp(2.23)
-        print(J_autodiff)
-        print(J_tapenade)
-    else:
-        error = foo_comp(2.23)
-        print(error)
-"""

@@ -57,9 +57,8 @@ from psyclone.psyir.symbols import (
 
 
 def own_routine_symbol(routine):
-    """Get the RoutineSymol of routine, ie. the symbol tagged
-    'own_routine_symbol' from the routine argument's
-    SymbolTable.
+    """Get the RoutineSymol of routine, ie. the symbol tagged \
+    'own_routine_symbol' from the routine argument's SymbolTable.
 
     :param routine: routine whose symbol to return.
     :type routine: :py:class:`psyclone.psyir.nodes.Routine`
@@ -85,7 +84,7 @@ def datanode(sym_or_datanode):
 
     :param sym_or_ref: symbol or datanode.
     :type sym_or_ref: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
-                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
+                            :py:class:`psyclone.psyir.symbols.DataSymbol`]
     :raises TypeError: if sym_or_datanode is of the wrong type.
 
     :return: datanode.
@@ -108,21 +107,22 @@ def datanode(sym_or_datanode):
 
 
 def assign(variable, value):
-    """This function creates an Assignment Node between two References or DataSymbols.
+    """This function creates an Assignment Node between two References or \
+    DataSymbols.
 
-    :param variable: LHS of Assignment
+    :param variable: LHS of Assignment.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param value: RHS of Assignment
+    :param value: RHS of Assignment.
     :type value: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                        :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a Reference or \
-        DataSymbol instance
+                       DataSymbol instance
     :raises TypeError: if the the value argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance
 
-    :return: an Assignement node `variable = value`
+    :return: an Assignement node `variable = value`.
     :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
     """
     if not isinstance(variable, (Reference, DataSymbol)):
@@ -148,14 +148,14 @@ def assign_zero(variable):
     """This function creates an Assignment Node with zero on the RHS, \
     respecting the LHS datatype.
 
-    :param variable: LHS of Assignment
+    :param variable: LHS of Assignment.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a Reference or \
-        DataSymbol instance
+                       DataSymbol instance
 
-    :return: an Assignement node `variable = 0`
+    :return: an Assignement node `variable = 0`.
     :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
     """
     if not isinstance(variable, (Reference, DataSymbol)):
@@ -172,19 +172,19 @@ def increment(variable, value):
     """This function creates an Assignment Node corresponding to an \
     incrementation of variable by value (ie. C++ style `variable += value`).
 
-    :param variable: LHS of Assignment, to be incremented
+    :param variable: LHS of Assignment, to be incremented.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param value: incrementation value
+    :param value: incrementation value.
     :type value: Union[:py:class:`psyclone.psyir.nodes.Reference`, \
                        :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a Reference or \
-        DataSymbol instance
+                       DataSymbol instance.
     :raises TypeError: if the the value argument is not a Reference or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: an Assignement node `variable = variable + value`
+    :return: an Assignement node `variable = variable + value`.
     :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
     """
     if not isinstance(variable, (Reference, DataSymbol)):
@@ -208,21 +208,25 @@ def increment(variable, value):
 def zero(datatype=INTEGER_TYPE):
     """ This function creates a Literal Node with value 0 of a given datatype.
 
-    :param datatype: datatype of the returned Literal Node, defaults to INTEGER_TYPE
-    :type datatype: Optional[Union[:py:class:`psyclone.psyir.symbols.ScalarType`, \
-                                   :py:class:`psyclone.psyir.symbols.ArrayType`]]
+    :param datatype: datatype of the returned Literal Node, \
+                     defaults to INTEGER_TYPE.
+    :type datatype: Optional[\
+                        Union[:py:class:`psyclone.psyir.symbols.ScalarType`, \
+                              :py:class:`psyclone.psyir.symbols.ArrayType`]\
+                    ]
 
-    :raises NotImplementedError: if datatype is an instance of `ArrayType`
-    :raises TypeError: if datatype is not an instance of `ArrayType` or `ScalarType`
-    :raises NotImplementedError: if the intrinsic of the 'ScalarType` is neither \
-        `INTEGER` nor `REAL`
+    :raises NotImplementedError: if datatype is an instance of `ArrayType`.
+    :raises TypeError: if datatype is not an instance of `ArrayType` or \
+                       `ScalarType`.
+    :raises NotImplementedError: if the intrinsic of the 'ScalarType` is \
+                                 neither `INTEGER` nor `REAL`.
 
-    :return: a Literal Node with value 0 of correct datatype
+    :return: a Literal Node with value 0 of correct datatype.
     :rtype: :py:class:`psyclone.psyir.nodes.Literal`
     """
     if isinstance(datatype, ArrayType):
         raise NotImplementedError(
-            "Creating arrays with null coefficients is " "not implemented yet."
+            "Creating arrays with null coefficients is not implemented yet."
         )
     if not isinstance(datatype, (ScalarType, ArrayType)):
         raise TypeError(
@@ -236,7 +240,7 @@ def zero(datatype=INTEGER_TYPE):
     if datatype.intrinsic == ScalarType.Intrinsic.INTEGER:
         return Literal("0", datatype)
     if datatype.intrinsic == ScalarType.Intrinsic.REAL:
-        # TODO: Literal doesn't accept "1d0", seems like a bug
+        # TODO: Literal doesn't accept "0d0", seems like a bug
         # if datatype.precision == ScalarType.Precision.DOUBLE:
         #    return Literal("0d0", datatype)
         return Literal("0.0", datatype)
@@ -250,21 +254,25 @@ def zero(datatype=INTEGER_TYPE):
 def one(datatype=INTEGER_TYPE):
     """ This function creates a Literal Node with value 1 of a given datatype.
 
-    :param datatype: datatype of the returned Literal Node, defaults to INTEGER_TYPE
-    :type datatype: Optional[Union[:py:class:`psyclone.psyir.symbols.ScalarType`, \
-                                   :py:class:`psyclone.psyir.symbols.ArrayType`]]
+    :param datatype: datatype of the returned Literal Node, \
+                     defaults to INTEGER_TYPE.
+    :type datatype: Optional[\
+                        Union[:py:class:`psyclone.psyir.symbols.ScalarType`, \
+                              :py:class:`psyclone.psyir.symbols.ArrayType`]\
+                    ]
 
-    :raises NotImplementedError: if datatype is an instance of `ArrayType`
-    :raises TypeError: if datatype is not an instance of `ArrayType` or `ScalarType`
-    :raises NotImplementedError: if the intrinsic of the 'ScalarType` is neither \
-        `INTEGER` nor `REAL`
+    :raises NotImplementedError: if datatype is an instance of `ArrayType`.
+    :raises TypeError: if datatype is not an instance of `ArrayType` \
+                       or `ScalarType`.
+    :raises NotImplementedError: if the intrinsic of the 'ScalarType` is \
+                                 neither `INTEGER` nor `REAL`.
 
-    :return: a Literal Node with value 1 of correct datatype
+    :return: a Literal Node with value 1 of correct datatype.
     :rtype: :py:class:`psyclone.psyir.nodes.Literal`
     """
     if isinstance(datatype, ArrayType):
         raise NotImplementedError(
-            "Creating arrays with unitary coefficients is " "not implemented yet."
+            "Creating arrays with unitary coefficients is not implemented yet."
         )
     if not isinstance(datatype, (ScalarType, ArrayType)):
         raise TypeError(
@@ -293,14 +301,14 @@ def minus(operand):
     """This function creates a UnaryOperation Node with operator MINUS and \
         the operand argument.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation node `-operand`
+    :return: a UnaryOperation node `-operand`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -318,19 +326,19 @@ def div(lhs, rhs):
     """This function creates a BinaryOperation Node with operator DIV \
         corresponding to `lhs / rhs`.
 
-    :param lhs: numerator
+    :param lhs: numerator.
     :type lhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param rhs: denominator
+    :param rhs: denominator.
     :type rhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: multiply BinaryOperation `lhs / rhs`
+    :return: multiply BinaryOperation `lhs / rhs`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
@@ -354,15 +362,15 @@ def inverse(operand):
     """This function creates a UnaryOperation Node with operator DIV \
         corresponding to the inverse of the operand argument.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation node `1/operand` where 1 is of datatype \
-        REAL_TYPE
+    :return: a UnaryOperation node `1.0/operand` where 1.0 is of datatype \
+             REAL_TYPE.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -380,19 +388,19 @@ def power(lhs, rhs):
     """This function creates a BinaryOperation Node with operator POW \
         corresponding to `lhs**rhs`.
 
-    :param lhs: variable to be raised to a power
+    :param lhs: variable to be raised to a power.
     :type lhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param rhs: exponent of the power
+    :param rhs: exponent of the power.
     :type rhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: power BinaryOperation `lhs**rhs`
+    :return: power BinaryOperation `lhs**rhs`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
@@ -416,15 +424,15 @@ def square(operand):
     """This function creates a BinaryOperation Node with operator POW \
         corresponding to the square of the operand argument.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
     :return: a BinaryOperation Node `operand**2` where 2 is of datatype \
-        INTEGER_TYPE
+             INTEGER_TYPE.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -442,19 +450,19 @@ def mul(lhs, rhs):
     """This function creates a BinaryOperation Node with operator MUL \
         corresponding to `lhs * rhs`.
 
-    :param lhs: first variable to me multiplied
+    :param lhs: first variable to be multiplied.
     :type lhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param rhs: second variable to be multiplied
+    :param rhs: second variable to be multiplied.
     :type rhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: multiply BinaryOperation `lhs * rhs`
+    :return: multiply BinaryOperation `lhs * rhs`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
@@ -478,19 +486,19 @@ def sub(lhs, rhs):
     """This function creates a BinaryOperation Node with operator SUB \
         corresponding to `lhs - rhs`.
 
-    :param lhs: lhs of substraction
+    :param lhs: lhs of substraction.
     :type lhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param rhs: rhs of substraction
+    :param rhs: rhs of substraction.
     :type rhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: substraction BinaryOperation `lhs - rhs`
+    :return: substraction BinaryOperation `lhs - rhs`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
@@ -514,19 +522,19 @@ def add(lhs, rhs):
     """This function creates a BinaryOperation Node with operator ADD \
         corresponding to `lhs + rhs`.
 
-    :param lhs: first variable to me multiplied
+    :param lhs: first variable to be added.
     :type lhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
-    :param rhs: second variable to be multiplied
+    :param rhs: second variable to be added.
     :type rhs: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: addition BinaryOperation `lhs + rhs`
+    :return: addition BinaryOperation `lhs + rhs`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
@@ -550,14 +558,14 @@ def log(operand):
     """This function creates a UnaryOperation Node with operator LOG \
         corresponding to the natural logarithm of operand.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation Node `log(operand)`
+    :return: a UnaryOperation Node `log(operand)`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -575,14 +583,14 @@ def exp(operand):
     """This function creates a UnaryOperation Node with operator EXP \
         corresponding to the exponential of operand.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation Node `exp(operand)`
+    :return: a UnaryOperation Node `exp(operand)`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -600,14 +608,14 @@ def cos(operand):
     """This function creates a UnaryOperation Node with operator COS \
         corresponding to the cosine of operand.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation Node `cos(operand)`
+    :return: a UnaryOperation Node `cos(operand)`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -625,14 +633,14 @@ def sin(operand):
     """This function creates a UnaryOperation Node with operator SIN \
         corresponding to the sine of operand.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation Node `sin(operand)`
+    :return: a UnaryOperation Node `sin(operand)`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -650,14 +658,14 @@ def sqrt(operand):
     """This function creates a UnaryOperation Node with operator SQRT \
         corresponding to the square root of operand.
 
-    :param operand: operand to be used in the operation
+    :param operand: operand to be used in the operation.
     :type variable: Union[:py:class:`psyclone.psyir.nodes.DataNode`, \
                           :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if the the variable argument is not a DataNode or \
-        DataSymbol instance
+                       DataSymbol instance.
 
-    :return: a UnaryOperation Node `sqrt(operand)`
+    :return: a UnaryOperation Node `sqrt(operand)`.
     :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
@@ -683,11 +691,11 @@ def sign(lhs, rhs):
                      :py:class:`psyclone.psyir.symbols.DataSymbol`]
 
     :raises TypeError: if lhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
-        nor 'DataSymbol'
+                       nor 'DataSymbol'.
 
-    :return: addition BinaryOperation `SIGN(lhs, rhs)`
+    :return: addition BinaryOperation `SIGN(lhs, rhs)`.
     :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):

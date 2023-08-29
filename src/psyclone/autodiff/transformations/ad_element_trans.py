@@ -34,13 +34,15 @@
 # Author J. Remy, Inria
 
 """This module provides an abstract Transformation for reverse-mode automatic 
-differentiation of some PSyIR nodes. This is the parent class of 
-'ADOperationTrans', 'ADAssignmentTrans' and 'ADCallTrans'."""
+differentiation of some PSyIR nodes. 
+This is the parent class of `ADOperationTrans`, `ADAssignmentTrans` and 
+`ADCallTrans`.
+"""
 
 from abc import ABCMeta
 
 from psyclone.autodiff.transformations import ADTrans
-#from psyclone.psyGen import Transformation
+
 
 class ADElementTrans(ADTrans, metaclass=ABCMeta):
     """An abstract class for automatic differentation transformations.
@@ -50,7 +52,8 @@ class ADElementTrans(ADTrans, metaclass=ABCMeta):
     and 'ADCallTrans'.
 
     :param routine_trans: ADRoutineTrans context instance
-    :type routine_trans: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
+    :type routine_trans: :py:class:`psyclone.autodiff.transformations.\
+                                    ADRoutineTrans`
 
     :raises TypeError: if the routine_trans argument is of the wrong type
     """
@@ -64,9 +67,11 @@ class ADElementTrans(ADTrans, metaclass=ABCMeta):
         :rtype: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
         """
         return self._routine_trans
-    
+
     @routine_trans.setter
     def routine_trans(self, routine_trans):
+        # Avoid circular dependency
+        # pylint: disable=import-outside-toplevel
         from psyclone.autodiff.transformations import ADRoutineTrans
 
         if not isinstance(routine_trans, ADRoutineTrans):
@@ -79,4 +84,3 @@ class ADElementTrans(ADTrans, metaclass=ABCMeta):
     def __init__(self, routine_trans):
         # Setter is typechecked
         self.routine_trans = routine_trans
-

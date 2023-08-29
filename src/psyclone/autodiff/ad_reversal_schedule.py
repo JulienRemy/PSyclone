@@ -44,6 +44,8 @@ class ADReversalSchedule(object, metaclass=ABCMeta):
     automatic differentiation call trees.
     """
 
+    # pylint: disable=useless-object-inheritance
+
     @abstractmethod
     def is_strong_link(self, parent_routine_name, child_routine_name):
         """Abstract method. Determines if the link between two routines \
@@ -52,11 +54,11 @@ class ADReversalSchedule(object, metaclass=ABCMeta):
         Weak links lead to joint reversals.
 
         :param parent_routine_name: name of the parent (calling) routine.
-        :type parent_routine_name: str
+        :type parent_routine_name: Str
         :param child_routine_name: name of the child (called) routine.
-        :type child_routine_name: str
+        :type child_routine_name: Str
         """
-        pass
+
 
 class ADSplitReversalSchedule(ADReversalSchedule):
     """Class describing a split reversal schedule for reverse-mode
@@ -65,6 +67,8 @@ class ADSplitReversalSchedule(ADReversalSchedule):
     Children routines follow the recording or returning motion of their parents.
     """
 
+    # pylint: disable=too-few-public-methods
+
     def is_strong_link(self, parent_routine_name, child_routine_name):
         """Determines if the link between two routines \
         is strong or not.
@@ -72,15 +76,15 @@ class ADSplitReversalSchedule(ADReversalSchedule):
         Weak links lead to joint reversals.
 
         :param parent_routine_name: name of the parent (calling) routine.
-        :type parent_routine_name: str
+        :type parent_routine_name: Str
         :param child_routine_name: name of the child (called) routine.
-        :type child_routine_name: str
+        :type child_routine_name: Str
 
         :raises TypeError: if parent_routine_name is of the wrong type.
         :raises TypeError: if child_routine_name is of the wrong type.
 
         :return: True, all links are strong in a split reversal.
-        :rtype: bool
+        :rtype: Bool
         """
         if not isinstance(parent_routine_name, str):
             raise TypeError(
@@ -99,6 +103,7 @@ class ADSplitReversalSchedule(ADReversalSchedule):
 
         return True
 
+
 class ADJointReversalSchedule(ADReversalSchedule):
     """Class describing a joint reversal schedule for reverse-mode
     automatic differentiation. 
@@ -108,6 +113,8 @@ class ADJointReversalSchedule(ADReversalSchedule):
     parent routine is returning.
     """
 
+    # pylint: disable=too-few-public-methods
+
     def is_strong_link(self, parent_routine_name, child_routine_name):
         """Determines if the link between two routines \
         is strong or not.
@@ -115,15 +122,15 @@ class ADJointReversalSchedule(ADReversalSchedule):
         Weak links lead to joint reversals.
 
         :param parent_routine_name: name of the parent (calling) routine.
-        :type parent_routine_name: str
+        :type parent_routine_name: Str
         :param child_routine_name: name of the child (called) routine.
-        :type child_routine_name: str
+        :type child_routine_name: Str
 
         :raises TypeError: if parent_routine_name is of the wrong type.
         :raises TypeError: if child_routine_name is of the wrong type.
 
         :return: False, all links are weak in a joint reversal.
-        :rtype: bool
+        :rtype: Bool
         """
         if not isinstance(parent_routine_name, str):
             raise TypeError(
@@ -142,6 +149,7 @@ class ADJointReversalSchedule(ADReversalSchedule):
 
         return False
 
+
 class ADLinkReversalSchedule(ADReversalSchedule):
     """Class describing a reversal schedule described by links between \
     parent and child routines for reverse-mode automatic differentiation. 
@@ -152,26 +160,30 @@ class ADLinkReversalSchedule(ADReversalSchedule):
     when their parent routine is returning.
 
     :param strong_links: list of [parent_name, child_name] strong links,    \
-        defaults to None.
-    :type strong_links: Union[list[list[str]], NoneType], optional
+                         defaults to None.
+    :type strong_links: Optional[Union[List[List[Str]], NoneType]]
     :param weak_links: list of [parent_name, child_name] weak links, \
-        defaults to None
-    :type weak_links: Union[list[list[str]], NoneType], optional
+                       defaults to None.
+    :type weak_links: Optional[Union[List[List[Str]], NoneType]]
     :param default_link: default link type, for links not found among the \
-        two preceding list, defaults to None
-    :type default_link: Union[str, NoneType], optional
+                         two preceding list, defaults to None.
+    :type default_link: Optional[Union[Str, NoneType]]
 
     :raises TypeError: if an argument is of the wrong type.
     :raises ValueError: if a list in strong_links or weak_links is not of \
-        length 2.
-    :raises ValueError: if default_link is not "strong", "weak" or None
+                        length 2.
+    :raises ValueError: if default_link is not "strong", "weak" or None.
     :raises ValueError: if all three of strong_links, weak_links and \
-        default_link are None.
+                        default_link are None.
     :raises ValueError: if a link is present in both strong_links and \
-        weak_links.
+                        weak_links.
     """
 
+    # pylint: disable=too-few-public-methods
+
     def __init__(self, strong_links=None, weak_links=None, default_link=None):
+        # pylint: disable=too-many-branches
+
         if not isinstance(strong_links, (list, type(None))):
             raise TypeError(
                 f"'strong_links' argument in ADReversalSchedule constructor "
@@ -182,22 +194,23 @@ class ADLinkReversalSchedule(ADReversalSchedule):
             for link in strong_links:
                 if not isinstance(link, list):
                     raise TypeError(
-                        f"'strong_links' argument in ADReversalSchedule constructor "
-                        f"should be of type 'list[list[str]]' but found "
-                        f"'list[{type(link).__name__}]'."
+                        f"'strong_links' argument in ADReversalSchedule "
+                        f"constructor should be of type 'list[list[str]]' "
+                        f"but found 'list[{type(link).__name__}]'."
                     )
                 if len(link) != 2:
                     raise ValueError(
-                        f"'strong_links' argument in ADReversalSchedule constructor "
-                        f"should be of type 'list[lists of 2 elements]' but found "
+                        f"'strong_links' argument in ADReversalSchedule "
+                        f"constructor should be of type "
+                        f"'list[lists of 2 elements]' but found "
                         f"a list of length {len(link)}."
                     )
                 for name in link:
                     if not isinstance(name, str):
                         raise TypeError(
-                            f"'strong_links' argument in ADReversalSchedule constructor "
-                            f"should be of type 'list[list[str]]' but found "
-                            f"'list[list[{type(name).__name__}]]'."
+                            f"'strong_links' argument in ADReversalSchedule "
+                            f"constructor should be of type 'list[list[str]]' "
+                            f"but found 'list[list[{type(name).__name__}]]'."
                         )
         if not isinstance(weak_links, (list, type(None))):
             raise TypeError(
@@ -209,22 +222,23 @@ class ADLinkReversalSchedule(ADReversalSchedule):
             for link in weak_links:
                 if not isinstance(link, list):
                     raise TypeError(
-                        f"'weak_links' argument in ADReversalSchedule constructor "
-                        f"should be of type 'list[list[str]]' but found "
-                        f"'list[{type(link).__name__}]'."
+                        f"'weak_links' argument in ADReversalSchedule "
+                        f"constructor should be of type 'list[list[str]]' "
+                        f"but found 'list[{type(link).__name__}]'."
                     )
                 if len(link) != 2:
                     raise ValueError(
-                        f"'weak_links' argument in ADReversalSchedule constructor "
-                        f"should be of type 'list[lists of 2 elements]' but found "
+                        f"'weak_links' argument in ADReversalSchedule "
+                        f"constructor should be of type "
+                        f"'list[lists of 2 elements]' but found "
                         f"a list of length {len(link)}."
                     )
                 for name in link:
                     if not isinstance(name, str):
                         raise TypeError(
-                            f"'weak_links' argument in ADReversalSchedule constructor "
-                            f"should be of type 'list[list[str]]' but found "
-                            f"'list[list[{type(name).__name__}]]'."
+                            f"'weak_links' argument in ADReversalSchedule "
+                            f"constructor should be of type 'list[list[str]]' "
+                            f"but found 'list[list[{type(name).__name__}]]'."
                         )
         if not isinstance(default_link, (str, type(None))):
             raise TypeError(
@@ -239,16 +253,22 @@ class ADLinkReversalSchedule(ADReversalSchedule):
                     f"should be 'strong', 'weak' or None but found "
                     f"{default_link}."
                 )
-        if (strong_links is None) and (weak_links is None) and (default_link is None):
+        if (
+            (strong_links is None)
+            and (weak_links is None)
+            and (default_link is None)
+        ):
             raise ValueError(
-                "One at least of 'strong_links, 'weak_links' and 'default_link' arguments in ADReversalSchedule constructor "
+                "One at least of 'strong_links, 'weak_links' and 'default_link' "
+                "arguments in ADReversalSchedule constructor "
                 "must be different from 'None'."
             )
         if (strong_links is not None) and (weak_links is not None):
             for link in strong_links:
                 if link in weak_links:
                     raise ValueError(
-                        f"Both 'strong_links' and 'weak_links' arguments in ADReversalSchedule constructor "
+                        f"Both 'strong_links' and 'weak_links' arguments in "
+                        f"ADReversalSchedule constructor "
                         f"contain link '{link}', this is not allowed."
                     )
 
@@ -263,15 +283,15 @@ class ADLinkReversalSchedule(ADReversalSchedule):
         Weak links lead to joint reversals.
 
         :param parent_routine_name: name of the parent (calling) routine.
-        :type parent_routine_name: str
+        :type parent_routine_name: Str
         :param child_routine_name: name of the child (called) routine.
-        :type child_routine_name: str
+        :type child_routine_name: Str
 
         :raises TypeError: if parent_routine_name is of the wrong type.
         :raises TypeError: if child_routine_name is of the wrong type.
 
         :return: True, if the link is strong. False otherwise.
-        :rtype: bool
+        :rtype: Bool
         """
         if not isinstance(parent_routine_name, str):
             raise TypeError(
