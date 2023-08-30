@@ -271,7 +271,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
 
         if jacobian:
             jacobian_routine = self.jacobian_routine(
-                dependent_vars, independent_vars, options
+                "forward", dependent_vars, independent_vars, options
             )
             self.container_trans.container.addchild(jacobian_routine)
 
