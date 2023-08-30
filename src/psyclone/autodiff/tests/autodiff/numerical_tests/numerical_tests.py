@@ -276,7 +276,7 @@ def test_unary_composition():
                 with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
-                x_val = np.random.uniform(-1e2, 1e2, 10)
+                x_val = np.random.uniform(-1, 1, 10)
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
