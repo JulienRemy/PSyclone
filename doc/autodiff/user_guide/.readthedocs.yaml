@@ -62,3 +62,4 @@ python:
        path: .
        extra_requirements:
          - doc
+     - requirements: doc/autodiff/user_guide/pip_requirements.txt

@@ -38,5 +38,4 @@
 # the PSyclone autodiff documentation. Used by readthedocs.
 sphinx
 sphinxcontrib.bibtex
-rtd-tikz
 sphinxcontrib.tikz
