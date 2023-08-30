@@ -1,15 +1,17 @@
+# PSyclone: automatic differentiation
+
 # !!! THIS IS AN EXPERIMENTAL FORK !!! #
 ### It is intended only as a prototype ###
 ### Currently in development and not thoroughly tested ###
 
 # Introduction #
 
-Welcome to PSyclone `autodiff` fork, a prototype implementation of reverse-mode automatic differentation in PSyclone.  
+Welcome to PSyclone `autodiff` fork, a prototype implementation of forward- and reverse-mode automatic differentation in PSyclone.  
 For PSyclone itself, see [GitHub](https://github.com/stfc/PSyclone) and [ReadTheDocs](http://psyclone.readthedocs.io).  
 
 # Description #
 
-This implements reverse-mode automatic differentiation using source-to-source transformations.  
+This implements forward- and reverse-mode automatic differentiation using source-to-source transformations.  
 Compared to other tools, it uses a static array as a tape to record and restore values rather than a LIFO stack.
 
 What has been implemented (but **not** necessarily tested):  
@@ -18,10 +20,11 @@ What has been implemented (but **not** necessarily tested):
     - calls to subroutines,
     - (some) unary and binary operations,
 - scalar variables and arguments (no arrays),
-- recording and restoring values from a tape,
 - nested calls to subroutines,
-- three different types of reversal schedules,
-- simplification of the adjoint subroutine as a postprocessing step.  
+- simplification of the transformed subroutines as a postprocessing step,
+- in reverse-mode:
+    - three different types of reversal schedules,
+    - recording and restoring values from a tape.
 
 What has *not* been implemented:
 - functions and programs,
@@ -48,4 +51,5 @@ A tutorial may be found in the `src/psyclone/autodiff/tutorial` subdirectory.
 # Tests #
 
 For now tests are all in the `src/psyclone/autodiff/tests` subdirectory and not in the `tests` one.  
+They include unit tests for *some* of the transformations and numerical comparisons to [Tapenade](https://team.inria.fr/ecuador/en/tapenade/) 3.16.
 
