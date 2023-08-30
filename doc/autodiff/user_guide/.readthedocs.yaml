@@ -50,6 +50,11 @@ build:
 sphinx:
    configuration: doc/autodiff/user_guide/conf.py
 
+submodules:
+   include:
+     - src/psyclone/autodiff/
+   recursive: true
+
 # If using Sphinx, optionally build your docs in additional formats such as PDF
 # formats:
 #    - pdf
