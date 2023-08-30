@@ -100,7 +100,7 @@ def test_unary():
                     print("without iterative assignment")
                     routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
 
-                with open("routine.f90", "w") as file:
+                with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
                 # Operators requiring a positive argument
@@ -124,7 +124,7 @@ def test_unary():
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
-                        "routine.f90",
+                        "./outputs/routine.f90",
                         "routine_unary",
                         ["f"],
                         ["x"],
@@ -184,7 +184,7 @@ def test_binary():
 
                 # routine.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
 
-                with open("routine.f90", "w") as file:
+                with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
                 if op is BinaryOperation.Operator.POW:
@@ -199,7 +199,7 @@ def test_binary():
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
-                        "routine.f90",
+                        "./outputs/routine.f90",
                         "routine_binary",
                         ["f"],
                         ["x", "y"],
@@ -273,7 +273,7 @@ def test_unary_composition():
                         ),
                     )
 
-                with open("routine.f90", "w") as file:
+                with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
                 x_val = np.random.uniform(-1e2, 1e2, 10)
@@ -284,7 +284,7 @@ def test_unary_composition():
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
-                        "routine.f90",
+                        "./outputs/routine.f90",
                         "routine_unary_composition",
                         ["f"],
                         ["x"],
@@ -354,7 +354,7 @@ def test_binary_composition():
                         ),
                     )
 
-                with open("routine.f90", "w") as file:
+                with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
                 x_val = np.random.uniform(-1e2, 1e2, 10)
@@ -366,7 +366,7 @@ def test_binary_composition():
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
-                        "routine.f90",
+                        "./outputs/routine.f90",
                         "routine_binary_composition",
                         ["f"],
                         ["x", "y"],
@@ -484,7 +484,7 @@ def test_taping():
     """
     routine = _create_taping_routine("routine_taping")
 
-    with open("routine.f90", "w") as file:
+    with open("./outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rev_schedule = ADJointReversalSchedule()
@@ -494,7 +494,7 @@ def test_taping():
 
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
-            "routine.f90",
+            "./outputs/routine.f90",
             "routine_taping",
             ["f"],
             ["x"],
@@ -562,7 +562,7 @@ def test_nested_calls():
         )
         calling_routine.new_call(called_routine_2, [x, f])
 
-    with open("routine.f90", "w") as file:
+    with open("./outputs/routine.f90", "w") as file:
         file.write(called_routine_1.write())
         file.write(called_routine_2.write())
         file.write(calling_routine.write())
@@ -581,7 +581,7 @@ def test_nested_calls():
 
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
-            "routine.f90",
+            "./outputs/routine.f90",
             "calling",
             ["f"],
             ["x"],
@@ -604,7 +604,7 @@ def test_nested_calls():
 
     max_error, associated_values = NumericalComparator.compare(
         "./tapenade_3.16",
-        "routine.f90",
+        "./outputs/routine.f90",
         "calling",
         ["f"],
         ["x"],
@@ -716,7 +716,7 @@ def test_many_arguments():
                     ),
                 )
 
-        with open("routine.f90", "w") as file:
+        with open("./outputs/routine.f90", "w") as file:
             file.write(routine.write())
 
         rev_schedule = ADJointReversalSchedule()
@@ -736,7 +736,7 @@ def test_many_arguments():
 
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
-            "routine.f90",
+            "./outputs/routine.f90",
             "routine_many",
             dependent_names,
             independent_names,

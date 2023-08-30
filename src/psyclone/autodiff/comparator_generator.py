@@ -269,25 +269,32 @@ class ComparatorGenerator(object):
         head += f"/({' '.join(independent_vars)})"
         tapenade_mode = "-tangent" if mode == "forward" else "-reverse"
 
+        # Position of the dot in the file name
+        dot_index = file_path.rfind('.')
+        tapenade_postfix = "_d" if mode == "forward" else "_b"
+        tapenade_output_file_path = (
+            file_path[:dot_index] + tapenade_postfix + file_path[dot_index:]
+        )
+
+        slash_index = tapenade_output_file_path.rfind('/')
+        if slash_index != -1:
+            tapenade_output_dir = file_path[:(slash_index + 1)]
+        else:
+            tapenade_output_dir = "./"
+
         subprocess.run(
             [
                 tapenade_path + "/bin/tapenade",
                 file_path,
                 "-head",
                 head,
+                "-O",
+                tapenade_output_dir,
                 tapenade_mode,
             ],
             text=True,
             check=True,
             capture_output=True,
-        )
-
-        # Position of the dot in the file name
-        # TODO: detect the dot, this is messy...
-        dot_index = -4  # file_path.find('.', -1, 0)
-        tapenade_postfix = "_d" if mode == "forward" else "_b"
-        tapenade_output_file_path = (
-            file_path[:dot_index] + tapenade_postfix + file_path[dot_index:]
         )
 
         # create the comparator subroutine
@@ -616,6 +623,12 @@ class ComparatorGenerator(object):
         )
 
         module = import_module(module_name)
+
+        # Move the .so files
+        subprocess.run(f"mv *.so {tapenade_output_dir}",
+                        shell=True,
+                        check=True,
+                        capture_output=True)
 
         return getattr(module, routine_name + "_comp"), [
             arg.name for arg in comparator_arguments
