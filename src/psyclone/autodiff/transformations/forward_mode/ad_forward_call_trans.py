@@ -77,7 +77,7 @@ class ADForwardCallTrans(ADCallTrans):
         :return: transformed routine symbol.
         :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
         """
-        return self.called_routine_trans.transformed_symbol
+        return self.called_routine_trans.transformed_symbols[0]
 
     def apply(self, call, options=None):
         """Applies the transformation, generating the transformed call \
@@ -321,4 +321,4 @@ class ADForwardCallTrans(ADCallTrans):
             options=options,
         )
 
-        return self.called_routine_trans.transformed_symbol
+        return self.called_routine_trans.transformed_symbols[0]
