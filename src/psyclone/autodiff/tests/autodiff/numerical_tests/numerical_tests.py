@@ -755,10 +755,10 @@ def test_many_arguments():
         print("===============================\n")
 
 if __name__ == "__main__":
-    # test_unary()
-    # test_binary()
-    # test_unary_composition()
-    # test_binary_composition()
+    test_unary()
+    test_binary()
+    test_unary_composition()
+    test_binary_composition()
     test_taping()
     test_nested_calls()
     test_many_arguments()
