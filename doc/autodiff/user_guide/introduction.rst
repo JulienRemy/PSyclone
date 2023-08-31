@@ -40,10 +40,10 @@ Introduction
 
 PSyclone ``autodiff`` module is PSyclone's **prototype** implementation of 
 source-to-source 
-:ref:`automatic differentiation (AD) <_automatic_differentiation>`. 
+:ref:`automatic differentiation (AD) <automatic_differentiation>`. 
 It takes generic Fortran code and applies automatic differentiation in 
 :ref:`forward-mode (tangent) <forward_mode>` or 
-:ref:`reverse-mode (adjoint) <reverse-mode>`.  
+:ref:`reverse-mode (adjoint) <reverse_mode>`.  
 
 .. _autodiff_tutorial:
 
