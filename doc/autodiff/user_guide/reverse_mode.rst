@@ -54,8 +54,8 @@ Fortran source code.
 
 .. _transformations:
 
-Reverse-mode automatic differentiation transformations
-++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Reverse-mode transformations
+++++++++++++++++++++++++++++
 
 Several transformations, to be applied on PSyIR nodes, have been implemented. 
 In reverse-mode, all of them follow the naming convention 
@@ -239,11 +239,157 @@ and ``foo-qux`` a weak link.
 .. _value_tape:
 
 Value tape
-----------
+++++++++++
 
 .. autoclass:: psyclone.autodiff.tapes.ADValueTape
       :members: record, restore
 
+.. _adjoints:
 
+Generating adjoints
++++++++++++++++++++
 
+.. _operation_adjoints:
+
+Adjoints of operations
+----------------------
+
+.. _unary_operation_adjoints:
+
+Unary operations
+~~~~~~~~~~~~~~~~
+
++-------------------+-----------------------+---------------------------------------------------+
+| Advancing motion  | Recording motion      | Returning motion                                  |
++===================+=======================+===================================================+
+|``f = +x``         | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = +x``            |   ``x_adj = x_adj + f_adj``                       |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = -x``         | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = -x``            |   ``x_adj = x_adj - f_adj``                       |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = SQRT(x)``    | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = SQRT(x)``       |   ``x_adj = x_adj + f_adj / (2 * SQRT(x))``       |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = EXP(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   |``f = EXP(x)``         |   ``x_adj = x_adj + f_adj * EXP(x)``              |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = LOG(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = LOG(x)``        |   ``x_adj = x_adj + f_adj / x``                   |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = LOG10(x)``   | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = LOG10(x)``      |   ``x_adj = x_adj + f_adj / (x * LOG(10.0))``     |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = COS(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = COS(x)``        |   ``x_adj = x_adj - f_adj * SIN(x)``              |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = SIN(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = SIN(x)``        |   ``x_adj = x_adj + f_adj * COS(x)``              |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = TAN(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = TAN(x)``        |   ``x_adj = x_adj + f_adj * (1.0 + TAN(x) ** 2)`` |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = ACOS(x)``    | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = ACOS(x)``       |   ``x_adj = x_adj - f_adj / SQRT(1.0 - x ** 2)``  |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = ASIN(x)``    | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = ASIN(x)``       |   ``x_adj = x_adj + f_adj / SQRT(1.0 - x ** 2)``  |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = ATAN(x)``    | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = ATAN(x)``       |   ``x_adj = x_adj + f_adj / (1.0 + x ** 2)``      |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+|``f = ABS(x)``     | ``value_tape(i) = f`` |   ``f = value_tape(i)``                           |
+|                   | ``f = ABS(x)``        |   ``x_adj = x_adj + f_adj * (x / ABS(x))``        |
+|                   |                       |   ``f_adj = 0.0``                                 |
++-------------------+-----------------------+---------------------------------------------------+
+
+.. _binary_operation_adjoints:
+
+Binary operations
+~~~~~~~~~~~~~~~~~
+
++-------------------+-----------------------+---------------------------------------------+
+| Advancing motion  | Recording motion      | Returning motion                            |
++===================+=======================+=============================================+
+|``f = x + y``      | ``value_tape(i) = f`` |``f = value_tape(i)``                        |
+|                   | ``f = x + y``         |``x_adj = x_adj + f_adj``                    |
+|                   |                       |``y_adj = y_adj + f_adj``                    |
+|                   |                       |``f_adj = 0.0``                              |
++-------------------+-----------------------+---------------------------------------------+
+|``f = x - y``      | ``value_tape(i) = f`` |``f = value_tape(i)``                        |
+|                   | ``f = x - y``         |``x_adj = x_adj + f_adj``                    |
+|                   |                       |``y_adj = y_adj - f_adj``                    |
+|                   |                       |``f_adj = 0.0``                              |
++-------------------+-----------------------+---------------------------------------------+
+|``f = x * y``      | ``value_tape(i) = f`` |``f = value_tape(i)``                        |
+|                   | ``f = x * y``         |``x_adj = x_adj + f_adj * y``                |
+|                   |                       |``y_adj = y_adj + f_adj * x``                |
+|                   |                       |``f_adj = 0.0``                              |
++-------------------+-----------------------+---------------------------------------------+
+|``f = x / y``      | ``value_tape(i) = f`` |``f = value_tape(i)``                        |
+|                   | ``f = x / y``         |``x_adj = x_adj + f_adj / y``                |
+|                   |                       |``y_adj = y_adj - f_adj * x / y ** 2``       |
+|                   |                       |``f_adj = 0.0``                              |
++-------------------+-----------------------+---------------------------------------------+
+|``f = x ** y``     | ``value_tape(i) = f`` |``f = value_tape(i)``                        |
+|                   | ``f = x ** y``        |``x_adj = x_adj + f_adj * y * x ** (y - 1)`` |
+|                   |                       |``y_adj = y_adj + f_adj * x ** y * LOG(x)``  |
+|                   |                       |``f_adj = 0.0``                              |
++-------------------+-----------------------+---------------------------------------------+
+
+.. _iterative_assignments:
+
+Adjoints of iterative assignments 
+---------------------------------
+
+In the case of iterative assignments *ie.* where the LHS variable of the 
+assignment is also present on the RHS, additional care must be taken to avoid 
+incorrect computations of the LHS adjoint by assigning to it last rather than 
+incrementing its value as in the general case detailled above.
+
+As an example consider the following adjoint:
+
++-------------------+-----------------------+--------------------------+
+| Advancing motion  | Recording motion      | Returning motion         |
++===================+=======================+==========================+
+|``f = 2 * f + x``  | ``value_tape(i) = f`` |``f = value_tape(i)``     |
+|                   | ``f = 2 * f + x``     |``x_adj = x_adj + f_adj`` |
+|                   |                       |``f_adj = f_adj * 2``     |
++-------------------+-----------------------+--------------------------+
+
+.. _call_adjoints:
+
+Adjoints of calls to subroutines
+--------------------------------
+
+The adjoints of calls to subroutines depend on the 
+:ref:`reversal schedule <reversal_schedules>` that is used.
+
++-------------------+----------------------------+--------------------------------------------+--------------------------+
+| Advancing motion  | Recording motion           | Returning motion                           | Remark                   |
++===================+============================+============================================+==========================+
+| Joint reversal schedule                                                                     |                          |
++===================+============================+============================================+==========================+
+|``call func(x, y)  |[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     | depending on x's intent  |
+|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 | depending on y's intent  |
+|                   |``call func_recording(x,y)``|``call func_returning(x, x_adj, y, y_adj)`` |                          |
++===================+============================+============================================+==========================+
+| Split reversal schedule                                                                     |                          |
++===================+============================+============================================+==========================+
+|``call func(x, y)  |[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     | depending on x's intent  |
+|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 | depending on y's intent  |
+|                   |``call func(x,y)``          |``call func_reversing(x, x_adj, y, y_adj)`` |                          |
++===================+============================+============================================+==========================+
 
