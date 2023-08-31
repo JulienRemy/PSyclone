@@ -176,7 +176,8 @@ that of the original program as illustated in the
 If there are less dependent than independent variables, as is often the case, 
 its complexity is lower than that of the forward- or tagent-mode. 
 
-However, when non-linearities are present, reverse-mode also requires running 
+However, when some variables are overwritten in the program, 
+reverse-mode also requires running 
 the original program and recording overwritten values, and eventually some 
 the results of some operations, when they appear in the computations of some 
 adjoints. 
@@ -223,3 +224,4 @@ for a chosen dependent variable :math:`z \in \{y_1, y_2\}`.
 
 Initialize with :math:`\forall i, \bar{x}_i = 0, \forall k, \bar{v}_k = 0 \text{ and choose } (\bar{y}_1 = 1, \bar{y}_2 = 0) \text{ \textbf{or} } (\bar{y}_1 = 0, \bar{y}_2 = 1)`
 to obtain the adjoints.
+
