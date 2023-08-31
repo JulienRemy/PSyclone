@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(docs_dir, "_ext"))
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones. The definition of 'apilinks' is in PSyclone/doc/_ext/apilinks.py.
 extensions = [
-    'sphinxcontrib.tikz',
+    'sphinxcontrib.tikz', 'sphinxcontrib.bibtex',
     'sphinx.ext.imgmath', 'sphinx.ext.autodoc', 'sphinx.ext.intersphinx',
     'apilinks']
 
@@ -94,3 +94,6 @@ intersphinx_mapping = {
 tikz_proc_suite = 'GhostScript'
 tikz_tikzlibraries = 'graphs, graphs.standard, quotes'
 tikz_latex_preamble = "\\usepackage{amssymb}"
+
+# -- Options for BibTex extension -------------------------------------------
+bibtex_bibfiles = ['refs.bib']

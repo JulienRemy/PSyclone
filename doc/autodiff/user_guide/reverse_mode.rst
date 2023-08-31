@@ -91,10 +91,8 @@ The transformation returns a PSyIR ``Container`` node containing four
 
 - the *advancing* (original) motion,
 - the *recording* motion, which records overwritten values to the tape,
-- the *returning* motion, which recovers values from the tape and computes the 
-adjoints of the independent variables,
-- the *reversing* motion, which combines the two precedent recording and 
-returning motions and is the one to call in order to differentiate.
+- the *returning* motion, which recovers values from the tape and computes the adjoints of the independent variables,
+- the *reversing* motion, which combines the two precedent recording and returning motions and is the one to call in order to differentiate.
 
 If some other routine is called by the target one, the returned ``Container`` 
 node also contains four definitions for its different motions.
@@ -132,10 +130,11 @@ routine.
 
 .. _reversal_schedules:
 
-Reversal schedules
+Reversal schedules 
 ------------------
 
-Reversal schedules specify the way a transformed routine may call other 
+Reversal schedules (see :footcite:t:`griewank-walther` chapter 12.2, p.265) 
+specify the way a transformed routine may call other 
 transformed routines.  
 They are implemented as 3 subclasses of ``ADReversalSchedule``.
 
@@ -253,7 +252,9 @@ and restoring statements to and from the value tape array.
 Generating adjoints
 +++++++++++++++++++
 
-The transformations applied to generate adjoints are detailled below.  
+The transformations applied to generate adjoints are detailled below.
+They mostly follow the guidelines found in :footcite:t:`griewank-walther` 
+chapter 6.2, pp.125-126.
 
 Internally, the transformations used are ``ADReverseAssignmentTrans``,
 ``ADReverseOperationTrans`` and ``ADReverseCallTrans``, depending on the PSyIR
@@ -353,6 +354,12 @@ Adjoints of unary operations
 |                   |                       |   ``f_adj = 0.0``                                 |
 +-------------------+-----------------------+---------------------------------------------------+
 
+*Note*: some of these adjoints computations, 
+explicitly those for ``SQRT``, ``EXP``, ``TAN`` and ``ABS``,
+could reuse the (post)value of ``f`` before restoring its prevalue from the 
+value tape rather than recompute it (see :footcite:t:`griewank-walther` 
+table 4.8, p.68). This is not implemented yet.
+
 .. _binary_operation_adjoints:
 
 Adjoints of binary operations
@@ -402,6 +409,12 @@ Adjoints of binary operations
 |                   |                       |``f_adj = 0.0``                              |
 +-------------------+-----------------------+---------------------------------------------+
 
+*Note*: some of these adjoints computations, 
+explicitly those for ``/`` and ``**``
+could reuse the (post)value of ``f`` before restoring its prevalue from the 
+value tape rather than recompute it (see :footcite:t:`griewank-walther` 
+table 4.8, p.68). This is not implemented yet.
+
 .. _composed_operations_adjoints:
 
 The cases detailled above are the simpler ones, of assigning the result of an 
@@ -413,7 +426,8 @@ operands.
 
 The transformation option ``inline_operation_adjoints`` allows the user to 
 choose whether these operation adjoints should be substituted in further 
-computations of adjoints, iff they only appear once on the RHS of an assignment.
+computations of adjoints as a postprocessing step, 
+iff they only appear once on the RHS of an assignment.
 
 As an example, consider the following computation involving composed operations
 and the associated adjoints computations, without and with substitution.
@@ -439,7 +453,8 @@ Adjoints of iterative assignments
 In the case of iterative assignments *ie.* where the LHS variable of the 
 assignment is also present on the RHS, additional care must be taken to avoid 
 incorrect computations of the LHS adjoint by assigning to it last rather than 
-incrementing its value as in the general case detailled above.
+incrementing its value as in the general case detailled above 
+(see :footcite:t:`griewank-walther` chapter 5.1, p.93).
 
 As an example consider the following adjoint:
 
@@ -493,4 +508,4 @@ Joint reversal schedule
 |                   |``call func(x,y)``          |``call func_reversing(x, x_adj, y, y_adj)`` |
 +-------------------+----------------------------+--------------------------------------------+
 
-
+.. footbibliography::
