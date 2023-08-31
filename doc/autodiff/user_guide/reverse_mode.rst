@@ -249,6 +249,14 @@ Value tape
 Generating adjoints
 +++++++++++++++++++
 
+The transformations applied to generate adjoints are detailled below.  
+
+Internally, the transformations used are ``ADReverseAssignmentTrans``,
+``ADReverseOperationTrans`` and ``ADReverseCallTrans``, depending on the PSyIR
+node being transformed. 
+These all return two separate lists of PSyIR statements, used respectively in 
+extending the recording and returning routines being generated.
+
 .. _operation_adjoints:
 
 Adjoints of operations
@@ -390,10 +398,39 @@ Binary operations
 |                   |                       |``f_adj = 0.0``                              |
 +-------------------+-----------------------+---------------------------------------------+
 
+.. _composed_operations_adjoints:
+
+The cases detailled above are the simpler ones, of assigning the result of an 
+operation to a variable.
+
+When composed operations are present, an adjoint variable is declared for the 
+adjoint of the operation itself and used to increment the adjoints of its 
+operands.
+
+The transformation option ``inline_operation_adjoints`` allows the user to 
+choose whether these operation adjoints should be substituted in further 
+computations of adjoints, iff they only appear once on the RHS of an assignment.
+
+As an example, consider the following computation involving composed operations
+and the associated adjoints computations, without and with substitution.
+*Note*: taping assignments are omitted below.
+
++---------------------+-------------------------------------+---------------------------------------------+
+| Composed operation  | Adjoints, without substitution      | Adjoints, with substitution                 |
++=====================+=====================================+=============================================+
+|``f = EXP(x) + z``   | ``op_adj = f_adj``                  |``z_adj = z_adj + f_adj``                    |
+|                     |                                     |                                             |
+|                     | ``z_adj = z_adj + f_adj``           |``x_adj = x_adj + f_adj * EXP(x)``           |
+|                     |                                     |                                             |
+|                     | ``x_adj = x_adj + op_adj * EXP(x)`` |``f_adj = 0.0``                              |
+|                     |                                     |                                             |
+|                     | ``f_adj = 0.0``                     |                                             |
++---------------------+-------------------------------------+---------------------------------------------+
+
 .. _iterative_assignments:
 
 Adjoints of iterative assignments 
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In the case of iterative assignments *ie.* where the LHS variable of the 
 assignment is also present on the RHS, additional care must be taken to avoid 
@@ -420,30 +457,34 @@ Adjoints of calls to subroutines
 The adjoints of calls to subroutines depend on the 
 :ref:`reversal schedule <reversal_schedules>` that is used.
 
+Whether the prevalues of the arguments are recorded and restored from the tape 
+depend on their intent in the called subroutine, which determines whether their 
+value might be overwritten by it or not.
+
 Split reversal schedule
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-| Advancing motion  | Recording motion           | Returning motion                           | Remark                   |
-+===================+============================+============================================+==========================+
-|``call func(x, y)``|[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     | depending on x's intent  |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 | depending on y's intent  |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-|                   |``call func_recording(x,y)``|``call func_returning(x, x_adj, y, y_adj)`` |                          |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
++-------------------+----------------------------+--------------------------------------------+
+| Advancing motion  | Recording motion           | Returning motion                           |
++===================+============================+============================================+
+|``call func(x, y)``|[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     |
++-------------------+----------------------------+--------------------------------------------+
+|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 |
++-------------------+----------------------------+--------------------------------------------+
+|                   |``call func_recording(x,y)``|``call func_returning(x, x_adj, y, y_adj)`` |
++-------------------+----------------------------+--------------------------------------------+
 
 Joint reversal schedule
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-| Advancing motion  | Recording motion           | Returning motion                           | Remark                   |
-+===================+============================+============================================+==========================+
-|``call func(x, y)``|[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     | depending on x's intent  |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 | depending on y's intent  |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
-|                   |``call func(x,y)``          |``call func_reversing(x, x_adj, y, y_adj)`` |                          |
-+-------------------+----------------------------+--------------------------------------------+--------------------------+
++-------------------+----------------------------+--------------------------------------------+
+| Advancing motion  | Recording motion           | Returning motion                           |
++===================+============================+============================================+
+|``call func(x, y)``|[``value_tape(i) = x``]     |[``x = value_tape(i)``]                     |
++-------------------+----------------------------+--------------------------------------------+
+|                   |[``value_tape(i + 1) = y``] |[``y = value_tape(i + 1)``]                 |
++-------------------+----------------------------+--------------------------------------------+
+|                   |``call func(x,y)``          |``call func_reversing(x, x_adj, y, y_adj)`` |
++-------------------+----------------------------+--------------------------------------------+
 
 
