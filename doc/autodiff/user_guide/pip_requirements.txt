@@ -39,3 +39,4 @@
 sphinx
 sphinxcontrib.bibtex
 sphinxcontrib.tikz
+numpy

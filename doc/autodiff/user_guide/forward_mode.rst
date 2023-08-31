@@ -39,6 +39,17 @@
 Forward-mode AD (tangent)
 =========================
 
+The derivative of the Fortran source code is constructed using a source-to-source 
+and line-by-line approach, transforming the target routine into a tangent routine, 
+which computes the derivatives of the dependent variables with respect to the 
+independent variables.
+
+This is implemented in PSyclone by parsing the source code file containing the 
+target routine, and eventually the routines it calls, transforming it into a 
+PSyIR AST and applying :ref:`forward-mode automatic differentiation 
+transformations <forward_transformations>` to the nodes thus obtained. 
+The resulting PSyIR tree is then written to Fortran source code.
+
 
 Generating derivatives
 ++++++++++++++++++++++
@@ -50,8 +61,8 @@ Derivatives of operations
 
 .. _unary_operation_derivatives:
 
-Unary operations
-~~~~~~~~~~~~~~~~
+Derivatives of unary operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 +----------------+------------------------------------+
 | Original       | Transformed                        |
@@ -111,8 +122,8 @@ Unary operations
 
 .. _binary_operation_derivatives:
 
-Binary operations
-~~~~~~~~~~~~~~~~~
+Derivatives of binary operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 +-------------------+---------------------------------------------------------------+
 | Advancing motion  | Recording motion                                              |
@@ -137,3 +148,14 @@ Binary operations
 |                   |                                                               |
 |                   | ``f = x ** y``                                                |
 +-------------------+---------------------------------------------------------------+
+
+.. _call_derivatives:
+
+Derivatives of calls to subroutines
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++-------------------+-----------------------------------------+
+| Original          | Transformed                             |
++===================+=========================================+
+|``call func(x, y)``|``call func_tangent(x, x_d, y, y_d)``    |
++-------------------+-----------------------------------------+

@@ -48,10 +48,10 @@ target routine.
 This is implemented in PSyclone by parsing the source code file containing the 
 target routine, and eventually the routines it calls, transforming it into a 
 PSyIR AST and applying :ref:`reverse-mode automatic differentiation 
-transformations <transformations>` to the nodes thus obtained. 
+transformations <reverse_transformations>` to the nodes thus obtained. 
 The resulting PSyIR tree is then written to Fortran source code.
 
-.. _transformations:
+.. _reverse_transformations:
 
 Reverse-mode transformations
 ++++++++++++++++++++++++++++
@@ -259,12 +259,12 @@ extending the recording and returning routines being generated.
 .. _operation_adjoints:
 
 Adjoints of operations
-----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. _unary_operation_adjoints:
 
-Unary operations
-~~~~~~~~~~~~~~~~
+Adjoints of unary operations
+----------------------------
 
 +-------------------+-----------------------+---------------------------------------------------+
 | Advancing motion  | Recording motion      | Returning motion                                  |
@@ -350,8 +350,8 @@ Unary operations
 
 .. _binary_operation_adjoints:
 
-Binary operations
-~~~~~~~~~~~~~~~~~
+Adjoints of binary operations
+-----------------------------
 
 +-------------------+-----------------------+---------------------------------------------+
 | Advancing motion  | Recording motion      | Returning motion                            |
@@ -429,7 +429,7 @@ and the associated adjoints computations, without and with substitution.
 .. _iterative_assignments:
 
 Adjoints of iterative assignments 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------
 
 In the case of iterative assignments *ie.* where the LHS variable of the 
 assignment is also present on the RHS, additional care must be taken to avoid 
@@ -451,7 +451,7 @@ As an example consider the following adjoint:
 .. _call_adjoints:
 
 Adjoints of calls to subroutines
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The adjoints of calls to subroutines depend on the 
 :ref:`reversal schedule <reversal_schedules>` that is used.
@@ -460,8 +460,10 @@ Whether the prevalues of the arguments are recorded and restored from the tape
 depend on their intent in the called subroutine, which determines whether their 
 value might be overwritten by it or not.
 
+Operations as subroutine call arguments are also transformed.  
+
 Split reversal schedule
-~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------
 
 +-------------------+----------------------------+--------------------------------------------+
 | Advancing motion  | Recording motion           | Returning motion                           |
@@ -474,7 +476,7 @@ Split reversal schedule
 +-------------------+----------------------------+--------------------------------------------+
 
 Joint reversal schedule
-~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------
 
 +-------------------+----------------------------+--------------------------------------------+
 | Advancing motion  | Recording motion           | Returning motion                           |
