@@ -6,7 +6,10 @@
 
 # Introduction #
 
-Welcome to PSyclone `autodiff` fork, a prototype implementation of forward- and reverse-mode automatic differentation in PSyclone.  
+Welcome to PSyclone `autodiff` module fork, a prototype implementation of forward- and reverse-mode automatic differentation in PSyclone.  
+
+Please see [psyclone-autodiff on ReadTheDocs](https://psyclone-autodiff.readthedocs.io/) for more information.
+
 For PSyclone itself, see [GitHub](https://github.com/stfc/PSyclone) and [ReadTheDocs](http://psyclone.readthedocs.io).  
 
 # Description #
@@ -37,6 +40,10 @@ What has *not* been implemented:
 - and much more.
 
 A talk slide deck can be found in the `src/psyclone/autodiff/documents` subdirectory.
+
+# Installing #
+
+Instructions for installing from source can be found on ReadTheDocs in the [getting started section](https://psyclone-autodiff.readthedocs.io/en/latest/getting_started.html).
 
 # Documentation #
 
