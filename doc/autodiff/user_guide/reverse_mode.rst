@@ -60,9 +60,9 @@ Several transformations, to be applied on PSyIR nodes, have been implemented.
 In reverse-mode, all of them follow the naming convention 
 ``ADReverse[PSyIRNodeSubclass]Trans``.
 The one of most interest for the user is the 
-:ref:`ADReverseContainerTrans <container_trans>` class and its ``apply`` method.
+:ref:`ADReverseContainerTrans <reverse_container_trans>` class and its ``apply`` method.
 
-.. _container_trans:
+.. _reverse_container_trans:
 
 Container transformation
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -239,6 +239,11 @@ and ``foo-qux`` a weak link.
 
 Value tape
 ++++++++++
+
+Prevalues of overwritten variables are recorded and restored from a *value tape*,
+implemented as a static array.
+The transformations themselves employ an ``ADValueTape`` to generate recording 
+and restoring statements to and from the value tape array.
 
 .. autoclass:: psyclone.autodiff.tapes.ADValueTape
       :members: record, restore

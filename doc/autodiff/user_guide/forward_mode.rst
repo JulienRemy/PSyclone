@@ -50,6 +50,49 @@ PSyIR AST and applying :ref:`forward-mode automatic differentiation
 transformations <forward_transformations>` to the nodes thus obtained. 
 The resulting PSyIR tree is then written to Fortran source code.
 
+.. _forward_transformations:
+
+Forward-mode transformations
+++++++++++++++++++++++++++++
+
+All forward-mode AD transformations, to be applied to PSyIR nodes,
+follow the naming convention ``ADForward[PSyIRNodeSubclass]Trans``.
+The one users should use is 
+:ref:`ADForwardContainerTrans <forward_container_trans>` class and its 
+``apply`` method.
+
+.. _forward_container_trans:
+
+Container transformation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: psyclone.autodiff.transformations.ADForwardContainerTrans
+      :members: apply
+
+After parsing the Fortran code file containing the target routine, an
+``ADForwardContainerTrans`` instance should be applied to it to perform 
+automatic differentiation.  
+This in turn applies an 
+``ADForwardRoutineTrans`` to the target routine, which goes line-by-line through
+the statements found in the ``Routine`` node, applying 
+``ADForward[PSyIRNodeSubclass]Trans`` to the statements, etc.
+
+For descriptions of the arguments, see the relevant sections of 
+:ref:`ADReverseContainerTrans <reverse_container_trans>`: 
+:ref:`target routine<target_routine>`, 
+:ref:`dependent variables<dependent_variables>` (to be differentiated) 
+and :ref:`independent variables<independent_variables>` (to differentiate with 
+respect to).
+
+The transformation returns a PSyIR ``Container`` node containing two 
+``Routine`` definitions for:
+
+- the original target routine,
+- the transformed tangent routine, which computes of the required derivatives.
+
+If some other routine is called by the target one, the returned ``Container`` 
+node also contains the original and tangent definitions for it.
+
 
 Generating derivatives
 ++++++++++++++++++++++
