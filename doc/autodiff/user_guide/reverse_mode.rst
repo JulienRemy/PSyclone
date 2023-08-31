@@ -36,8 +36,8 @@
 .. _reverse_mode:
 
 
-Reverse-mode automatic differentiation (adjoint)
-================================================
+Reverse-mode AD (adjoint)
+=========================
 
 The adjoint of the Fortran source code is constructed using a source-to-source 
 and line-by-line approach, transforming the :ref:`target (to be transformed) 
@@ -48,9 +48,8 @@ target routine.
 This is implemented in PSyclone by parsing the source code file containing the 
 target routine, and eventually the routines it calls, transforming it into a 
 PSyIR AST and applying :ref:`reverse-mode automatic differentiation 
-transformations <transformations>` 
-to the nodes thus obtained. The resulting PSyIR tree is then written to 
-Fortran source code.
+transformations <transformations>` to the nodes thus obtained. 
+The resulting PSyIR tree is then written to Fortran source code.
 
 .. _transformations:
 

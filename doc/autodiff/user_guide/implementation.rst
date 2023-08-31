@@ -73,7 +73,7 @@ An optional ``verbose`` mode is available, which is especially useful when
 examining the transformed statements and routines in reverse-mode.
 
 Basic simplification and substitution rules can be applied as an optional 
-postprocessing step to shorten the transformed code and increase its 
+postprocessing step to shorten the transformed code and improve its 
 readability.
 
 :ref:`Reverse-mode transformations<reverse_mode>` store overwritten values 
@@ -85,9 +85,10 @@ and/or offloaded to GPU.
 Also in reverse-mode, three types of 
 :ref:`reversal schedules<reversal_schedules>` are available:
 
-- split reversal schedules,
-- joint reversal schedules,
-- reversal schedules specifying strong or weak links for all caller-called pairs of routines.
+- :ref:`split reversal schedules<split_reversal_schedule>`,
+- :ref:`joint reversal schedules<joint_reversal_schedule>`,
+- :ref:`"link" reversal schedules<link_reversal_schedule>` specifying strong or
+weak links for all calling-called pairs of routines.
 
 
 .. _missing_features:
