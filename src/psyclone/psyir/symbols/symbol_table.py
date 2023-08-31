@@ -348,6 +348,9 @@ class SymbolTable():
         :param symbol_init_args: arguments to create a new symbol.
         :type symbol_init_args: unwrapped Dict[str] = object
 
+        :returns: the new symbol.
+        :rtype: :py:class:`psyclone.psyir.symbols.Symbol`
+
         :raises TypeError: if the type_symbol argument is not the type of a \
                            Symbol object class or one of its subclasses.
 
@@ -381,6 +384,9 @@ class SymbolTable():
         :param str name: name of the symbol to lookup or create.
         :param new_symbol_args: arguments to create a new symbol.
         :type new_symbol_args: unwrapped Dict[str, object]
+
+        :returns: the found or created symbol.
+        :rtype: :py:class:`psyclone.psyir.symbols.Symbol`
 
         :raises SymbolError: if the symbol already exists but the type_symbol \
                              argument does not match the type of the symbol \
