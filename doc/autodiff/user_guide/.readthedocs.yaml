@@ -56,8 +56,8 @@ submodules:
    recursive: true
 
 # If using Sphinx, optionally build your docs in additional formats such as PDF
-# formats:
-#    - pdf
+formats:
+   - pdf
 
 # Optionally declare the Python requirements required to build your docs. We
 # need to install the PSyclone package.
