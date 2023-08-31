@@ -32,7 +32,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
 # Author:   A. R. Porter, STFC Daresbury Lab
-# Modified: J. Remy, Inria
+# Modified: J. Remy, Université Grenoble Alpes, Inria
 
 # Read the Docs configuration file for the PSyclone autodiff module User Guide.
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details.

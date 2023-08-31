@@ -31,7 +31,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
-# Author J. Remy, Inria
+# Author: J. Remy, Université Grenoble Alpes, Inria
 
 """PSyclone automatic differentiation module.
 """

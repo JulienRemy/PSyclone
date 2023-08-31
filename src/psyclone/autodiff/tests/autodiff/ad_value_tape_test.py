@@ -31,7 +31,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
-# Authors: J. Remy, Inria
+# Author: J. Remy, Université Grenoble Alpes, Inria
 
 """A module to perform tests on the autodiff ADValueTape class.
 """

@@ -31,7 +31,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
-# Author J. Remy, Inria
+# Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This file contains a generator of Fortran subroutines for automated numerical 
 testing of PSyclone `autodiff`.

@@ -31,7 +31,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
-# Authors: J. Remy, Inria
+# Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This file contains a numerical comparator class for the purpose of \
 comparing numerical results of programs transformed using `psyclone.autodiff` \
