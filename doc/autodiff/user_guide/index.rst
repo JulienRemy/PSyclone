@@ -52,8 +52,12 @@ PSyclone automatic differentiation module
     (adjoint) mode.  
 
     It is inspired by 
-    `Tapenade <https://team.inria.fr/ecuador/en/tapenade/>`_, which is used to 
-    perform numerical tests of the transformations.
+    `Tapenade <https://team.inria.fr/ecuador/en/tapenade/>`_ (see :footcite:t:`tapenade` and :footcite:p:`tapenade-user-guide`), 
+    which is also used to perform numerical tests of the transformations, and 
+    `OpenAD <https://www.mcs.anl.gov/OpenAD/>`_ (see :footcite:t:`openad`).
+
+    The general approach and transformations rules were adapted from 
+    :footcite:t:`griewank-walther`.
 
 .. toctree::
     :hidden:
@@ -61,21 +65,29 @@ PSyclone automatic differentiation module
 
 .. toctree::
     :maxdepth: 2
-    :caption: Introduction
+    :caption: Automatic differentiation
 
     introduction
     automatic_differentiation
+
+.. toctree::
+    :maxdepth: 2
+    :caption: PSyclone autodiff module
+
+    getting_started
     implementation
     reverse_mode
     forward_mode
 
 .. when generating latex the index and module index are generated
    automatically and the entries below are rendered as plain text.
-.. only:: html
+.. .. only:: html
 	  
-    Indices and tables
-    ==================
+..    Indices and tables
+..    ==================
 
-    * :ref:`genindex`
-    * :ref:`modindex`
-    * :ref:`search`
+..    * :ref:`genindex`
+..    * :ref:`modindex`
+..    * :ref:`search`
+
+.. footbibliography::

@@ -33,26 +33,77 @@
 .. -----------------------------------------------------------------------------
 .. Written by J. Remy, Inria
 
-.. _introduction:
+.. _getting_started:
 
-Introduction
-============
+Getting started
+===============
 
-PSyclone ``autodiff`` module is PSyclone's **prototype** implementation of 
-source-to-source 
-:ref:`automatic differentiation (AD) <automatic_differentiation>`. 
-It takes generic Fortran code and applies automatic differentiation in 
-:ref:`forward-mode (tangent) <forward_mode>` or 
-:ref:`reverse-mode (adjoint) <reverse_mode>`.  
+.. _download:
 
-It is inspired by 
-`Tapenade <https://team.inria.fr/ecuador/en/tapenade/>`_ (see :footcite:t:`tapenade` and :footcite:p:`tapenade-user-guide`), 
-which is also used to perform numerical tests of the transformations, and 
-`OpenAD <https://www.mcs.anl.gov/OpenAD/>`_ (see :footcite:t:`openad`).
+Download
+--------
 
-The general approach and transformations rules were adapted from 
-:footcite:t:`griewank-walther`.
+PSyclone ``autodiff`` module is hosted on GitHub: https://github.com/JulienRemy/PSyclone/tree/automatic_differentiation. 
 
-This module was created as a M1 internship project in the `AIRSEA team <https://team.inria.fr/airsea/>`_ of Inria Grenoble.
+It is currently an **experimental protoype**. The latest version is the ``automatic_differentiation`` branch.
 
-.. footbibliography::
+To download it, clone the repository then checkout the branch using 
+
+.. code-block:: console
+
+    $ git clone https://github.com/JulienRemy/PSyclone.git
+    $ git checkout automatic_differentiation
+
+.. _env_dependencies:
+
+Environment and dependencies
+----------------------------
+
+Please follow the instructions regarding environments and dependencies 
+at https://psyclone.readthedocs.io/en/stable/getting_going.html.
+
+This module also requires NumPy, which can be installed using ``pip``:
+
+.. code-block:: console
+
+    $ pip install numpy
+
+The tutorials also require Jupyter Notebook, which can be installed using ``pip``:
+
+.. code-block:: console
+
+    $ pip install jupyter
+
+.. _installing:
+
+Installing
+----------
+
+PSyclone and its ``autodiff`` module can then be installed using ``pip``:
+
+.. code-block:: console
+
+    $ cd <PSYCLONE_HOME>
+    $ pip install [--user] .
+
+or using ``setup.py``:
+
+.. code-block:: console
+
+    $ cd <PSYCLONE_HOME>
+    $ python setup.py install
+
+.. _autodiff_tutorial:
+
+Tutorial
+--------
+
+See the `src/psyclone/autodiff/tutorials/ <https://github.com/JulienRemy/PSyclone/tree/automatic_differentiation/src/psyclone/autodiff/tutorials>`_ directory for a Jupyter Notebook
+tutorial detailling the use of the module in reverse-mode.
+
+To open it using Jupyter Notebook:
+
+.. code-block:: console
+
+    $ jupyter-notebook tuto1.ipynb
+

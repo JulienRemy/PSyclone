@@ -87,8 +87,7 @@ Also in reverse-mode, three types of
 
 - :ref:`split reversal schedules<split_reversal_schedule>`,
 - :ref:`joint reversal schedules<joint_reversal_schedule>`,
-- :ref:`"link" reversal schedules<link_reversal_schedule>` specifying strong or
-weak links for all calling-called pairs of routines.
+- :ref:`"link" reversal schedules<link_reversal_schedule>` specifying strong or weak links for all calling-called pairs of routines.
 
 
 .. _missing_features:

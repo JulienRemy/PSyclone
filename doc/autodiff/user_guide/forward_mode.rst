@@ -97,6 +97,10 @@ node also contains the original and tangent definitions for it.
 Generating derivatives
 ++++++++++++++++++++++
 
+The transformations applied to generate derivatives are detailled below.
+They mostly follow the guidelines found in :footcite:t:`griewank-walther` 
+chapter 6.2, p.123.
+
 .. _operation_derivatives:
 
 Derivatives of operations
@@ -202,3 +206,5 @@ Derivatives of calls to subroutines
 +===================+=========================================+
 |``call func(x, y)``|``call func_tangent(x, x_d, y, y_d)``    |
 +-------------------+-----------------------------------------+
+
+.. footbibliography::
