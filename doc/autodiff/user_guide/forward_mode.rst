@@ -36,8 +36,8 @@
 .. _forward_mode:
 
 
-Forward-mode automatic differentiation (tangent)
-================================================
+Forward-mode AD (tangent)
+=========================
 
 
 Generating derivatives

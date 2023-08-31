@@ -35,11 +35,11 @@
 
 .. _automatic_differentiation:
 
-Automatic differentiation
-=========================
+Automatic differentiation (AD)
+==============================
 
-Simply put, the aim of automatic differentiation is to automatically obtain the
-derivatives of somes variables output by an existing program with respect to 
+Simply put, the aim of automatic differentiation (AD) is to automatically obtain 
+the derivatives of somes variables output by an existing program with respect to 
 some of its input variables.
 
 It avoids resorting to symbolic differentiation, which is error-prone when done
