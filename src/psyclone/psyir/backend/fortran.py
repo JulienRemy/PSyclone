@@ -1111,8 +1111,10 @@ class FortranWriter(LanguageWriter):
         if not node.name:
             raise VisitorError("Expected node name to have a value.")
 
+        name = node.name
+
         if node.is_program:
-            result = f"{self._nindent}program {node.name}\n"
+            result = f"{self._nindent}program {name}\n"
             routine_type = "program"
         else:
             args = [symbol.name for symbol in node.symbol_table.argument_list]
@@ -1120,11 +1122,11 @@ class FortranWriter(LanguageWriter):
             if node.return_symbol:
                 # This Routine has a return value and is therefore a Function
                 routine_type = "function"
-                if node.return_symbol.name.lower() != node.name.lower():
+                if node.return_symbol.name.lower() != name.lower():
                     suffix = f" result({node.return_symbol.name})"
             else:
                 routine_type = "subroutine"
-            result = f"{self._nindent}{routine_type} {node.name}("
+            result = f"{self._nindent}{routine_type} {name}("
             result += ", ".join(args) + f"){suffix}\n"
 
         self._depth += 1
@@ -1168,7 +1170,7 @@ class FortranWriter(LanguageWriter):
             f"{exec_statements}\n")
 
         self._depth -= 1
-        result += f"{self._nindent}end {routine_type} {node.name}\n"
+        result += f"{self._nindent}end {routine_type} {name}\n"
 
         return result
 

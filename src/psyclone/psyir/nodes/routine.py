@@ -35,6 +35,7 @@
 # Modified by: R. W. Ford, STFC Daresbury Lab
 # Modified by: S. Siso, STFC Daresbury Lab
 # MOdified by: J. Henrichs, Bureau of Meteorology
+# Modified by: J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 ''' This module contains the Routine node implementation.'''
@@ -68,8 +69,19 @@ class Routine(Schedule, CommentableMixin):
         super().__init__(**kwargs)
 
         self._return_symbol = None
-        self._name = None
-        # Name is set-up by the name setter property
+
+        # If the 'own_routine_symbol' tag already exist check that is
+        # consistent with the given routine name.
+        if 'own_routine_symbol' in self.symbol_table.tags_dict:
+            existing_symbol = self.routine_symbol
+            if existing_symbol.name.lower() != name.lower():
+                raise KeyError(
+                    f"Can't assign '{name}' as the routine name because "
+                    f"its symbol table contains a symbol ({existing_symbol}) "
+                    f"already tagged as 'own_routine_symbol'.")
+
+        # Name is set-up by the name setter property, which creates the 
+        # RoutineSymbol.
         self.name = name
 
         if not isinstance(is_program, bool):
@@ -174,55 +186,83 @@ class Routine(Schedule, CommentableMixin):
         :returns: the name of this Routine.
         :rtype: str
         '''
-        return self._name
+        return self.routine_symbol.name
 
     @name.setter
     def name(self, new_name):
         '''
         Sets a new name for the Routine.
-
-        TODO #1200 this node should only hold a reference to the corresponding
-        RoutineSymbol and get its name from there.
+        Either creates a RoutineSymbol for the Routine or renames the existing 
+        one.
 
         :param str new_name: new name for the Routine.
 
         :raises TypeError: if new_name is not a string.
-        :raises KeyError: if there already is a different named symbol with \
-            the 'own_routine_tag' in the symbol_table.
 
         '''
         if not isinstance(new_name, str):
             raise TypeError(f"Routine name must be a str but got "
                             f"'{type(new_name).__name__}'")
-        # TODO #1200 The name is duplicated in the _name attribute and the
-        # symbol.name that there is in the local symbol table. This setter
-        # updates both but note that a better solution is needed because
-        # renaming the symbol_table symbol alone would make it inconsistent.
-        if not self._name:
-            # If the 'own_routine_symbol' tag already exist check that is
-            # consistent with the given routine name.
-            if 'own_routine_symbol' in self.symbol_table.tags_dict:
-                existing_symbol = self.symbol_table.lookup_with_tag(
-                        'own_routine_symbol', scope_limit=self)
-                if existing_symbol.name.lower() == new_name.lower():
-                    self._name = new_name
-                    return  # The preexisting symbol already matches
-                # Otherwise raise an exception
-                raise KeyError(
-                    f"Can't assign '{new_name}' as the routine name because "
-                    f"its symbol table contains a symbol ({existing_symbol}) "
-                    f"already tagged as 'own_routine_symbol'.")
 
-            self._name = new_name
+        if 'own_routine_symbol' not in self.symbol_table.tags_dict:
             # Since the constructor can not mark methods as functions directly
             # the symbol will always start being NoType and must be updated
             # if a return_value type is provided.
             self.symbol_table.add(RoutineSymbol(new_name, NoType()),
                                   tag='own_routine_symbol')
-        elif self._name != new_name:
-            symbol = self.symbol_table.lookup(self._name)
-            self._name = new_name
-            self.symbol_table.rename_symbol(symbol, new_name)
+
+        else:
+            # If the existing name is the same, do nothing
+            if self.name.lower() == new_name.lower():
+                return
+
+            # Otherwise rename it accordingly
+            existing_symbol = self.symbol_table.lookup_with_tag(
+                        'own_routine_symbol', scope_limit=self)
+            self.symbol_table.rename_symbol(existing_symbol, new_name)
+
+    @property
+    def routine_symbol(self):
+        '''
+        :returns: the RoutineSymbol of this Routine.
+        :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
+        '''
+        return self.symbol_table.lookup_with_tag('own_routine_symbol')
+
+    @routine_symbol.setter
+    def routine_symbol(self, routine_symbol):
+        '''
+        Sets a new RoutineSymbol for the Routine.
+
+        :param routine_symbol: new RoutineSymbol for the Routine.
+        :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
+
+        :raises TypeError: if routine_symbol is of the wrong type.
+        :raises ValueError: if the return symbol exists (ie. this is a \
+                            function) and the datatype of the new routine \
+                            symbol doesn't match that of the return symbol.
+
+        '''
+        if not isinstance(routine_symbol, RoutineSymbol):
+            raise TypeError(f"routine_symbol should be a RoutineSymbol but got "
+                            f"'{type(routine_symbol).__name__}'.")
+
+        # For functions (only), the return symbol is defined.
+        # Ensure that both the new routine symbol and existing return symbol
+        # have the same datatype.
+        if (self.return_symbol and
+            routine_symbol.datatype is not self.return_symbol.datatype):
+            raise ValueError(f"The datatype of routine_symbol should be the "
+                             f"same as the one of the Routine return symbol, "
+                             f"which is '{self.return_symbol.datatype}', but "
+                             f"found '{routine_symbol.datatype}'.")
+
+        # If there is already a routine symbol, remove it
+        if 'own_routine_symbol' in self.symbol_table.tags_dict:
+            existing_symbol = self.routine_symbol
+            self.symbol_table.remove(existing_symbol)
+
+        self.symbol_table.add(routine_symbol, 'own_routine_symbol')
 
     def __str__(self):
         result = self.node_str(False) + ":\n"
@@ -272,7 +312,14 @@ class Routine(Schedule, CommentableMixin):
         # The routine symbol must be updated accordingly, this is because the
         # function datatype is provided by the type of the return symbol which
         # may be given after the Routine is created.
-        self.symbol_table.lookup(self._name).datatype = value.datatype
+        self.routine_symbol.datatype = value.datatype
+
+        # If this routine is in a module (Container), we also need need to
+        # update the datatype of its symbol in the Container's symbol table,
+        # if it exists.
+        if self.parent and self.name in self.parent.symbol_table:
+            self.parent.symbol_table.lookup(
+                self.routine_symbol.name).datatype = value.datatype
 
     def _refine_copy(self, other):
         ''' Refine the object attributes when a shallow copy is not the most

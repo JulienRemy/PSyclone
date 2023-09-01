@@ -34,6 +34,7 @@
 # Author: A. R. Porter, STFC Daresbury Lab
 # Modified: S. Siso, STFC Daresbury Lab
 # Modified: J. Henrichs, Bureau of Meteorology
+# Modified: J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 ''' This module contains the pytest tests for the Routine class. '''
@@ -42,7 +43,7 @@ import pytest
 
 from psyclone.psyir.nodes import (Routine, Assignment, Reference, Literal,
                                   ScopingNode)
-from psyclone.psyir.symbols import (REAL_TYPE, DataSymbol,
+from psyclone.psyir.symbols import (REAL_TYPE, INTEGER_TYPE, DataSymbol,
                                     SymbolTable, RoutineSymbol)
 from psyclone.tests.utilities import check_links
 
@@ -56,52 +57,9 @@ def test_routine_constructor():
         Routine("hello", is_program=1)
     assert "'is_program' must be a bool" in str(err.value)
     node = Routine("hello")
-    assert node._name == "hello"
+    assert node.name == "hello"
 
-
-def test_routine_properties():
-    ''' Check the various properties of the Routine class. '''
-    node1 = Routine("hello")
-    assert node1.dag_name == "routine_hello_0"
-    assert node1.return_symbol is None
-    assert node1.is_program is False
-    assert node1.name == "hello"
-    # Give the Routine a child to get full coverage of __str__ method
-    node1.addchild(Assignment())
-    assert "Routine[name:'hello']:\nAssignment" in str(node1)
-
-    node2 = Routine("bonjour")
-    assert node2.is_program is False
-
-    node3 = Routine("gutentag", is_program=True)
-    assert node3.is_program
-
-
-def test_routine_name_setter():
-    ''' Check the name setter property of the Routine class updates its
-    name and its associated Routine symbol. '''
-
-    node = Routine("hello")  # The constructor has an implicit name setter
-    # Check the associated RoutineSymbol has been created
-    assert "hello" in node.symbol_table
-    assert isinstance(node.symbol_table.lookup("hello"), RoutineSymbol)
-    # Check with an incorrect value type
-    with pytest.raises(TypeError) as err:
-        node.name = 3
-    assert "must be a str but got" in str(err.value)
-
-    # Perform a successful name change
-    node.name = "goodbye"
-    assert node.name == "goodbye"
-    # Check that the previous symbol has been deleted and the new one created
-    assert "welcome" not in node.symbol_table
-    assert "goodbye" in node.symbol_table
-    # Check that the 'own_routine_symbol' tag has been updated
-    assert node.symbol_table.lookup_with_tag('own_routine_symbol').name == \
-        "goodbye"
-
-
-def test_routine_name_setter_preexisting_tag():
+def test_routine_constructor_preexisting_tag():
     ''' Check that if the routine is initialized with a SymbolTable that
     already contains a 'own_routine_symbol' tag, the names must match.'''
 
@@ -125,6 +83,105 @@ def test_routine_name_setter_preexisting_tag():
     node2.name = "bye"
     assert (node2.symbol_table.lookup_with_tag("own_routine_symbol").name ==
             "bye")
+
+
+def test_routine_properties():
+    ''' Check the various properties of the Routine class. '''
+    node1 = Routine("hello")
+    assert node1.dag_name == "routine_hello_0"
+    assert node1.return_symbol is None
+    assert node1.is_program is False
+    assert (node1.routine_symbol 
+            is node1.symbol_table.lookup_with_tag('own_routine_symbol'))
+    assert node1.routine_symbol.name == "hello"
+    assert node1.name == "hello"
+    # Give the Routine a child to get full coverage of __str__ method
+    node1.addchild(Assignment())
+    assert "Routine[name:'hello']:\nAssignment" in str(node1)
+
+    node2 = Routine("bonjour")
+    assert node2.is_program is False
+
+    node3 = Routine("gutentag", is_program=True)
+    assert node3.is_program
+
+
+def test_routine_name_setter():
+    ''' Check the name setter of the Routine class updates its
+    name and its associated Routine symbol. '''
+
+    node = Routine("hello")  # The constructor has an implicit name setter
+    # Check the associated RoutineSymbol has been created
+    assert "hello" in node.symbol_table
+    assert isinstance(node.symbol_table.lookup("hello"), RoutineSymbol)
+    # Check with an incorrect value type
+    with pytest.raises(TypeError) as err:
+        node.name = 3
+    assert "must be a str but got" in str(err.value)
+
+    # Perform a successful name change
+    node.name = "goodbye"
+    assert node.name == "goodbye"
+    # Check that the previous symbol has been renamed
+    assert "welcome" not in node.symbol_table
+    assert "goodbye" in node.symbol_table
+    # Check that the 'own_routine_symbol' tag has been updated
+    assert node.symbol_table.lookup_with_tag('own_routine_symbol').name == \
+        "goodbye"
+
+
+def test_routine_routine_symbol_setter():
+    ''' Check the routine_symbol setter of the Routine class. '''
+
+    node1 = Routine("hello")  # The constructor creates a RoutineSymbol
+    # Check the associated RoutineSymbol has been created
+    assert "hello" in node1.symbol_table
+    assert isinstance(node1.routine_symbol, RoutineSymbol)
+    # Check with an incorrect value type
+    with pytest.raises(TypeError) as err:
+        node1.routine_symbol = 3
+    assert ("routine_symbol should be a RoutineSymbol but got 'int'."
+            in str(err.value))
+
+    # Perform a successful RoutineSymbol change
+    # in the absence of a return symbol
+    new_symbol = RoutineSymbol("goodbye", REAL_TYPE)
+    node1.routine_symbol = new_symbol
+    assert node1.routine_symbol is new_symbol
+    assert node1.routine_symbol.name == "goodbye"
+    assert node1.name == "goodbye"
+    # Check that the previous symbol was replaced
+    assert "welcome" not in node1.symbol_table
+    assert "goodbye" in node1.symbol_table
+
+    # Perform a successful RoutineSymbol change
+    # in the presence of a return symbol (same datatype)
+    node2 = Routine("bonjour")
+    return_symbol2 = DataSymbol("x", REAL_TYPE)
+    node2.symbol_table.add(return_symbol2)
+    node2.return_symbol = return_symbol2
+    new_routine_symbol = RoutineSymbol("salut", REAL_TYPE)
+    node2.routine_symbol = new_routine_symbol
+    assert node2.routine_symbol is new_routine_symbol
+    assert node2.routine_symbol.name == "salut"
+    assert node2.name == "salut"
+    # Check that the previous symbol was replaced
+    assert "bonjour" not in node2.symbol_table
+    assert "salut" in node2.symbol_table
+
+    # Check with a new RoutineSymbol with a datatype
+    # different from the return symbol one
+    node3 = Routine("cat")
+    return_symbol3 = DataSymbol("x", REAL_TYPE)
+    node3.symbol_table.add(return_symbol3)
+    node3.return_symbol = return_symbol3
+    new_routine_symbol = RoutineSymbol("dog", INTEGER_TYPE)
+    with pytest.raises(ValueError) as err:
+        node3.routine_symbol = new_routine_symbol
+    assert ("The datatype of routine_symbol should be the same as the one of "
+            "the Routine return symbol, which is 'Scalar<REAL, UNDEFINED>', "
+            "but found 'Scalar<INTEGER, UNDEFINED>'."
+            in str(err.value))
 
 
 def test_routine_return_symbol_setter():

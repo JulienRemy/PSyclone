@@ -33,6 +33,7 @@
 # -----------------------------------------------------------------------------
 # Author R. W. Ford, STFC Daresbury Lab
 # Modified by A. R. Porter and S. Siso, STFC Daresbury Lab
+# Modified by J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 '''Performs pytest tests on the Routine node handler in the
@@ -47,8 +48,7 @@ from psyclone.tests.utilities import Compile
 
 def test_fw_routine(fortran_reader, fortran_writer, monkeypatch, tmpdir):
     '''Check the FortranWriter class outputs correct code when a routine node
-    is found. Also tests that an exception is raised if routine.name does not
-    have a value.
+    is found.
 
     '''
     code = (
@@ -127,11 +127,6 @@ def test_fw_routine(fortran_reader, fortran_writer, monkeypatch, tmpdir):
         "  integer :: symbol1_1\n"
         "\n") in result
     assert Compile(tmpdir).string_compiles(result)
-
-    monkeypatch.setattr(schedule, "_name", None)
-    with pytest.raises(VisitorError) as excinfo:
-        _ = fortran_writer(schedule)
-    assert "Expected node name to have a value." in str(excinfo.value)
 
 
 def test_fw_routine_nameclash(fortran_writer):

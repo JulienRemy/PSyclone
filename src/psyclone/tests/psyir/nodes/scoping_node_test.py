@@ -32,6 +32,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
 # Authors: A. R. Porter and S. Siso, STFC Daresbury Lab
+# Modified by J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 ''' Performs py.test tests on the ScopingNode PSyIR node. '''
@@ -102,7 +103,7 @@ def test_scoping_node_copy():
     assert new_schedule[0].rhs.symbol in new_schedule.symbol_table.symbols
 
 
-def test_scoping_node_copy_hierarchy(fortran_writer):
+def test_scoping_node_copy_hierarchy(fortran_writer, tmpdir):
     ''' Test that the ScopingNode copy() method creates a new symbol table
     with copied symbols and updates the children references.
 
@@ -161,7 +162,6 @@ def test_scoping_node_copy_hierarchy(fortran_writer):
     parent_node.addchild(new_schedule)
 
     # Check that the expected code is generated
-    # TODO #1200: the new 'routine' RoutineSymbol also needs to change.
     expected = '''\
 module module
   implicit none
@@ -176,20 +176,19 @@ module module
     a = b_global(i)
 
   end subroutine routine
-  subroutine routine(a)
+  subroutine routine_new(a)
     integer, intent(inout) :: a
     integer :: i_new
 
     a = b_global(i_new)
 
-  end subroutine routine
+  end subroutine routine_new
 
 end module module
 '''
     output = fortran_writer(parent_node)
     assert expected == output
-    # TODO #1200: fixing this issue must allow to Compile the test output
-    # assert Compile(tmpdir).string_compiles(output)
+    assert Compile(tmpdir).string_compiles(output)
 
 
 def test_scoping_node_copy_loop(fortran_writer, tmpdir):

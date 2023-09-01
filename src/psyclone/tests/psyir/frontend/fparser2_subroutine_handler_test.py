@@ -342,7 +342,9 @@ def test_function_unsupported_type(fortran_reader):
     for name in ["my_func", "agrif_cfixed"]:
         sym = table.lookup(name)
         assert isinstance(sym, RoutineSymbol)
-        assert isinstance(sym.datatype, UnresolvedType)
+    print(table.lookup("my_func"))
+    assert isinstance(table.lookup("my_func").datatype, UnknownFortranType)
+    assert isinstance(table.lookup("agrif_cfixed").datatype, UnresolvedType)
 
 
 def test_function_unsupported_derived_type(fortran_reader):
