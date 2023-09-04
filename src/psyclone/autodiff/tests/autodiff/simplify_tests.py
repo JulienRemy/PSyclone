@@ -1017,6 +1017,18 @@ def test_simplify_mul_by_one(fortran_writer):
     mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
     assert fortran_writer(simplify_mul_by_one(mul)) == "x"
 
+    one = Literal('1.', REAL_TYPE)
+    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), one.copy())
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+
+    one = Literal('1.0', REAL_TYPE)
+    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), one.copy())
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+
 def test_simplify_mul_by_zero(fortran_writer):
     """Test that the simplify_mul_by_zero function returns the expected result.
     """
