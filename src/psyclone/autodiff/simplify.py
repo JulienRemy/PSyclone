@@ -667,7 +667,7 @@ def simplify_mul_div(binary_operation):
     ):
         for operand in binary_operation.children:
             if isinstance(operand, Literal):
-                if operand.value == "1":
+                if operand.value in ("1", "1.", "1.0"):
                     return simplify_mul_by_one(binary_operation)
                 if operand.value in ("0", "0.0", "0."):
                     return simplify_mul_by_zero(binary_operation)
@@ -900,7 +900,7 @@ def _valuecheck_at_least_one_literal_operand(binary_operation, values):
 
 # x * 1 or 1 * x => x
 def simplify_mul_by_one(binary_operation):
-    """Simplifies a binary operation with operator MUL or DIV, one operand \
+    """Simplifies a binary operation with operator MUL, one operand \
     being of type Literal with value '1'.
 
     :param binary_operation: operation to simplify.
@@ -916,12 +916,11 @@ def simplify_mul_by_one(binary_operation):
     _typecheck_mul_div(binary_operation)
     _typecheck_at_least_one_literal_operand(binary_operation)
 
-    _valuecheck_at_least_one_literal_operand(binary_operation, ["1"])
+    _valuecheck_at_least_one_literal_operand(binary_operation, ["1", "1.", "1.0"])
 
     for i, operand in enumerate(binary_operation.children):
         if isinstance(operand, Literal):
-            # NOTE: not 1.0, sometimes used to "cast" to REAL
-            if operand.value == "1":
+            if operand.value in ["1", "1.", "1.0"]:
                 return binary_operation.children[1 - i].copy()
 
     raise ValueError(
