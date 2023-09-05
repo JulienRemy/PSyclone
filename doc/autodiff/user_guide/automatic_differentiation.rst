@@ -82,7 +82,10 @@ the chain rule.
 
 It comes in two main flavors, usually called 
 :ref:`forward- or tangent-mode <forward_math>` and 
-:ref:`reverse- or adjoint-mode <reverse_math>`.
+:ref:`reverse- or adjoint-mode <reverse_math>`, which differ in the way 
+substitutions are performed in the chain rule, which partial derivatives are 
+computed as a result and the order in which statements in the original program 
+are differentiated by the AD transformation.
 
 .. _forward_math:
 
@@ -125,9 +128,9 @@ order of computation as that of the original program.
 
 If there are less independent than dependent variables, its complexity
 is lower than that of the reverse- or adjoint-mode. But frequently, and maybe 
-even more so in oceanographic models, the number of inputs greatly exceeds the 
-number of outputs, requiring many repeated evaluations, one for each input or 
-independent variable to differentiate with respect to.
+even more so in ocean and atmosphere models, the number of inputs greatly 
+exceeds the number of outputs, requiring many repeated evaluations, one for 
+each input or independent variable to differentiate with respect to.
 
 
 .. _reverse_math:
@@ -224,4 +227,10 @@ for a chosen dependent variable :math:`z \in \{y_1, y_2\}`.
 
 Initialize with :math:`\forall i, \bar{x}_i = 0, \forall k, \bar{v}_k = 0 \text{ and choose } (\bar{y}_1 = 1, \bar{y}_2 = 0) \text{ \textbf{or} } (\bar{y}_1 = 0, \bar{y}_2 = 1)`
 to obtain the adjoints.
+
+Notice that the adjoint of variables appearing as operands in the original
+computations (top) are incremented in the reverse-mode ones (bottom). Moreover, 
+non-linearities in the original occasion the presence of operation results/
+non-adjoint variables in the adjoint computations, which could be either 
+recomputed or recorded and restored from a tape.
 
