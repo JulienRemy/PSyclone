@@ -43,7 +43,7 @@ from psyclone.psyir.nodes import (
     Assignment,
 )
 from psyclone.psyir.symbols import (
-    REAL_DOUBLE_TYPE,
+    REAL_TYPE,
     DataSymbol,
     ScalarType,
     ArrayType,
@@ -101,7 +101,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
     # _call_adjoint_name = "call_adj"
 
     # TODO: correct datatype
-    _default_value_tape_datatype = REAL_DOUBLE_TYPE
+    _default_value_tape_datatype = REAL_TYPE
 
     def __init__(self, container_trans):
         super().__init__()

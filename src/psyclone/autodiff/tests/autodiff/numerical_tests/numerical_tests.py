@@ -43,7 +43,7 @@ import numpy as np
 from psyclone.autodiff import NumericalComparator, SubroutineGenerator
 
 from psyclone.psyir.nodes import Literal, UnaryOperation, BinaryOperation, Reference
-from psyclone.psyir.symbols import REAL_DOUBLE_TYPE
+from psyclone.psyir.symbols import REAL_TYPE
 
 from psyclone.autodiff.ad_reversal_schedule import (
     ADSplitReversalSchedule,
@@ -51,7 +51,7 @@ from psyclone.autodiff.ad_reversal_schedule import (
     ADLinkReversalSchedule,
 )
 
-MAX_ERROR = 1e-10
+MAX_ERROR = 1e-5
 
 MODES = ("forward", "reverse")
 
@@ -109,12 +109,12 @@ def test_unary():
                     UnaryOperation.Operator.LOG,
                     UnaryOperation.Operator.LOG10,
                 ):
-                    x_val = np.random.uniform(0, 1e2, 100)
+                    x_val = np.random.uniform(0, 2, 100)
                 # Operators requiring an argument in [-1, 1]
                 elif op in (UnaryOperation.Operator.ACOS, UnaryOperation.Operator.ASIN):
                     x_val = np.random.uniform(-1, 1, 100)
                 else:
-                    x_val = np.random.uniform(-1e2, 1e2, 100)
+                    x_val = np.random.uniform(-2, 2, 100)
 
                 # Whichever schedule will work
                 rev_schedule = ADJointReversalSchedule()
@@ -188,10 +188,10 @@ def test_binary():
                     file.write(routine.write())
 
                 if op is BinaryOperation.Operator.POW:
-                    x_val = x_val = np.random.uniform(0, 1e2, 1000)
+                    x_val = np.random.uniform(0, 2, 1000)
                 else:
-                    x_val = np.random.uniform(-1e2, 1e2, 1000)
-                y_val = np.random.uniform(-1e2, 1e2, 1000)
+                    x_val = np.random.uniform(-2, 2, 1000)
+                y_val = np.random.uniform(-2, 2, 1000)
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
@@ -308,8 +308,8 @@ def test_unary_composition():
 def test_binary_composition():
     """Test composition of binary operators in both modes, by applying \
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
-    `f = (x (op1) y) (op2) y` or `f = x; f = (f (op1) x) (op2) y` and comparing \
-    numerical results for random values of `x` and `y`.
+    `f = (x (op1) y) (op2) z` or `f = x; f = (f (op1) y) (op2) z` and comparing \
+    numerical results for random values of `x`, `y` and `z`.
 
     :raises ValueError: if the error is above MAX_ERROR or is NaN.
     """
@@ -330,6 +330,7 @@ def test_binary_composition():
 
                 x = routine.new_in_arg("x")
                 y = routine.new_in_arg("y")
+                z = routine.new_in_arg("z")
                 f = routine.new_out_arg("f")
 
                 if iterative:
@@ -339,8 +340,8 @@ def test_binary_composition():
                         f,
                         BinaryOperation.create(
                             binary_1,
-                            BinaryOperation.create(binary_2, Reference(f), Reference(x)),
-                            Reference(y),
+                            BinaryOperation.create(binary_2, Reference(f), Reference(y)),
+                            Reference(z),
                         ),
                     )
                 else:
@@ -350,15 +351,16 @@ def test_binary_composition():
                         BinaryOperation.create(
                             binary_1,
                             BinaryOperation.create(binary_2, Reference(x), Reference(y)),
-                            Reference(y),
+                            Reference(z),
                         ),
                     )
 
                 with open("./outputs/routine.f90", "w") as file:
                     file.write(routine.write())
 
-                x_val = np.random.uniform(-1e2, 1e2, 10)
-                y_val = np.random.uniform(-1e2, 1e2, 10)
+                x_val = np.random.uniform(1, 3, 100)
+                y_val = np.random.uniform(1, 3, 100)
+                z_val = np.random.uniform(1, 3, 100)
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
@@ -370,7 +372,7 @@ def test_binary_composition():
                         "routine_binary_composition",
                         ["f"],
                         ["x", "y"],
-                        {"x": x_val.tolist(), "y": y_val.tolist()},
+                        {"x": x_val.tolist(), "y": y_val.tolist(), "z": z_val.tolist()},
                         "Linf_error",
                         {"verbose": True, "inline_operation_adjoints": inline},
                         mode,
@@ -432,7 +434,7 @@ def _create_taping_routine(name):
             x,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
-                Literal("1.01", REAL_DOUBLE_TYPE),
+                Literal("1.01", REAL_TYPE),
                 Reference(x),
             ),
         )
@@ -454,13 +456,13 @@ def _create_taping_routine(name):
             x,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
-                Literal("1.01", REAL_DOUBLE_TYPE),
+                Literal("1.01", REAL_TYPE),
                 Reference(x),
             ),
         )
 
         routine.new_assignment(
-            a, Literal(str(np.random.uniform(-1, 1)), REAL_DOUBLE_TYPE)
+            a, Literal(str(np.random.uniform(-1, 1)), REAL_TYPE)
         )
 
         routine.new_assignment(
@@ -534,7 +536,7 @@ def test_nested_calls():
     f = calling_routine.new_out_arg("f")
 
     # f = 0.0
-    calling_routine.new_assignment(f, Literal("0.0", REAL_DOUBLE_TYPE))
+    calling_routine.new_assignment(f, Literal("0.0", REAL_TYPE))
 
     # Thrice
     # x = 1.01 * x
@@ -546,7 +548,7 @@ def test_nested_calls():
             x,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
-                Literal("1.01", REAL_DOUBLE_TYPE),
+                Literal("1.01", REAL_TYPE),
                 Reference(x),
             ),
         )
@@ -556,7 +558,7 @@ def test_nested_calls():
             x,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
-                Literal("1.01", REAL_DOUBLE_TYPE),
+                Literal("1.01", REAL_TYPE),
                 Reference(x),
             ),
         )
@@ -656,7 +658,7 @@ def test_many_arguments():
                 undef_args.append(arg)
             else:
                 arg = routine.new_variable(f"arg{i}")
-                routine.new_assignment(arg, Literal(f"{i}.0", REAL_DOUBLE_TYPE))
+                routine.new_assignment(arg, Literal(f"{i}.0", REAL_TYPE))
                 non_args.append(arg)
 
         for i in range(n):

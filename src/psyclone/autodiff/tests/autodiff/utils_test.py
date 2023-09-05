@@ -73,7 +73,6 @@ from psyclone.autodiff.utils import (
     sign,
     own_routine_symbol
 )
-from psyclone.psyir.symbols.datatypes import REAL_DOUBLE_TYPE
 
 
 def test_datanode_error():
@@ -229,11 +228,9 @@ def test_zero_error():
 def test_zero(fortran_writer):
     int_zero = zero(INTEGER_TYPE)
     real_zero = zero(REAL_TYPE)
-    #double_zero = zero(REAL_DOUBLE_TYPE)
 
     assert fortran_writer(int_zero) == "0"
     assert fortran_writer(real_zero) == "0.0"
-    #assert fortran_writer(double_zero) == "0d0"
 
 
 def test_one_error():
@@ -264,11 +261,9 @@ def test_one_error():
 def test_one(fortran_writer):
     int_one = one(INTEGER_TYPE)
     real_one = one(REAL_TYPE)
-    #double_one = one(REAL_DOUBLE_TYPE)
 
     assert fortran_writer(int_one) == "1"
     assert fortran_writer(real_one) == "1.0"
-    #assert fortran_writer(double_one) == "1d0"
 
 
 def test_minus_error():

@@ -52,7 +52,7 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.symbols import (
     INTEGER_TYPE,
-    REAL_DOUBLE_TYPE,
+    REAL_TYPE,
     SymbolTable,
     DataSymbol,
     ArrayType,
@@ -80,7 +80,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
     # Default PSyIR datatype for the derivatives/adjoints
     # TODO: use the dependent variable type and precision
-    _default_differential_datatype = REAL_DOUBLE_TYPE
+    _default_differential_datatype = REAL_TYPE
 
     # Attributes that need to be redefined by subclasses
     _number_of_routines = 0
