@@ -62,6 +62,23 @@ In reverse-mode, all of them follow the naming convention
 The one of most interest for the user is the 
 :ref:`ADReverseContainerTrans <reverse_container_trans>` class and its ``apply`` method.
 
+After parsing the Fortran code file containing the target routine, an
+``ADReverseContainerTrans`` instance should be applied to it to perform 
+automatic differentiation.  
+The ``ADReverseContainerTrans.apply`` method in turn applies an 
+``ADReverseRoutineTrans`` to the target routine, which goes line-by-line through
+the statements found in the ``Routine`` node, applying 
+``ADReverse[PSyIRNodeSubclass]Trans`` to the statements, etc.
+
+.. tikz:: Reverse-mode AD transformation call graph
+    :libs: graphs, graphs.standard, quotes
+
+      \graph[nodes={draw}, grow down = 1.5cm, branch right = 5cm]{
+                        ADReverseContainerTrans ->["(in)dependent vars"] ADReverseRoutineTrans -> {ADReverseAssignmentTrans ->[swap, "LHS adjoint"] ADReverseOperationTrans ->[bend left = 2cm, "parent adjoint"] a / $ $[white] ->[bend left = 2cm, "if composed"] ADReverseOperationTrans, ADReverseCallTrans},
+                        ADReverseCallTrans ->["if operation argument"] ADReverseOperationTrans, 
+                        ADReverseCallTrans ->[bend right = 0.5cm, swap, "transform called routine", purple] ADReverseRoutineTrans,
+                        };    
+
 .. _reverse_container_trans:
 
 Container transformation
@@ -70,13 +87,6 @@ Container transformation
 .. autoclass:: psyclone.autodiff.transformations.ADReverseContainerTrans
       :members: apply
 
-After parsing the Fortran code file containing the target routine, an
-``ADReverseContainerTrans`` instance should be applied to it to perform 
-automatic differentiation.  
-The ``ADReverseContainerTrans.apply`` method in turn applies an 
-``ADReverseRoutineTrans`` to the target routine, which goes line-by-line through
-the statements found in the ``Routine`` node, applying 
-``ADReverse[PSyIRNodeSubclass]Trans`` to the statements, etc.
 
 As can be seen, the required arguments include the PSyIR ``[File]Container`` 
 node obtained by parsing and transforming the source code, the **names** of the 

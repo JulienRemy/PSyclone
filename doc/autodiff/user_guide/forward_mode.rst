@@ -66,9 +66,6 @@ The one users should use is
 Container transformation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: psyclone.autodiff.transformations.ADForwardContainerTrans
-      :members: apply
-
 After parsing the Fortran code file containing the target routine, an
 ``ADForwardContainerTrans`` instance should be applied to it to perform 
 automatic differentiation.  
@@ -76,6 +73,18 @@ This in turn applies an
 ``ADForwardRoutineTrans`` to the target routine, which goes line-by-line through
 the statements found in the ``Routine`` node, applying 
 ``ADForward[PSyIRNodeSubclass]Trans`` to the statements, etc.
+
+.. tikz:: Forward-mode AD transformation call graph
+    :libs: graphs, graphs.standard, quotes
+
+      \graph[nodes={draw}, grow down = 1.5cm, branch right = 5cm]{
+                        ADForwardContainerTrans ->["(in)dependent vars"] ADForwardRoutineTrans -> {ADForwardAssignmentTrans ->[swap] ADForwardOperationTrans ->[bend left = 2cm] a / $ $[white] ->[bend left = 2cm, "if composed"] ADForwardOperationTrans, ADForwardCallTrans},
+                        ADForwardCallTrans ->["if op argument"] ADForwardOperationTrans, 
+                        ADForwardCallTrans ->[bend right = 0.5cm, swap, "transform called routine", purple] ADForwardRoutineTrans,
+                        };    
+
+.. autoclass:: psyclone.autodiff.transformations.ADForwardContainerTrans
+      :members: apply
 
 For descriptions of the arguments, see the relevant sections of 
 :ref:`ADReverseContainerTrans <reverse_container_trans>`: 

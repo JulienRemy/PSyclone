@@ -45,14 +45,14 @@ Download
 
 PSyclone ``autodiff`` module is hosted on GitHub: https://github.com/JulienRemy/PSyclone/tree/automatic_differentiation. 
 
-It is currently an **experimental protoype**. The latest version is the ``automatic_differentiation`` branch.
+| It is currently an **experimental protoype**.  
+| The latest version is the ``automatic_differentiation`` branch.
 
-To download it, clone the repository then checkout the branch using 
+To download it, clone the repository using 
 
 .. code-block:: console
 
     $ git clone https://github.com/JulienRemy/PSyclone.git
-    $ git checkout automatic_differentiation
 
 .. _env_dependencies:
 
