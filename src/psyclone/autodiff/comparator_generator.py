@@ -70,7 +70,7 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.symbols import (
     ArrayType,
-    REAL_DOUBLE_TYPE,
+    REAL_TYPE,
     INTEGER_TYPE,
     RoutineSymbol,
 )
@@ -96,7 +96,7 @@ class ComparatorGenerator(object):
     # TODO: specify Fortran version
     # _fortran_version = "fortran90"
 
-    _default_scalar_datatype = REAL_DOUBLE_TYPE
+    _default_scalar_datatype = REAL_TYPE
 
     @staticmethod
     def _apply_reverse_autodiff(

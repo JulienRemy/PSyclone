@@ -40,7 +40,7 @@ testing of PSyclone `autodiff`.
 from enum import Enum
 
 from psyclone.psyir.nodes import Routine, Literal, Call, Reference, DataNode
-from psyclone.psyir.symbols import DataSymbol, DataType, REAL_DOUBLE_TYPE
+from psyclone.psyir.symbols import DataSymbol, DataType, REAL_TYPE
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -60,14 +60,14 @@ class SubroutineGenerator(object):
     :param subroutine_name: name of the subroutine to generate.
     :type subroutine_name: Str
     :param default_datatype: default datatype to use in creating new arguments
-        and variables, defaults to REAL_DOUBLE_TYPE
+        and variables, defaults to REAL_TYPE
     :type default_datatype: Optional[\
                                 :py:class:`psyclone.psyir.symbols.DataType`]
     """
 
     # pylint: disable=useless-object-inheritance
 
-    def __init__(self, subroutine_name, default_datatype=REAL_DOUBLE_TYPE):
+    def __init__(self, subroutine_name, default_datatype=REAL_TYPE):
         self._check_str(subroutine_name)
         self._check_datatype(default_datatype)
 
