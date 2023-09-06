@@ -44,7 +44,6 @@ from psyclone.psyir.nodes import (
     BinaryOperation,
     Literal,
     Assignment,
-    Node,
     Reference,
 )
 from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE, DataSymbol
@@ -61,26 +60,29 @@ from psyclone.autodiff.simplify import (
     _typecheck_mul_div,
     _typecheck_sub,
     _typecheck_unary_operation,
-    simplify_add,
+    #simplify_add,
     simplify_add_minus_minus,
     simplify_add_plus_minus_or_minus_plus,
+    simplify_add_zero,
     simplify_add_sub_factorize,
     simplify_add_twice_to_mul_by_2,
-    simplify_assignment,
+    #simplify_assignment,
     simplify_binary_operation,
-    simplify_mul_div,
+    #simplify_mul_div,
     simplify_mul_by_one,
     simplify_mul_by_zero,
     simplify_mul_div_minus_minus,
     simplify_mul_div_plus_minus_or_minus_plus,
     simplify_node,
     simplify_self_assignment,
-    simplify_sub,
+    #simplify_sub,
     simplify_sub_itself_to_zero,
     simplify_sub_minus_plus,
     simplify_sub_plus_minus,
+    simplify_sub_zero,
 )
 
+#pylint: disable=invalid-name, redefined-outer-name, too-many-lines
 
 def test__typecheck_binary_operation():
     """Test that the _typecheck_binary_operation function raises the correct
@@ -170,7 +172,8 @@ def test__typecheck_mul_div():
 
 
 def test__typecheck_unary_operation():
-    """Test that the _typecheck_unary_operation function raises the correct errors."""
+    """Test that the _typecheck_unary_operation function raises the correct 
+    errors."""
     with pytest.raises(TypeError) as info:
         _typecheck_unary_operation(None)
     assert (
@@ -199,7 +202,8 @@ def test__typecheck_minus():
 
 
 def test__typecheck_assignment():
-    """Test that the _typecheck_assignment function raises the correct errors."""
+    """Test that the _typecheck_assignment function raises the correct 
+    errors."""
     with pytest.raises(TypeError) as info:
         _typecheck_assignment(None)
     assert (
@@ -210,7 +214,8 @@ def test__typecheck_assignment():
 
 
 def test__typecheck_at_least_one_literal_operand():
-    """Test that the _typecheck_at_least_one_literal_operand function raises the correct errors."""
+    """Test that the _typecheck_at_least_one_literal_operand function raises 
+    the correct errors."""
     with pytest.raises(TypeError) as info:
         _typecheck_at_least_one_literal_operand(None)
     assert (
@@ -235,7 +240,8 @@ def test__typecheck_at_least_one_literal_operand():
 
 
 def test__valuecheck_at_least_one_literal_operand():
-    """Test that the _valuecheck_at_least_one_literal_operand function raises the correct errors."""
+    """Test that the _valuecheck_at_least_one_literal_operand function raises 
+    the correct errors."""
     with pytest.raises(TypeError) as info:
         _valuecheck_at_least_one_literal_operand(None, None)
     assert (
@@ -249,7 +255,7 @@ def test__valuecheck_at_least_one_literal_operand():
         )
     assert (
         "'values' argument should be of "
-        "type 'list[str]' but found "
+        "type 'list[str]' or 'tuple[str]' but found "
         "'NoneType'." in str(info.value)
     )
     with pytest.raises(TypeError) as info:
@@ -261,7 +267,7 @@ def test__valuecheck_at_least_one_literal_operand():
         )
     assert (
         "'values' argument should be of "
-        "type 'list[str]' but found an element of type "
+        "type 'list[str]' or 'tuple[str]' but found an element of type "
         "'NoneType'." in str(info.value)
     )
 
@@ -300,9 +306,12 @@ def test__valuecheck_at_least_one_literal_operand():
 
 
 def test_simplify_binary_operation_errors():
-    """Test that the simplify_binary_operation function raises the correct errors."""
+    """Test that the simplify_binary_operation function raises the correct 
+    errors."""
     with pytest.raises(TypeError) as info:
-        simplify_binary_operation(BinaryOperation(BinaryOperation.Operator.MUL), None)
+        simplify_binary_operation(
+            BinaryOperation(BinaryOperation.Operator.MUL), None
+        )
     assert (
         "'times' argument should be of "
         "type 'int' but found "
@@ -310,7 +319,9 @@ def test_simplify_binary_operation_errors():
     )
 
     with pytest.raises(ValueError) as info:
-        simplify_binary_operation(BinaryOperation(BinaryOperation.Operator.MUL), 0)
+        simplify_binary_operation(
+            BinaryOperation(BinaryOperation.Operator.MUL), 0
+        )
     assert (
         "'times' argument should be at least "
         "'1' but found "
@@ -319,7 +330,8 @@ def test_simplify_binary_operation_errors():
 
 
 def test_simplify_add_twice_to_mul_by_2_errors():
-    """Test that the simplify_add_twice_to_mul_by_2 function raises the correct errors."""
+    """Test that the simplify_add_twice_to_mul_by_2 function raises the 
+    correct errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
         Literal("0", INTEGER_TYPE),
@@ -356,7 +368,8 @@ def test_simplify_add_twice_to_mul_by_2_errors():
 
 
 def test_simplify_add_minus_minus_errors():
-    """Test that the simplify_add_minus_minus function raises the correct errors."""
+    """Test that the simplify_add_minus_minus function raises the 
+    correct errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
         Literal("0", INTEGER_TYPE),
@@ -420,7 +433,8 @@ def test_simplify_add_minus_minus_errors():
 
 
 def test_simplify_add_plus_minus_or_minus_plus_errors():
-    """Test that the simplify_add_plus_minus_or_minus_plus function raises the correct errors."""
+    """Test that the simplify_add_plus_minus_or_minus_plus function raises the 
+    correct errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
         Literal("0", INTEGER_TYPE),
@@ -485,8 +499,57 @@ def test_simplify_add_plus_minus_or_minus_plus_errors():
     simplify_add_plus_minus_or_minus_plus(binary)
 
 
+def test_simplify_add_zero_errors():
+    """Test that the simplify_add_zero function raises the correct errors."""
+    unary = UnaryOperation.create(
+        UnaryOperation.Operator.MINUS,
+        Literal("0", INTEGER_TYPE),
+    )
+    with pytest.raises(TypeError) as info:
+        simplify_add_zero(unary)
+    assert (
+        "'binary_operation' argument should be of "
+        "type 'BinaryOperation' but found "
+        "'UnaryOperation'." in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.MUL,
+        Literal("0", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    with pytest.raises(ValueError) as info:
+        simplify_add_zero(binary)
+    assert (
+        "'binary_operation' argument should have "
+        "operator 'BinaryOperation.Operator.ADD' "
+        "but found" in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.ADD,
+        Literal("1", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    with pytest.raises(ValueError) as info:
+        simplify_add_zero(binary)
+    assert (
+        "At least one of 'binary_operation' argument children should "
+        "be a Literal with value in ('0', '0.', '0.0') but found"
+        in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.ADD,
+        Literal("0", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    simplify_add_zero(binary)
+
+
 def test_simplify_sub_itself_to_zero_errors():
-    """Test that the simplify_sub_itself_to_zero function raises the correct errors."""
+    """Test that the simplify_sub_itself_to_zero function raises the 
+    correct errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB,
         Literal("0", INTEGER_TYPE),
@@ -523,7 +586,8 @@ def test_simplify_sub_itself_to_zero_errors():
 
 
 def test_simplify_sub_minus_plus_errors():
-    """Test that the simplify_sub_minus_plus function raises the correct errors."""
+    """Test that the simplify_sub_minus_plus function raises the correct 
+    errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB,
         Literal("0", INTEGER_TYPE),
@@ -586,7 +650,8 @@ def test_simplify_sub_minus_plus_errors():
 
 
 def test_simplify_sub_plus_minus_errors():
-    """Test that the simplify_sub_plus_minus function raises the correct errors."""
+    """Test that the simplify_sub_plus_minus function raises the correct 
+    errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB,
         Literal("0", INTEGER_TYPE),
@@ -649,9 +714,12 @@ def test_simplify_sub_plus_minus_errors():
 
 
 def test_simplify_add_sub_factorize_errors():
-    """Test that the simplify_add_sub_factorize function raises the correct errors."""
+    """Test that the simplify_add_sub_factorize function raises the correct 
+    errors."""
     a = Reference(DataSymbol("a", INTEGER_TYPE))
-    binary = BinaryOperation.create(BinaryOperation.Operator.ADD, a.copy(), a.copy())
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, a.copy(), a.copy()
+    )
     with pytest.raises(ValueError) as info:
         simplify_add_sub_factorize(binary)
     assert (
@@ -684,7 +752,8 @@ def test_simplify_add_sub_factorize_errors():
     assert (
         "'binary_operation' argument should have one child "
         "of type 'Reference' and the other of type 'BinaryOperation' "
-        "with operator 'BinaryOperation.Operator.MUL' but found" in str(info.value)
+        "with operator 'BinaryOperation.Operator.MUL' but found"
+        in str(info.value)
     )
 
     a = Reference(DataSymbol("a", INTEGER_TYPE))
@@ -713,8 +782,57 @@ def test_simplify_add_sub_factorize_errors():
     simplify_add_sub_factorize(binary)
 
 
+def test_simplify_sub_zero_errors():
+    """Test that the simplify_sub_zero function raises the correct errors."""
+    unary = UnaryOperation.create(
+        UnaryOperation.Operator.MINUS,
+        Literal("0", INTEGER_TYPE),
+    )
+    with pytest.raises(TypeError) as info:
+        simplify_sub_zero(unary)
+    assert (
+        "'binary_operation' argument should be of "
+        "type 'BinaryOperation' but found "
+        "'UnaryOperation'." in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.MUL,
+        Literal("0", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    with pytest.raises(ValueError) as info:
+        simplify_sub_zero(binary)
+    assert (
+        "'binary_operation' argument should have "
+        "operator 'BinaryOperation.Operator.SUB' "
+        "but found" in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.SUB,
+        Literal("1", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    with pytest.raises(ValueError) as info:
+        simplify_sub_zero(binary)
+    assert (
+        "At least one of 'binary_operation' argument children should "
+        "be a Literal with value in ('0', '0.', '0.0') but found"
+        in str(info.value)
+    )
+
+    binary = BinaryOperation.create(
+        BinaryOperation.Operator.SUB,
+        Literal("0", INTEGER_TYPE),
+        Reference(DataSymbol("a", INTEGER_TYPE)),
+    )
+    simplify_sub_zero(binary)
+
+
 def test_simplify_mul_div_minus_minus_errors():
-    """Test that the simplify_mul_div_minus_minus function raises the correct errors."""
+    """Test that the simplify_mul_div_minus_minus function raises the 
+    correct errors."""
     # _typecheck functions already tested
 
     # Should pass
@@ -728,7 +846,8 @@ def test_simplify_mul_div_minus_minus_errors():
 
 
 def test_simplify_mul_div_plus_minus_or_minus_plus_errors():
-    """Test that the simplify_mul_div_plus_minus_or_minus_plus function raises the correct errors."""
+    """Test that the simplify_mul_div_plus_minus_or_minus_plus function raises 
+    the correct errors."""
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL,
         Literal("0", INTEGER_TYPE),
@@ -842,7 +961,8 @@ def test_simplify_mul_by_zero_errors():
 
 
 def test_simplify_self_assignment_errors():
-    """Test that the simplify_self_assignment function raises the correct errors."""
+    """Test that the simplify_self_assignment function raises the correct 
+    errors."""
 
     a = Reference(DataSymbol("a", INTEGER_TYPE))
     b = Reference(DataSymbol("b", INTEGER_TYPE))
@@ -888,175 +1008,349 @@ def test_simplify_node_errors():
         "'0'." in str(info.value)
     )
 
+
 ##############
 # Values
 
+
 def test_simplify_add_twice_to_mul_by_2(fortran_writer):
-    """Test that the simplify_add_twice_to_mul_by_2 function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
+    """Test that the simplify_add_twice_to_mul_by_2 function returns the 
+    expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
     add = BinaryOperation.create(BinaryOperation.Operator.ADD, x, x.copy())
     assert fortran_writer(simplify_add_twice_to_mul_by_2(add)) == "2 * x"
 
+
 def test_simplify_add_minus_minus(fortran_writer):
-    """Test that the simplify_add_minus_minus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    add = BinaryOperation.create(BinaryOperation.Operator.ADD, minus_x, minus_y)
+    """Test that the simplify_add_minus_minus function returns the 
+    expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_x, minus_y = [
+        UnaryOperation.create(UnaryOperation.Operator.MINUS, var)
+        for var in [x, y]
+    ]
+    add = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, minus_x, minus_y
+    )
     assert fortran_writer(simplify_add_minus_minus(add)) == "-(x + y)"
 
-def test_simplify_add_plus_minus_or_minus_plus(fortran_writer):
-    """Test that the simplify_add_plus_minus_or_minus_plus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    sub = BinaryOperation.create(BinaryOperation.Operator.ADD, x.copy(), minus_y.copy())
-    assert fortran_writer(simplify_add_plus_minus_or_minus_plus(sub)) == "x - y"
 
-    sub = BinaryOperation.create(BinaryOperation.Operator.ADD, minus_x.copy(), y.copy())
-    assert fortran_writer(simplify_add_plus_minus_or_minus_plus(sub)) == "y - x"
+def test_simplify_add_plus_minus_or_minus_plus(fortran_writer):
+    """Test that the simplify_add_plus_minus_or_minus_plus function returns 
+    the expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_x, minus_y = [
+        UnaryOperation.create(UnaryOperation.Operator.MINUS, var)
+        for var in [x, y]
+    ]
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, x.copy(), minus_y.copy()
+    )
+    assert (
+        fortran_writer(simplify_add_plus_minus_or_minus_plus(sub)) == "x - y"
+    )
+
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, minus_x.copy(), y.copy()
+    )
+    assert (
+        fortran_writer(simplify_add_plus_minus_or_minus_plus(sub)) == "y - x"
+    )
+
+
+def test_simplify_add_zero(fortran_writer):
+    """Test that the simplify_add_zero function returns the expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+
+    # x + 0
+    zero = Literal("0", INTEGER_TYPE)
+    x_plus_zero = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, x.copy(), zero.copy()
+    )
+    assert fortran_writer(simplify_add_zero(x_plus_zero)) == "x"
+
+    # 0 + x
+    zero_plus_x = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, zero.copy(), x.copy()
+    )
+    assert fortran_writer(simplify_add_zero(zero_plus_x)) == "x"
+
+    # 0. and 0.0
+    for zero_str in ("0.", "0.0"):
+        zero = Literal(zero_str, REAL_TYPE)
+
+        # x + 0
+        x_plus_zero = BinaryOperation.create(
+            BinaryOperation.Operator.ADD, x.copy(), zero.copy()
+        )
+        assert fortran_writer(simplify_add_zero(x_plus_zero)) == "x"
+
+        # 0 + x
+        zero_plus_x = BinaryOperation.create(
+            BinaryOperation.Operator.ADD, zero.copy(), x.copy()
+        )
+        assert fortran_writer(simplify_add_zero(zero_plus_x)) == "x"
+
 
 def test_simplify_sub_itself_to_zero(fortran_writer):
-    """Test that the simplify_sub_itself_to_zero function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
+    """Test that the simplify_sub_itself_to_zero function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
     sub = BinaryOperation.create(BinaryOperation.Operator.SUB, x, x.copy())
     assert fortran_writer(simplify_sub_itself_to_zero(sub)) == "0"
 
+
 def test_simplify_sub_minus_plus(fortran_writer):
-    """Test that the simplify_sub_minus_plus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, minus_x, y.copy())
+    """Test that the simplify_sub_minus_plus function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_x = UnaryOperation.create(UnaryOperation.Operator.MINUS, x)
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, minus_x, y.copy()
+    )
     assert fortran_writer(simplify_sub_minus_plus(sub)) == "-(x + y)"
 
+
 def test_simplify_sub_plus_minus(fortran_writer):
-    """Test that the simplify_sub_plus_minus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, x.copy(), minus_y)
+    """Test that the simplify_sub_plus_minus function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_y = UnaryOperation.create(UnaryOperation.Operator.MINUS, y)
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, x.copy(), minus_y
+    )
     assert fortran_writer(simplify_sub_plus_minus(sub)) == "x + y"
 
-def test_simplify_add_sub_factorize(fortran_writer):
-    """Test that the simplify_add_sub_factorize function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    x_times_y = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), y.copy())
-    y_times_x = BinaryOperation.create(BinaryOperation.Operator.MUL, y.copy(), x.copy())
 
-    add = BinaryOperation.create(BinaryOperation.Operator.ADD, x.copy(), y_times_x.copy())
+def test_simplify_sub_zero(fortran_writer):
+    """Test that the simplify_sub_zero function returns the expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+
+    # x - 0
+    zero = Literal("0", INTEGER_TYPE)
+    x_minus_zero = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, x.copy(), zero.copy()
+    )
+    assert fortran_writer(simplify_sub_zero(x_minus_zero)) == "x"
+
+    # 0 - x
+    zero_minus_x = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, zero.copy(), x.copy()
+    )
+    assert fortran_writer(simplify_sub_zero(zero_minus_x)) == "-x"
+
+    # 0. and 0.0
+    for zero_str in ("0.", "0.0"):
+        zero = Literal(zero_str, REAL_TYPE)
+
+        # x - 0
+        x_minus_zero = BinaryOperation.create(
+            BinaryOperation.Operator.SUB, x.copy(), zero.copy()
+        )
+        assert fortran_writer(simplify_sub_zero(x_minus_zero)) == "x"
+
+        # 0 - x
+        zero_minus_x = BinaryOperation.create(
+            BinaryOperation.Operator.SUB, zero.copy(), x.copy()
+        )
+        assert fortran_writer(simplify_sub_zero(zero_minus_x)) == "-x"
+
+
+def test_simplify_add_sub_factorize(fortran_writer):
+    """Test that the simplify_add_sub_factorize function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    x_times_y = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), y.copy()
+    )
+    y_times_x = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, y.copy(), x.copy()
+    )
+
+    add = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, x.copy(), y_times_x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(add)) == "(1 + y) * x"
 
-    add = BinaryOperation.create(BinaryOperation.Operator.ADD, x.copy(), x_times_y.copy())
+    add = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, x.copy(), x_times_y.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(add)) == "x * (1 + y)"
 
-    add = BinaryOperation.create(BinaryOperation.Operator.ADD, y_times_x.copy(), x.copy())
+    add = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, y_times_x.copy(), x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(add)) == "(y + 1) * x"
 
-    add = BinaryOperation.create(BinaryOperation.Operator.ADD, x_times_y.copy(), x.copy())
+    add = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, x_times_y.copy(), x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(add)) == "x * (y + 1)"
 
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, x.copy(), y_times_x.copy())
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, x.copy(), y_times_x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(sub)) == "(1 - y) * x"
 
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, x.copy(), x_times_y.copy())
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, x.copy(), x_times_y.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(sub)) == "x * (1 - y)"
 
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, y_times_x.copy(), x.copy())
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, y_times_x.copy(), x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(sub)) == "(y - 1) * x"
 
-    sub = BinaryOperation.create(BinaryOperation.Operator.SUB, x_times_y.copy(), x.copy())
+    sub = BinaryOperation.create(
+        BinaryOperation.Operator.SUB, x_times_y.copy(), x.copy()
+    )
     assert fortran_writer(simplify_add_sub_factorize(sub)) == "x * (y - 1)"
 
 
 def test_simplify_mul_div_minus_minus(fortran_writer):
-    """Test that the simplify_mul_div_minus_minus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, minus_x, minus_y)
+    """Test that the simplify_mul_div_minus_minus function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_x, minus_y = [
+        UnaryOperation.create(UnaryOperation.Operator.MINUS, var)
+        for var in [x, y]
+    ]
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, minus_x, minus_y
+    )
     assert fortran_writer(simplify_mul_div_minus_minus(mul)) == "x * y"
 
-    div = BinaryOperation.create(BinaryOperation.Operator.DIV, minus_x.copy(), minus_y.copy())
+    div = BinaryOperation.create(
+        BinaryOperation.Operator.DIV, minus_x.copy(), minus_y.copy()
+    )
     assert fortran_writer(simplify_mul_div_minus_minus(div)) == "x / y"
 
+
 def test_simplify_mul_div_plus_minus_or_minus_plus(fortran_writer):
-    """Test that the simplify_mul_div_plus_minus_or_minus_plus function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    y = Reference(DataSymbol('y', INTEGER_TYPE))
-    minus_x, minus_y = [UnaryOperation.create(UnaryOperation.Operator.MINUS, var) for var in [x, y]]
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, minus_x.copy(), y.copy())
-    assert fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(mul)) == "-x * y"
+    """Test that the simplify_mul_div_plus_minus_or_minus_plus function returns 
+    the expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    y = Reference(DataSymbol("y", INTEGER_TYPE))
+    minus_x, minus_y = [
+        UnaryOperation.create(UnaryOperation.Operator.MINUS, var)
+        for var in [x, y]
+    ]
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, minus_x.copy(), y.copy()
+    )
+    assert (
+        fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(mul))
+        == "-x * y"
+    )
 
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), minus_y.copy())
-    assert fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(mul)) == "-x * y"
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), minus_y.copy()
+    )
+    assert (
+        fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(mul))
+        == "-x * y"
+    )
 
-    div = BinaryOperation.create(BinaryOperation.Operator.DIV, minus_x.copy(), y.copy())
-    assert fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(div)) == "-x / y"
+    div = BinaryOperation.create(
+        BinaryOperation.Operator.DIV, minus_x.copy(), y.copy()
+    )
+    assert (
+        fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(div))
+        == "-x / y"
+    )
 
-    div = BinaryOperation.create(BinaryOperation.Operator.DIV, x.copy(), minus_y.copy())
-    assert fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(div)) == "-x / y"
+    div = BinaryOperation.create(
+        BinaryOperation.Operator.DIV, x.copy(), minus_y.copy()
+    )
+    assert (
+        fortran_writer(simplify_mul_div_plus_minus_or_minus_plus(div))
+        == "-x / y"
+    )
+
 
 def test_simplify_mul_by_one(fortran_writer):
-    """Test that the simplify_mul_by_one function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    one = Literal('1', INTEGER_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), one.copy())
+    """Test that the simplify_mul_by_one function returns the expected result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    one = Literal("1", INTEGER_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), one.copy()
+    )
     assert fortran_writer(simplify_mul_by_one(mul)) == "x"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
-    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
-
-    one = Literal('1.', REAL_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), one.copy())
-    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, one.copy(), x.copy()
+    )
     assert fortran_writer(simplify_mul_by_one(mul)) == "x"
 
-    one = Literal('1.0', REAL_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), one.copy())
+    one = Literal("1.", REAL_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), one.copy()
+    )
     assert fortran_writer(simplify_mul_by_one(mul)) == "x"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, one.copy(), x.copy())
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, one.copy(), x.copy()
+    )
     assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+
+    one = Literal("1.0", REAL_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), one.copy()
+    )
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, one.copy(), x.copy()
+    )
+    assert fortran_writer(simplify_mul_by_one(mul)) == "x"
+
 
 def test_simplify_mul_by_zero(fortran_writer):
-    """Test that the simplify_mul_by_zero function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
-    zero = Literal('0', INTEGER_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), zero.copy())
+    """Test that the simplify_mul_by_zero function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
+    zero = Literal("0", INTEGER_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), zero.copy()
+    )
     assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, zero.copy(), x.copy())
-    assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
-
-    zero = Literal('0.0', REAL_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), zero.copy())
-    assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, zero.copy(), x.copy())
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, zero.copy(), x.copy()
+    )
     assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
 
-    zero = Literal('0.', REAL_TYPE)
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, x.copy(), zero.copy())
+    zero = Literal("0.0", REAL_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), zero.copy()
+    )
     assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
-    mul = BinaryOperation.create(BinaryOperation.Operator.MUL, zero.copy(), x.copy())
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, zero.copy(), x.copy()
+    )
     assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
+
+    zero = Literal("0.", REAL_TYPE)
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, x.copy(), zero.copy()
+    )
+    assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
+    mul = BinaryOperation.create(
+        BinaryOperation.Operator.MUL, zero.copy(), x.copy()
+    )
+    assert fortran_writer(simplify_mul_by_zero(mul)) == "0"
+
 
 def test_simplify_self_assignment():
-    """Test that the simplify_self_assignment function returns the expected result.
-    """
-    x = Reference(DataSymbol('x', INTEGER_TYPE))
+    """Test that the simplify_self_assignment function returns the expected 
+    result."""
+    x = Reference(DataSymbol("x", INTEGER_TYPE))
     assignment = Assignment.create(x, x.copy())
     assert simplify_self_assignment(assignment) is None
+
 
 if __name__ == "__main__":
     print("Testing simplify")
@@ -1077,9 +1371,11 @@ if __name__ == "__main__":
     test_simplify_binary_operation_errors()
     test_simplify_add_minus_minus_errors()
     test_simplify_add_plus_minus_or_minus_plus_errors()
+    test_simplify_add_zero_errors()
     test_simplify_sub_itself_to_zero_errors()
     test_simplify_sub_minus_plus_errors()
     test_simplify_sub_plus_minus_errors()
+    test_simplify_sub_zero_errors()
     test_simplify_add_sub_factorize_errors()
     test_simplify_mul_div_minus_minus_errors()
     test_simplify_mul_div_plus_minus_or_minus_plus_errors()
@@ -1095,9 +1391,11 @@ if __name__ == "__main__":
     test_simplify_add_twice_to_mul_by_2(fortran_writer)
     test_simplify_add_minus_minus(fortran_writer)
     test_simplify_add_plus_minus_or_minus_plus(fortran_writer)
+    test_simplify_add_zero(fortran_writer)
     test_simplify_sub_itself_to_zero(fortran_writer)
     test_simplify_sub_minus_plus(fortran_writer)
     test_simplify_sub_plus_minus(fortran_writer)
+    test_simplify_sub_zero(fortran_writer)
     test_simplify_add_sub_factorize(fortran_writer)
     test_simplify_mul_div_minus_minus(fortran_writer)
     test_simplify_mul_div_plus_minus_or_minus_plus(fortran_writer)

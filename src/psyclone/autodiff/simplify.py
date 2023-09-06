@@ -48,6 +48,9 @@ from psyclone.psyir.nodes import (
 )
 from psyclone.psyir.symbols import INTEGER_TYPE
 
+ZERO_LITERAL_VALUES = ("0", "0.", "0.0")
+ONE_LITERAL_VALUES = ("1", "1.", "1.0")
+
 
 def _typecheck_binary_operation(binary_operation):
     if not isinstance(binary_operation, BinaryOperation):
@@ -177,6 +180,11 @@ def simplify_add(binary_operation):
             operand.operator is UnaryOperation.Operator.MINUS
         ):
             return simplify_add_plus_minus_or_minus_plus(binary_operation)
+
+        if isinstance(operand, Literal) and (
+            operand.value in ZERO_LITERAL_VALUES
+        ):
+            return simplify_add_zero(binary_operation)
 
     return binary_operation
 
@@ -324,6 +332,36 @@ def simplify_add_plus_minus_or_minus_plus(binary_operation):
             )
 
 
+# 0 + x => x
+# x + 0 => x
+def simplify_add_zero(binary_operation):
+    """Simplifies a binary operation with operator ADD, one operand \
+    being of type Literal with value '0'.
+
+    :param binary_operation: operation to simplify.
+    :type binary_operation: :py:class:`psyclone.psyir.nodes.BinaryOperation`
+
+    :raises TypeError: if binary_operation is of the wrong type.
+    :raises ValueError: if the operator of binary_operation is not ADD.
+    :raises ValueError: if the operands are not as described.
+
+    :return: the simplified operation.
+    :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+    """
+    _typecheck_add(binary_operation)
+
+    _valuecheck_at_least_one_literal_operand(
+        binary_operation, ZERO_LITERAL_VALUES
+    )
+
+    for i, operand in enumerate(binary_operation.children):
+        other_operand = binary_operation.children[i - 1]
+        if isinstance(operand, Literal) and (
+            operand.value in ZERO_LITERAL_VALUES
+        ):
+            return other_operand.copy()
+
+
 def _typecheck_sub(binary_operation):
     _typecheck_binary_operation(binary_operation)
     if binary_operation.operator is not BinaryOperation.Operator.SUB:
@@ -371,6 +409,12 @@ def simplify_sub(binary_operation):
         is UnaryOperation.Operator.MINUS
     ):
         return simplify_sub_plus_minus(binary_operation)
+
+    for operand in binary_operation.children:
+        if isinstance(operand, Literal) and (
+            operand.value in ZERO_LITERAL_VALUES
+        ):
+            return simplify_sub_zero(binary_operation)
 
     return binary_operation
 
@@ -483,6 +527,39 @@ def simplify_sub_plus_minus(binary_operation):
         binary_operation.children[0].copy(),
         binary_operation.children[1].children[0].copy(),
     )
+
+# 0 - x => -x
+# x - 0 => x
+def simplify_sub_zero(binary_operation):
+    """Simplifies a binary operation with operator SUB, one operand \
+    being of type Literal with value '0'.
+
+    :param binary_operation: operation to simplify.
+    :type binary_operation: :py:class:`psyclone.psyir.nodes.BinaryOperation`
+
+    :raises TypeError: if binary_operation is of the wrong type.
+    :raises ValueError: if the operator of binary_operation is not SUB.
+    :raises ValueError: if the operands are not as described.
+
+    :return: the simplified operation.
+    :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+    """
+    _typecheck_sub(binary_operation)
+
+    _valuecheck_at_least_one_literal_operand(
+        binary_operation, ZERO_LITERAL_VALUES
+    )
+
+    for i, operand in enumerate(binary_operation.children):
+        other_operand = binary_operation.children[i - 1]
+        if isinstance(operand, Literal) and (
+            operand.value in ZERO_LITERAL_VALUES
+        ):
+            if i == 0:
+                return UnaryOperation.create(UnaryOperation.Operator.MINUS,
+                                             other_operand.copy())
+            else:
+                return other_operand.copy()
 
 
 def _typecheck_add_sub(binary_operation):
@@ -667,9 +744,9 @@ def simplify_mul_div(binary_operation):
     ):
         for operand in binary_operation.children:
             if isinstance(operand, Literal):
-                if operand.value in ("1", "1.", "1.0"):
+                if operand.value in ONE_LITERAL_VALUES:
                     return simplify_mul_by_one(binary_operation)
-                if operand.value in ("0", "0.0", "0."):
+                if operand.value in ZERO_LITERAL_VALUES:
                     return simplify_mul_by_zero(binary_operation)
 
     # (-x) */ (-y) => x */ y
@@ -860,16 +937,16 @@ def _typecheck_at_least_one_literal_operand(binary_operation):
 
 def _valuecheck_at_least_one_literal_operand(binary_operation, values):
     _typecheck_binary_operation(binary_operation)
-    if not isinstance(values, list):
+    if not isinstance(values, (list, tuple)):
         raise TypeError(
-            f"'values' argument should be of type 'list[str]' but "
-            f"found '{type(values).__name__}'."
+            f"'values' argument should be of type 'list[str]' or 'tuple[str]' "
+            f"but found '{type(values).__name__}'."
         )
     for value in values:
         if not isinstance(value, str):
             raise TypeError(
-                f"'values' argument should be of type 'list[str]' "
-                f"but found an element of type "
+                f"'values' argument should be of type 'list[str]' or "
+                f"'tuple[str]' but found an element of type "
                 f"'{type(value).__name__}'."
             )
 
@@ -916,11 +993,13 @@ def simplify_mul_by_one(binary_operation):
     _typecheck_mul_div(binary_operation)
     _typecheck_at_least_one_literal_operand(binary_operation)
 
-    _valuecheck_at_least_one_literal_operand(binary_operation, ["1", "1.", "1.0"])
+    _valuecheck_at_least_one_literal_operand(
+        binary_operation, ONE_LITERAL_VALUES
+    )
 
     for i, operand in enumerate(binary_operation.children):
         if isinstance(operand, Literal):
-            if operand.value in ["1", "1.", "1.0"]:
+            if operand.value in ONE_LITERAL_VALUES:
                 return binary_operation.children[1 - i].copy()
 
     raise ValueError(
@@ -949,12 +1028,12 @@ def simplify_mul_by_zero(binary_operation):
     _typecheck_at_least_one_literal_operand(binary_operation)
 
     _valuecheck_at_least_one_literal_operand(
-        binary_operation, ["0", "0.", "0.0"]
+        binary_operation, ZERO_LITERAL_VALUES
     )
 
     for operand in binary_operation.children:
         if isinstance(operand, Literal):
-            if operand.value in ("0", "0.0", "0."):
+            if operand.value in ZERO_LITERAL_VALUES:
                 return Literal("0", INTEGER_TYPE)
 
     raise ValueError(
