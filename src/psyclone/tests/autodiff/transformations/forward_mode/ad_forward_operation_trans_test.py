@@ -198,7 +198,7 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(cos))
-        == f"(-SIN(var)) * {PRE}var{POST}"
+        == f"-SIN(var) * {PRE}var{POST}"
     )
     assert (
         fortran_writer(ad_operation_trans.differentiate_unary(sin))
