@@ -84,13 +84,13 @@ class ADForwardCallTrans(ADCallTrans):
         obtained by applying forward-mode automatic differentiation \
         to the call arguments.
 
-        Options:
-        - bool 'jacobian': whether to generate the Jacobian routine. \
+        | Options:
+        | - bool 'jacobian': whether to generate the Jacobian routine. \
                            Defaults to False.
-        - bool 'verbose' : toggles explanatory comments. Defaults to False.
-        - bool 'simplify': True to apply simplifications after applying AD \
+        | - bool 'verbose' : toggles explanatory comments. Defaults to False.
+        | - bool 'simplify': True to apply simplifications after applying AD \
                            transformations. Defaults to True.
-        - int 'simplify_n_times': number of time to apply simplification \
+        | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
 
         :param assignment: assignment to be transformed.

@@ -253,7 +253,7 @@ class SubroutineGenerator(object):
                         ]
         :param access: access of the new argument, \
                        defaults to `ArgumentInterface.Access.UNKNOWN`.
-        :type access: Optional[element from 
+        :type access: Optional[element from \
         :py:class:`psyclone.psyir.symbols.interfaces.ArgumentInterface.Access`]
 
         :raises TypeError: if name is not a string.

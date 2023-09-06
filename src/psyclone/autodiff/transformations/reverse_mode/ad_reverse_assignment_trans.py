@@ -75,8 +75,8 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         - it increments the LHS adjoint due to its RHS occurences if this was \
             an iterative assignment.
             
-        Options:
-        - bool 'verbose' : toggles preceding and inline comments around the \
+        | Options:
+        | - bool 'verbose' : toggles preceding and inline comments around the \
                            adjoining of the assignment in the returning motion.
 
         :param assignment: node to be transformed.

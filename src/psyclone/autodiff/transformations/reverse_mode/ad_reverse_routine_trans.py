@@ -390,15 +390,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         routines that correspond to automatic differentiation of this Routine \
         using reverse-mode.
 
-        Options:
-        - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
+        | Options:
+        | - bool 'jacobian': whether to generate the Jacobian routine. Defaults\
                            to False.
-        - bool 'verbose' : toggles explanatory comments. Defaults to False.
-        - bool 'simplify': True to apply simplifications after applying AD \
+        | - bool 'verbose' : toggles explanatory comments. Defaults to False.
+        | - bool 'simplify': True to apply simplifications after applying AD \
                            transformations. Defaults to True.
-        - int 'simplify_n_times': number of time to apply simplification \
+        | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        - bool 'inline_operation_adjoints': True to inline all possible \
+        | - bool 'inline_operation_adjoints': True to inline all possible \
                                             operation adjoints definitions. \
                                             Defaults to True.
 
@@ -853,11 +853,11 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """Apply postprocessing steps (simplification, operation adjoints 
         substitution) to the 'routine' argument.
 
-        Options:
-        - bool 'simplify': True to apply simplifications. Defaults to True.
-        - int 'simplify_n_times': number of time to apply simplification \
+        | Options:
+        | - bool 'simplify': True to apply simplifications. Defaults to True.
+        | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        - bool 'inline_operation_adjoints': True to inline all possible \
+        | - bool 'inline_operation_adjoints': True to inline all possible \
                                             operation adjoints definitions. \
                                             Defaults to True.
 
@@ -893,22 +893,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """Record and restore the last values of non-argument variables \
         using the value_tape.
         Indeed these are not returned by the call but could affect the results.
-        Consider eg.
-        ```subroutine foo(a,b)
-            implicit none
-            double precision, intent(in) :: a
-            double precision, intent(out) :: b
-            double precision :: c
-
-            c = 2
-            ! here the prevalue 2 will be value_taped for c
-            c = 4
-            b = c * a 
-            ! db/da is evidently 4, so the last value of c needs to be taped
-        end subroutine foo```
 
         :param options: a dictionary with options for transformations, \
-            defaults to None.
+                        defaults to None.
         :type options: Optional[Dict[Str, Any]]
         """
         # pylint: disable=protected-access

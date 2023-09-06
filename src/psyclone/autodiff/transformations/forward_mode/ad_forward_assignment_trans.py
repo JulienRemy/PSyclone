@@ -55,8 +55,8 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         If the RHS is an Operation node, `apply` applies an \
         `ADForwardOperationTrans` to it.
             
-        Options:
-        - bool 'verbose' : toggles preceding and inline comments around the \
+        | Options:
+        | - bool 'verbose' : toggles preceding and inline comments around the \
             derivative of the assignment in the transformed motion.
 
         :param assignment: assignment to be transformed.

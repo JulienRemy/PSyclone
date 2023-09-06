@@ -776,11 +776,13 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
     def postprocess(self, routine, options=None):
         """Apply postprocessing steps (simplification, substitution) to the 
         'routine' argument.
+
         :param routine: routine to postprocess.
         :type routine: py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
+
         """
 
     def add_to_argument_list(self, symbol_table, argument, after=None):
@@ -793,11 +795,12 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
         :param argument: argument symbol to add.
         :type argument: :py:class:`psyclone.psyir.symbols.DataSymbol`
-        :param after: optional argument symbol after which to insert, 
+        :param after: optional argument symbol after which to insert, \
                       defaults to None.
-        :type after: Optional[Union[:py:class:`psyclone.psyir.symbols.
-                                               DataSymbol`, 
+        :type after: Optional[Union[:py:class:`psyclone.psyir.symbols. \
+                                               DataSymbol`, \
                                     `NoneType`]]
+
         :raises TypeError: if symbol_table is of the wrong type.
         :raises TypeError: if argument is of the wrong type.
         :raises TypeError: if argument's interface is not an ArgumentInterface.
@@ -853,8 +856,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         """Creates the Jacobian routine using automatic \
         differentation for the transformed routine and lists of \
         dependent and independent variables names.
-        Options:
-        - bool 'verbose' : preceding comment for the routine.
+        | Options:
+        | - bool 'verbose' : preceding comment for the routine.
 
         :param mode: mode to use. Can be either 'forward' or 'reverse'.
         :type mode: str
