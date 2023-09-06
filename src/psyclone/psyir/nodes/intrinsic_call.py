@@ -33,7 +33,7 @@
 # -----------------------------------------------------------------------------
 # Author: A. R. Porter, STFC Daresbury Lab
 # Modified: R. W. Ford, STFC Daresbury Lab
-#           J. Remy, Inria
+#           J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 ''' This module contains the IntrinsicCall node implementation.'''
@@ -151,7 +151,7 @@ class IntrinsicCall(Call):
                               IntrinsicCall.Intrinsic.DEALLOCATE):
             raise NotImplementedError("Datatypes of ALLOCATE and "
                                       "DEALLOCATE are not implemented.")
-        
+
         # Always returns REAL*4 using gfortran
         if self.intrinsic is IntrinsicCall.Intrinsic.RANDOM_NUMBER:
             return REAL_TYPE
@@ -160,7 +160,7 @@ class IntrinsicCall(Call):
         if self.intrinsic in (IntrinsicCall.Intrinsic.HUGE,
                               IntrinsicCall.Intrinsic.TINY):
             return self.children[0].datatype
-        
+
         if self.intrinsic in (IntrinsicCall.Intrinsic.MINVAL,
                               IntrinsicCall.Intrinsic.MAXVAL,
                               IntrinsicCall.Intrinsic.SUM):
@@ -170,7 +170,7 @@ class IntrinsicCall(Call):
                 or (len(self.children) == 1):
                 return ScalarType(self.children[0].datatype.intrinsic,
                                   self.children[0].datatype.precision)
-            
+
             # Two or three arguments, the array and DIM and/or MASK
             # Second argument is DIM if it's scalar
             if isinstance(self.children[1].datatype, ScalarType):
@@ -187,9 +187,8 @@ class IntrinsicCall(Call):
                 return ArrayType(scalar_type, shape)
 
             # Second argument is MASK
-            else:
-                return ScalarType(self.children[0].datatype.intrinsic,
-                                self.children[0].datatype.precision)
+            return ScalarType(self.children[0].datatype.intrinsic,
+                            self.children[0].datatype.precision)
 
     @property
     def intrinsic(self):

@@ -34,23 +34,29 @@
 # Authors R. W. Ford, A. R. Porter and S. Siso, STFC Daresbury Lab
 #         I. Kavcic, Met Office
 #         J. Henrichs, Bureau of Meteorology
+# Modified: J. Remy, Université Grenoble Alpes, Inria
 # -----------------------------------------------------------------------------
 
 '''Performs pytest tests on the Operation PSyIR node and its
 sub-classes.
 
 '''
+from itertools import product
+
 import pytest
+
+from psyclone.tests.utilities import Compile
 
 from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import UnaryOperation, BinaryOperation, \
-    NaryOperation, Literal, Reference, Return
+    NaryOperation, Literal, Reference, Return, Routine, FileContainer, Call
 from psyclone.psyir.symbols import DataSymbol, INTEGER_SINGLE_TYPE, \
-    REAL_SINGLE_TYPE
+    REAL_SINGLE_TYPE, ScalarType, ArrayType
 from psyclone.errors import GenerationError
 from psyclone.psyir.backend.fortran import FortranWriter
 from psyclone.tests.utilities import check_links
 from psyclone.psyir.nodes import Assignment, colored
+from psyclone.psyir.symbols.interfaces import ArgumentInterface, StaticInterface
 
 
 # Test Operation class. These are mostly covered by the subclass tests.
@@ -960,12 +966,7 @@ def test_reference_accesses_bounds(operator, fortran_reader):
                               options={"COLLECT-ARRAY-SHAPE-READS": True})
     assert str(vai) == "a: READ, b: READ, n: WRITE"
 
-
-from itertools import product
-from subprocess import run
-from psyclone.psyir.nodes import Routine, Reference, FileContainer, Call
-from psyclone.psyir.symbols import DataSymbol, ScalarType, ArrayType
-from psyclone.psyir.symbols.interfaces import ArgumentInterface, StaticInterface
+# Internal functions for testing datatypes
 
 def _initialize_scalar_kinds():
     intrinsics = ['INTEGER', 'BOOLEAN', 'REAL']
@@ -977,7 +978,8 @@ def _initialize_scalar_kinds():
     for t in intrinsics:
         for k in precisions:
             if isinstance(k, str):
-                scalar_type = ScalarType(ScalarType.Intrinsic[t], ScalarType.Precision[k])
+                scalar_type = ScalarType(
+                    ScalarType.Intrinsic[t], ScalarType.Precision[k])
             else:
                 scalar_type = ScalarType(ScalarType.Intrinsic[t], k)
 
@@ -990,11 +992,13 @@ def _initialize_scalar_kinds():
 
     return integer_kinds, real_kinds, boolean_kinds
 
+
 def _initialize_type_checkers(container, array_shape, arrays_only=False):
     integer_kinds, real_kinds, boolean_kinds = _initialize_scalar_kinds()
     scalar_datatypes = integer_kinds + real_kinds + boolean_kinds
 
-    array_datatypes = [ArrayType(scalar_type, array_shape) for scalar_type in scalar_datatypes]
+    array_datatypes = [ArrayType(scalar_type, array_shape)
+                       for scalar_type in scalar_datatypes]
 
     routine_symbols = {}
 
@@ -1021,16 +1025,18 @@ def _initialize_type_checkers(container, array_shape, arrays_only=False):
         routine = Routine(name)
         routine.symbol_table._argument_list.append(arg)
         routine.symbol_table.add(arg)
-    
+
         container.addchild(routine)
-        
+
         if datatype in scalar_datatypes:
             key = "scalar"
         else:
             key = dim_str
-        routine_symbols[(datatype.intrinsic, datatype.precision, key)] = routine.symbol_table.lookup_with_tag("own_routine_symbol")
+        routine_symbols[(datatype.intrinsic, datatype.precision, key)] \
+            = routine.symbol_table.lookup_with_tag("own_routine_symbol")
 
     return container, routine_symbols
+
 
 def _initialize_datasymbol(datatype):
     if datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
@@ -1044,42 +1050,39 @@ def _initialize_datasymbol(datatype):
         name = f"ref_{datatype.intrinsic.name}_{datatype.precision}"
     else:
         name = f"ref_{datatype.intrinsic.name}_{datatype.precision.name}"
-    
+
     if isinstance(datatype, ArrayType):
         name += f"_{datatype.shape[0].upper.value}"
         if len(datatype.shape) == 2:
             name += f"x{datatype.shape[1].upper.value}"
 
-    return DataSymbol(name, datatype, initial_value=initial_value, interface=StaticInterface())
+    return DataSymbol(name, datatype, initial_value=initial_value, 
+                      interface=StaticInterface())
 
-    
-def _write_and_compile(fortran_writer, container, compiler_cmd = "gfortran"):
-    with open(f"{container.name}.f90", 'w') as file:
-        fortran = fortran_writer(container)
-        #print(fortran)
-        file.write(fortran)
-        
-    run([compiler_cmd, f"{container.name}.f90", "-o", container.name], check=True)
-    run(f"./{container.name}", check=True)
 
-def test_unaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
+def test_unaryoperation_datatypes(fortran_writer, tmpdir):
+    """Test by compiling that the actual datatypes of written UnaryOperation 
+    nodes are those expected.
+    """
     container = FileContainer("unaryoperation")
 
-    array_shape = [2,3]
+    array_shape = [2, 3]
 
-    container, routine_symbols = _initialize_type_checkers(container, array_shape)
+    container, routine_symbols = _initialize_type_checkers(
+        container, array_shape)
 
     integer_kinds, real_kinds, boolean_kinds = _initialize_scalar_kinds()
     scalar_datatypes = integer_kinds + real_kinds + boolean_kinds
 
-    array_datatypes = [ArrayType(scalar_type, array_shape) for scalar_type in scalar_datatypes]
+    array_datatypes = [ArrayType(scalar_type, array_shape)
+                       for scalar_type in scalar_datatypes]
 
     program = Routine("unaryoperation", is_program=True)
     container.addchild(program)
 
     for datatype in scalar_datatypes + array_datatypes:
         sym = _initialize_datasymbol(datatype)
-        
+
         program.symbol_table.add(sym)
 
         if datatype in scalar_datatypes:
@@ -1089,48 +1092,57 @@ def test_unaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
 
         # CEIL, FLOOT, NINT : REAL => default INTEGER
         if datatype.intrinsic is ScalarType.Intrinsic.REAL:
-            for op in (UnaryOperation.Operator.CEIL, 
-                       UnaryOperation.Operator.FLOOR, 
+            for op in (UnaryOperation.Operator.CEIL,
+                       UnaryOperation.Operator.FLOOR,
                        UnaryOperation.Operator.NINT):
 
                 operation = UnaryOperation.create(op, Reference(sym))
 
-                assert (operation.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
-                assert (operation.datatype.precision is ScalarType.Precision.UNDEFINED)
+                assert (operation.datatype.intrinsic
+                        is ScalarType.Intrinsic.INTEGER)
+                assert (
+                    operation.datatype.precision
+                    is ScalarType.Precision.UNDEFINED)
                 assert (type(operation.datatype) is type(datatype))
                 if datatype in array_datatypes:
                     assert (operation.datatype.shape == datatype.shape)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                     operation.datatype.precision,
-                                                     key)], 
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     key)],
+                    [operation])
+
                 program.addchild(check)
-        
+
         # INT :
         # - INTEGER, REAL => default INTEGER
-        if datatype.intrinsic in (ScalarType.Intrinsic.INTEGER, ScalarType.Intrinsic.REAL):
-            operation = UnaryOperation.create(UnaryOperation.Operator.INT, 
+        if datatype.intrinsic in (ScalarType.Intrinsic.INTEGER,
+                                  ScalarType.Intrinsic.REAL):
+            operation = UnaryOperation.create(UnaryOperation.Operator.INT,
                                               Reference(sym))
-            
-            assert (operation.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
-            assert (operation.datatype.precision is ScalarType.Precision.UNDEFINED)
+
+            assert (operation.datatype.intrinsic is
+                    ScalarType.Intrinsic.INTEGER)
+            assert (operation.datatype.precision is
+                    ScalarType.Precision.UNDEFINED)
             assert (type(operation.datatype) is type(datatype))
             if datatype in array_datatypes:
-                    assert (operation.datatype.shape == datatype.shape)
+                assert (operation.datatype.shape == datatype.shape)
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                 operation.datatype.precision,
-                                                 key)], 
-                                [operation])
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 key)],
+                [operation])
             program.addchild(check)
 
         # MINUS, PLUS, ABS:
         # - INTEGER*k => INTEGER*k
         # - REAL*k => REAL*k
-        if datatype.intrinsic in (ScalarType.Intrinsic.INTEGER, ScalarType.Intrinsic.REAL):
-            for op in (UnaryOperation.Operator.MINUS, 
+        if datatype.intrinsic in (ScalarType.Intrinsic.INTEGER,
+                                  ScalarType.Intrinsic.REAL):
+            for op in (UnaryOperation.Operator.MINUS,
                        UnaryOperation.Operator.PLUS,
                        UnaryOperation.Operator.ABS):
 
@@ -1142,16 +1154,18 @@ def test_unaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
                 if datatype in array_datatypes:
                     assert (operation.datatype.shape == datatype.shape)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                     operation.datatype.precision,
-                                                     key)], 
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     key)],
+                    [operation])
+
                 program.addchild(check)
 
-        # SQRT, EXP, LOG, LOG10, COS, SIN, TAN, ACOS, ASIN, ATAN : REAL*k => REAL*k
+        # SQRT, EXP, LOG, LOG10, COS, SIN, TAN, ACOS, ASIN, ATAN :
+        # REAL*k => REAL*k
         if datatype.intrinsic is ScalarType.Intrinsic.REAL:
-            for op in (UnaryOperation.Operator.SQRT, 
+            for op in (UnaryOperation.Operator.SQRT,
                        UnaryOperation.Operator.EXP,
                        UnaryOperation.Operator.LOG,
                        UnaryOperation.Operator.LOG10,
@@ -1170,16 +1184,17 @@ def test_unaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
                 if datatype in array_datatypes:
                     assert (operation.datatype.shape == datatype.shape)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                     operation.datatype.precision,
-                                                     key)], 
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     key)],
+                    [operation])
+
                 program.addchild(check)
 
         # NOT : LOGICAL*K => LOGICAL*K
         if datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
-            operation = UnaryOperation.create(UnaryOperation.Operator.NOT, 
+            operation = UnaryOperation.create(UnaryOperation.Operator.NOT,
                                               Reference(sym))
 
             assert (operation.datatype.intrinsic is datatype.intrinsic)
@@ -1188,62 +1203,78 @@ def test_unaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
             if datatype in array_datatypes:
                 assert (operation.datatype.shape == datatype.shape)
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                 operation.datatype.precision,
-                                                 key)], 
-                                [operation])
-            
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 key)],
+                [operation])
+
             program.addchild(check)
 
         # TRANSPOSE : type_kind_ixj => type_kind_jxi
         if datatype in array_datatypes:
-            transpose_datatype = ArrayType(ScalarType(datatype.intrinsic, datatype.precision), datatype.shape[::-1])
+            transpose_datatype = ArrayType(ScalarType(
+                datatype.intrinsic, datatype.precision), datatype.shape[::-1])
             transpose_sym = _initialize_datasymbol(transpose_datatype)
 
-            new_sym = DataSymbol(transpose_sym.name + "_T", INTEGER_SINGLE_TYPE)
+            new_sym = DataSymbol(transpose_sym.name +
+                                 "_T", INTEGER_SINGLE_TYPE)
             new_sym.copy_properties(transpose_sym)
 
             program.symbol_table.add(new_sym)
 
-            operation = UnaryOperation.create(UnaryOperation.Operator.TRANSPOSE, 
+            operation = UnaryOperation.create(UnaryOperation.Operator.TRANSPOSE,
                                               Reference(new_sym))
-            
+
             assert (operation.datatype.intrinsic is datatype.intrinsic)
             assert (operation.datatype.precision is datatype.precision)
             assert (type(operation.datatype) is type(datatype))
             assert (operation.datatype.shape == datatype.shape)
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic, 
-                                                 operation.datatype.precision,
-                                                 key)], 
-                                [operation])
-            
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 key)],
+                [operation])
+
             program.addchild(check)
 
-    _write_and_compile(fortran_writer, container, compiler_cmd)
+    source = fortran_writer(container)
+    Compile(tmpdir).string_compiles(source)
 
-def test_binaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
+
+def test_binaryoperation_datatypes(fortran_writer, tmpdir):
+    """Test by compiling that the actual datatypes of written BinaryOperation 
+    nodes are those expected.
+    """
     container = FileContainer("binaryoperation")
 
-    array_shape = [2,3]
+    array_shape = [2, 3]
     vector_shape = [3]
 
-    container, routine_symbols = _initialize_type_checkers(container, array_shape)
+    container, routine_symbols = _initialize_type_checkers(
+        container, array_shape)
     # For 2x3 @ 3x2
-    container, other_routine_symbols = _initialize_type_checkers(container, [array_shape[0], array_shape[0]], arrays_only=True)
+    container, other_routine_symbols = _initialize_type_checkers(
+        container, [array_shape[0], array_shape[0]], arrays_only=True)
     routine_symbols = {**routine_symbols, **other_routine_symbols}
     # For 2x3 @ 3
-    container, other_routine_symbols = _initialize_type_checkers(container, [array_shape[0]], arrays_only=True)
+    container, other_routine_symbols = _initialize_type_checkers(
+        container, [array_shape[0]], arrays_only=True)
     routine_symbols = {**routine_symbols, **other_routine_symbols}
 
     integer_kinds, real_kinds, boolean_kinds = _initialize_scalar_kinds()
     scalar_datatypes = integer_kinds + real_kinds + boolean_kinds
 
-    array_datatypes1 = [ArrayType(scalar_type, array_shape) for scalar_type in scalar_datatypes]
-    vector_datatypes1 = [ArrayType(scalar_type, vector_shape) for scalar_type in scalar_datatypes]
+    array_datatypes1 = [ArrayType(scalar_type, array_shape)
+                        for scalar_type in scalar_datatypes]
+    vector_datatypes1 = [ArrayType(scalar_type, vector_shape)
+                         for scalar_type in scalar_datatypes]
     # Transposed matrices
-    array_datatypes2 = [ArrayType(scalar_type, array_shape[::-1]) for scalar_type in scalar_datatypes]
-    vector_datatypes2 = [ArrayType(scalar_type, vector_shape) for scalar_type in scalar_datatypes]
+    array_datatypes2 = [ArrayType(scalar_type, array_shape[::-1])
+                        for scalar_type in scalar_datatypes]
+    vector_datatypes2 = [ArrayType(scalar_type, vector_shape)
+                         for scalar_type in scalar_datatypes]
 
     datatypes1 = scalar_datatypes + array_datatypes1 + vector_datatypes1
     datatypes2 = scalar_datatypes + array_datatypes2 + vector_datatypes2
@@ -1254,7 +1285,7 @@ def test_binaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
     for datatype1, datatype2 in product(datatypes1, datatypes2):
         sym1 = _initialize_datasymbol(datatype1)
         sym2 = _initialize_datasymbol(datatype2)
-        
+
         for sym in (sym1, sym2):
             if sym.name not in program.symbol_table:
                 program.symbol_table.add(sym)
@@ -1275,231 +1306,268 @@ def test_binaryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
 
         # SIZE, LBOUND, UBOUND : (array, INTEGER) => default INTEGER
         if datatype1 in array_datatypes1 \
-            and (datatype2 in scalar_datatypes \
+            and (datatype2 in scalar_datatypes
                  and datatype2.intrinsic is ScalarType.Intrinsic.INTEGER):
-            for op in (BinaryOperation.Operator.SIZE, 
-                       BinaryOperation.Operator.LBOUND, 
+            for op in (BinaryOperation.Operator.SIZE,
+                       BinaryOperation.Operator.LBOUND,
                        BinaryOperation.Operator.UBOUND):
-                
-                operation = BinaryOperation.create(op, Reference(sym1), Reference(sym2))
 
-                assert (operation.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
-                assert (operation.datatype.precision is ScalarType.Precision.UNDEFINED)
+                operation = BinaryOperation.create(
+                    op, Reference(sym1), Reference(sym2))
+
+                assert (operation.datatype.intrinsic 
+                        is ScalarType.Intrinsic.INTEGER)
+                assert (
+                    operation.datatype.precision 
+                    is ScalarType.Precision.UNDEFINED)
                 assert isinstance(operation.datatype, ScalarType)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                     operation.datatype.precision,
-                                                     "scalar")],
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     "scalar")],
+                    [operation])
+
                 program.addchild(check)
 
         # CAST : (arg, scalar_type_kind) => scalar_type_kind
         if datatype2 in scalar_datatypes:
             operation = BinaryOperation.create(BinaryOperation.Operator.CAST,
                                                Reference(sym1), Reference(sym2))
-            
+
             assert (operation.datatype.intrinsic is datatype2.intrinsic)
             assert (operation.datatype.precision is datatype2.precision)
             assert isinstance(operation.datatype, ScalarType)
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                 operation.datatype.precision,
-                                                 "scalar")],
-                                [operation])
-            
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 "scalar")],
+                [operation])
+
             program.addchild(check)
 
         # MATMUL : (array_ixj, array_jxk) => array_ixk
         if datatype1 in array_datatypes1 and datatype2 in array_datatypes2 \
-            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN) \
+            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN)
                      ^ (datatype2.intrinsic is ScalarType.Intrinsic.BOOLEAN)):
             operation = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
                                                Reference(sym1), Reference(sym2))
-            
-            assert isinstance(operation.datatype, ArrayType)
-            assert (operation.datatype.shape == [datatype1.shape[0], datatype2.shape[1]])
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                 operation.datatype.precision,
-                                                 f"{operation.datatype.shape[0].upper.value}x{operation.datatype.shape[1].upper.value}")],
-                                [operation])
-            
+            assert isinstance(operation.datatype, ArrayType)
+            assert (operation.datatype.shape == [
+                    datatype1.shape[0], datatype2.shape[1]])
+
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 f"{operation.datatype.shape[0].upper.value}"
+                                 f"x"
+                                 f"{operation.datatype.shape[1].upper.value}")],
+                [operation])
+
             program.addchild(check)
 
         # MATMUL : (array_ixj, vector_j) => vector_i
         if datatype1 in array_datatypes1 and datatype2 in vector_datatypes2 \
-            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN) \
+            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN)
                      ^ (datatype2.intrinsic is ScalarType.Intrinsic.BOOLEAN)):
             operation = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
                                                Reference(sym1), Reference(sym2))
-            
+
             assert isinstance(operation.datatype, ArrayType)
             assert (operation.datatype.shape == [datatype1.shape[0]])
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                 operation.datatype.precision,
-                                                 f"{operation.datatype.shape[0].upper.value}")],
-                                [operation])
-            
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 f"{operation.datatype.shape[0].upper.value}")],
+                [operation])
+
             program.addchild(check)
-        
+
         # DOT_PRODUCT : (vector_i, vector_i) => scalar
         if datatype1 in vector_datatypes1 and datatype2 in vector_datatypes2 \
-            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN) \
+            and not ((datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN)
                      ^ (datatype2.intrinsic is ScalarType.Intrinsic.BOOLEAN)):
-            operation = BinaryOperation.create(BinaryOperation.Operator.DOT_PRODUCT,
-                                               Reference(sym1), Reference(sym2))
-            
+            operation = BinaryOperation.create(
+                                        BinaryOperation.Operator.DOT_PRODUCT,
+                                        Reference(sym1), Reference(sym2))
+
             assert isinstance(operation.datatype, ScalarType)
 
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                 operation.datatype.precision,
-                                                 "scalar")],
-                                [operation])
-            
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                 operation.datatype.precision,
+                                 "scalar")],
+                [operation])
+
             program.addchild(check)
 
         # REAL, INT : (arg, k) => REAL*k/INT*k
         # NOTE: no typecheck functions for vectors
         if datatype1 in scalar_datatypes + array_datatypes1 \
-            and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN):
+                and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN):
             operation = BinaryOperation.create(BinaryOperation.Operator.REAL,
-                                            Reference(sym1), Literal("4", INTEGER_SINGLE_TYPE))
+                                               Reference(sym1),
+                                               Literal("4", 
+                                                       INTEGER_SINGLE_TYPE))
             assert (operation.datatype.intrinsic is ScalarType.Intrinsic.REAL)
             assert (operation.datatype.precision == 4)
             assert (type(operation.datatype) is type(datatype1))
             if datatype1 in array_datatypes1:
-                    assert (operation.datatype.shape == datatype1.shape)
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                operation.datatype.precision,
-                                                key1)],
-                                    [operation])
+                assert (operation.datatype.shape == datatype1.shape)
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                operation.datatype.precision,
+                                key1)],
+                [operation])
             program.addchild(check)
 
             operation = BinaryOperation.create(BinaryOperation.Operator.REAL,
-                                            Reference(sym1), Literal("8", INTEGER_SINGLE_TYPE))
+                                               Reference(sym1),
+                                               Literal("8",
+                                                       INTEGER_SINGLE_TYPE))
             assert (operation.datatype.intrinsic is ScalarType.Intrinsic.REAL)
             assert (operation.datatype.precision == 8)
             assert (type(operation.datatype) is type(datatype1))
             if datatype1 in array_datatypes1:
-                    assert (operation.datatype.shape == datatype1.shape)
-            check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                operation.datatype.precision,
-                                                key1)],
-                                    [operation])
+                assert (operation.datatype.shape == datatype1.shape)
+            check = Call.create(
+                routine_symbols[(operation.datatype.intrinsic,
+                                operation.datatype.precision,
+                                key1)],
+                [operation])
             program.addchild(check)
 
             operation = BinaryOperation.create(BinaryOperation.Operator.INT,
-                                            Reference(sym1), Literal("4", INTEGER_SINGLE_TYPE))
-            assert (operation.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
+                                               Reference(sym1),
+                                               Literal("4",
+                                                       INTEGER_SINGLE_TYPE))
+            assert (operation.datatype.intrinsic
+                    is ScalarType.Intrinsic.INTEGER)
             assert (operation.datatype.precision == 4)
             assert (type(operation.datatype) is type(datatype1))
             if datatype1 in array_datatypes1:
-                    assert (operation.datatype.shape == datatype1.shape)
+                assert (operation.datatype.shape == datatype1.shape)
             check = Call.create(routine_symbols[(operation.datatype.intrinsic,
                                                 operation.datatype.precision,
                                                 key1)],
-                                    [operation])
+                                [operation])
             program.addchild(check)
 
             operation = BinaryOperation.create(BinaryOperation.Operator.INT,
-                                            Reference(sym1), Literal("8", INTEGER_SINGLE_TYPE))
-            assert (operation.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
+                                               Reference(sym1),
+                                               Literal("8",
+                                                       INTEGER_SINGLE_TYPE))
+            assert (operation.datatype.intrinsic
+                    is ScalarType.Intrinsic.INTEGER)
             assert (operation.datatype.precision == 8)
             assert (type(operation.datatype) is type(datatype1))
             if datatype1 in array_datatypes1:
-                    assert (operation.datatype.shape == datatype1.shape)
+                assert (operation.datatype.shape == datatype1.shape)
             check = Call.create(routine_symbols[(operation.datatype.intrinsic,
                                                 operation.datatype.precision,
                                                 key1)],
-                                    [operation])
+                                [operation])
             program.addchild(check)
 
         # ADD, SUB, MUL, DIV, POW : (arg1, arg2) => promote
         if (datatype1 in scalar_datatypes and datatype2 in scalar_datatypes) \
-            and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
-            and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN):
+                and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
+                and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN):
             for op in (BinaryOperation.Operator.ADD,
                        BinaryOperation.Operator.SUB,
                        BinaryOperation.Operator.MUL,
                        BinaryOperation.Operator.DIV,
                        BinaryOperation.Operator.POW):
-                
-                operation = BinaryOperation.create(op, Reference(sym1), Reference(sym2))
+
+                operation = BinaryOperation.create(
+                    op, Reference(sym1), Reference(sym2))
 
                 assert isinstance(operation.datatype, ScalarType)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                     operation.datatype.precision,
-                                                     "scalar")],
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     "scalar")],
+                    [operation])
+
                 program.addchild(check)
 
         # REM = MOD, very messy promotion rules (in gfortran)
         if (datatype1 in scalar_datatypes and datatype2 in scalar_datatypes) \
-            and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
-            and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
-            and (datatype1.intrinsic is datatype2.intrinsic):
-            operation = BinaryOperation.create(BinaryOperation.Operator.REM, Reference(sym1), Reference(sym2))
+                and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
+                and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
+                and (datatype1.intrinsic is datatype2.intrinsic):
+            operation = BinaryOperation.create(
+                BinaryOperation.Operator.REM, Reference(sym1), Reference(sym2))
 
             assert isinstance(operation.datatype, ScalarType)
 
             check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                    operation.datatype.precision,
-                                                    "scalar")],
+                                                 operation.datatype.precision,
+                                                 "scalar")],
                                 [operation])
-            
+
             program.addchild(check)
 
         # EQ, NE, GT, LT, GE, LE => default BOOLEAN
         if (datatype1 in scalar_datatypes and datatype2 in scalar_datatypes) \
-            and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
-            and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN): \
-            #and (datatype1.intrinsic is datatype2.intrinsic):
+                and (datatype1.intrinsic is not ScalarType.Intrinsic.BOOLEAN) \
+                and (datatype2.intrinsic is not ScalarType.Intrinsic.BOOLEAN): \
+                # and (datatype1.intrinsic is datatype2.intrinsic):
             for op in (BinaryOperation.Operator.EQ,
                        BinaryOperation.Operator.NE,
                        BinaryOperation.Operator.GT,
                        BinaryOperation.Operator.LT,
                        BinaryOperation.Operator.GE,
                        BinaryOperation.Operator.LE):
-                operation = BinaryOperation.create(op, Reference(sym1), Reference(sym2))
+                operation = BinaryOperation.create(
+                    op, Reference(sym1), Reference(sym2))
 
                 assert isinstance(operation.datatype, ScalarType)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                     operation.datatype.precision,
-                                                     "scalar")],
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     "scalar")],
+                    [operation])
+
                 program.addchild(check)
 
         # AND, OR, EQV, NEQV => default BOOLEAN
         if (datatype1 in scalar_datatypes and datatype2 in scalar_datatypes) \
-            and (datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN) \
-            and (datatype2.intrinsic is ScalarType.Intrinsic.BOOLEAN):
+                and (datatype1.intrinsic is ScalarType.Intrinsic.BOOLEAN) \
+                and (datatype2.intrinsic is ScalarType.Intrinsic.BOOLEAN):
             for op in (BinaryOperation.Operator.AND,
                        BinaryOperation.Operator.OR,
                        BinaryOperation.Operator.EQV,
                        BinaryOperation.Operator.NEQV):
-                operation = BinaryOperation.create(op, Reference(sym1), Reference(sym2))
+                operation = BinaryOperation.create(
+                    op, Reference(sym1), Reference(sym2))
 
                 assert isinstance(operation.datatype, ScalarType)
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                     operation.datatype.precision,
-                                                     "scalar")],
-                                    [operation])
-                
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     "scalar")],
+                    [operation])
+
                 program.addchild(check)
 
-    _write_and_compile(fortran_writer, container, compiler_cmd)
+    source = fortran_writer(container)
+    Compile(tmpdir).string_compiles(source)
 
-def test_naryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
+
+def test_naryoperation_datatypes(fortran_writer, tmpdir):
+    """Test by compiling that the actual datatypes of written NaryOperation 
+    nodes are those expected.
+    """
     container = FileContainer("naryoperation")
 
-    container, routine_symbols = _initialize_type_checkers(container, [2,3])
+    container, routine_symbols = _initialize_type_checkers(container, [2, 3])
 
     # No booleans
     integer_kinds, real_kinds, _ = _initialize_scalar_kinds()
@@ -1514,29 +1582,33 @@ def test_naryoperation_datatypes(fortran_writer, compiler_cmd = "gfortran"):
     for datatype1, datatype2 in product(datatypes1, datatypes2):
         sym1 = _initialize_datasymbol(datatype1)
         sym2 = _initialize_datasymbol(datatype2)
-        
+
         for sym in (sym1, sym2):
             if sym.name not in program.symbol_table:
                 program.symbol_table.add(sym)
 
         if datatype1.intrinsic is datatype2.intrinsic:
-            for op in (NaryOperation.Operator.MAX, 
+            for op in (NaryOperation.Operator.MAX,
                        NaryOperation.Operator.MIN):
-                
-                operation = NaryOperation.create(op, [Reference(sym1), Reference(sym2)])
 
-                check = Call.create(routine_symbols[(operation.datatype.intrinsic,
-                                                     operation.datatype.precision,
-                                                     "scalar")],
-                                    [operation])
-                
+                operation = NaryOperation.create(
+                    op, [Reference(sym1), Reference(sym2)])
+
+                check = Call.create(
+                    routine_symbols[(operation.datatype.intrinsic,
+                                     operation.datatype.precision,
+                                     "scalar")],
+                    [operation])
+
                 program.addchild(check)
 
-    _write_and_compile(fortran_writer, container, compiler_cmd)
+    source = fortran_writer(container)
+    Compile(tmpdir).string_compiles(source)
+
 
 if __name__ == "__main__":
     fortran_writer = FortranWriter()
-    test_unaryoperation_datatypes(fortran_writer, "gfortran")
-    test_binaryoperation_datatypes(fortran_writer, "gfortran")
-    test_naryoperation_datatypes(fortran_writer, "gfortran")
-            
+    Compile.TEST_COMPILE = True
+    test_unaryoperation_datatypes(fortran_writer, None)
+    test_binaryoperation_datatypes(fortran_writer, None)
+    test_naryoperation_datatypes(fortran_writer, None)
