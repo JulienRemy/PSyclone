@@ -84,7 +84,7 @@ def test_unary():
             UnaryOperation.Operator.ATAN,
             UnaryOperation.Operator.ABS,
         ):
-            print(f"Testing unary operator {op} in {mode}-mode")
+            # print(f"Testing unary operator {op} in {mode}-mode")
 
             for iterative in _iterative_and_inline_modes(mode):
                 routine = SubroutineGenerator("routine_unary")
@@ -93,11 +93,11 @@ def test_unary():
                 f = routine.new_out_arg("f")
 
                 if iterative:
-                    print("with an iterative assignment to f")
+                    # print("with an iterative assignment to f")
                     routine.new_assignment(f, x)
                     routine.new_assignment(f, UnaryOperation.create(op, Reference(f)))
                 else:
-                    print("without iterative assignment")
+                    # print("without iterative assignment")
                     routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
 
                 with open("./outputs/routine.f90", "w") as file:
@@ -120,7 +120,7 @@ def test_unary():
                 rev_schedule = ADJointReversalSchedule()
 
                 for inline in _iterative_and_inline_modes(mode):
-                    print(f"with option 'inline_operation_adjoints' = {inline}")
+                    # print(f"with option 'inline_operation_adjoints' = {inline}")
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
@@ -139,10 +139,10 @@ def test_unary():
                         raise ValueError(
                             f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
                         )
-                    print("passed")
-                    print("-----------------------")
+                    # print("passed")
+                    # print("-----------------------")
 
-            print("===============================\n")
+            # print("===============================\n")
 
 
 def test_binary():
@@ -161,7 +161,7 @@ def test_binary():
             BinaryOperation.Operator.DIV,
             BinaryOperation.Operator.POW,
         ):
-            print(f"Testing binary operator {op} in {mode}-mode")
+            # print(f"Testing binary operator {op} in {mode}-mode")
 
             for iterative in _iterative_and_inline_modes(mode):
                 routine = SubroutineGenerator("routine_binary")
@@ -171,13 +171,13 @@ def test_binary():
                 f = routine.new_out_arg("f")
 
                 if iterative:
-                    print("with an iterative assignment to f")
+                    # print("with an iterative assignment to f")
                     routine.new_assignment(f, x)
                     routine.new_assignment(
                         f, BinaryOperation.create(op, Reference(f), Reference(y))
                     )
                 else:
-                    print("without iterative assignment")
+                    # print("without iterative assignment")
                     routine.new_assignment(
                         f, BinaryOperation.create(op, Reference(x), Reference(y))
                     )
@@ -195,7 +195,7 @@ def test_binary():
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
-                    print(f"with option 'inline_operation_adjoints' = {inline}")
+                    # print(f"with option 'inline_operation_adjoints' = {inline}")
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
@@ -214,11 +214,11 @@ def test_binary():
                         raise ValueError(
                             f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
                         )
-                    print("passed")
+                    # print("passed")
 
-                    print("-----------------------")
+                    # print("-----------------------")
 
-            print("===============================\n")
+            # print("===============================\n")
 
 
 def test_unary_composition():
@@ -247,7 +247,7 @@ def test_unary_composition():
         )
 
         for unary_1, unary_2 in product(unary_operators, unary_operators):
-            print(f"Testing composition of {unary_1} and {unary_2} in {mode}-mode")
+            # print(f"Testing composition of {unary_1} and {unary_2} in {mode}-mode")
 
             for iterative in _iterative_and_inline_modes(mode):
                 routine = SubroutineGenerator("routine_unary_composition")
@@ -256,7 +256,7 @@ def test_unary_composition():
                 f = routine.new_out_arg("f")
 
                 if iterative:
-                    print("with an iterative assignment to f")
+                    # print("with an iterative assignment to f")
                     routine.new_assignment(f, x)
                     routine.new_assignment(
                         f,
@@ -265,7 +265,7 @@ def test_unary_composition():
                         ),
                     )
                 else:
-                    print("without iterative assignment")
+                    # print("without iterative assignment")
                     routine.new_assignment(
                         f,
                         UnaryOperation.create(
@@ -280,7 +280,7 @@ def test_unary_composition():
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
-                    print(f"with option 'inline_operation_adjoints' = {inline}")
+                    # print(f"with option 'inline_operation_adjoints' = {inline}")
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
@@ -299,10 +299,10 @@ def test_unary_composition():
                         raise ValueError(
                             f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
                         )
-                    print("passed")
-                    print("-----------------------")
+                    # print("passed")
+                    # print("-----------------------")
 
-            print("===============================\n")
+            # print("===============================\n")
 
 
 def test_binary_composition():
@@ -323,7 +323,7 @@ def test_binary_composition():
         )
 
         for binary_1, binary_2 in product(binary_operators, binary_operators):
-            print(f"Testing composition of {binary_1} and {binary_2} in {mode}-mode")
+            # print(f"Testing composition of {binary_1} and {binary_2} in {mode}-mode")
 
             for iterative in _iterative_and_inline_modes(mode):
                 routine = SubroutineGenerator("routine_binary_composition")
@@ -334,7 +334,7 @@ def test_binary_composition():
                 f = routine.new_out_arg("f")
 
                 if iterative:
-                    print("with an iterative assignment to f")
+                    # print("with an iterative assignment to f")
                     routine.new_assignment(f, x)
                     routine.new_assignment(
                         f,
@@ -345,7 +345,7 @@ def test_binary_composition():
                         ),
                     )
                 else:
-                    print("without iterative assignment")
+                    # print("without iterative assignment")
                     routine.new_assignment(
                         f,
                         BinaryOperation.create(
@@ -364,7 +364,7 @@ def test_binary_composition():
 
                 rev_schedule = ADJointReversalSchedule()
                 for inline in _iterative_and_inline_modes(mode):
-                    print(f"with option 'inline_operation_adjoints' = {inline}")
+                    # print(f"with option 'inline_operation_adjoints' = {inline}")
 
                     max_error, associated_values = NumericalComparator.compare(
                         "./tapenade_3.16",
@@ -383,10 +383,10 @@ def test_binary_composition():
                         raise ValueError(
                             f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
                         )
-                    print("passed")
-                    print("-----------------------")
+                    # print("passed")
+                    # print("-----------------------")
 
-            print("===============================\n")
+            # print("===============================\n")
 
 
 def _create_taping_routine(name):
@@ -491,8 +491,8 @@ def test_taping():
 
     rev_schedule = ADJointReversalSchedule()
     for inline in (True, False):
-        print(f"Testing a routine with many (used) taped values")
-        print(f"with option 'inline_operation_adjoints' = {inline}")
+        # print(f"Testing a routine with many (used) taped values")
+        # print(f"with option 'inline_operation_adjoints' = {inline}")
 
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
@@ -509,10 +509,10 @@ def test_taping():
 
         if max_error > MAX_ERROR or np.isnan(max_error):
             raise ValueError(f"Test failed, Linf_error = {max_error}")
-        print("passed")
-        print("-----------------------")
+        # print("passed")
+        # print("-----------------------")
 
-    print("===============================\n")
+    # print("===============================\n")
 
 
 def test_nested_calls():
@@ -524,7 +524,7 @@ def test_nested_calls():
 
     :raises ValueError: if the error is above MAX_ERROR or is NaN.
     """
-    print("Testing nested calls")
+    # print("Testing nested calls")
 
     # Ensure that both routines tape and reuse taped values
     called_routine_1 = _create_taping_routine("called_1")
@@ -579,7 +579,7 @@ def test_nested_calls():
     )
 
     for schedule in reversal_schedules:
-        print(f"Testing in reverse-mode using reversal schedule {type(schedule).__name__}")
+        # print(f"Testing in reverse-mode using reversal schedule {type(schedule).__name__}")
 
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
@@ -598,11 +598,11 @@ def test_nested_calls():
             raise ValueError(
                 f"Test failed, Linf_error = {max_error} for schedule {type(schedule).__name__}"
             )
-        print("passed")
-        print("-----------------------")
+        # print("passed")
+        # print("-----------------------")
 
     # Forward-mode
-    print("Testing in forward-mode")
+    # print("Testing in forward-mode")
 
     max_error, associated_values = NumericalComparator.compare(
         "./tapenade_3.16",
@@ -620,8 +620,8 @@ def test_nested_calls():
         raise ValueError(
             f"Test failed, Linf_error = {max_error} for schedule {type(schedule).__name__}"
         )
-    print("passed")
-    print("-----------------------")
+    # print("passed")
+    # print("-----------------------")
 
 def test_many_arguments():
     """Test applying `psyclone.autodiff` and Tapenade transformations to a \
@@ -631,7 +631,7 @@ def test_many_arguments():
     :raises ValueError: if the error is above MAX_ERROR or is NaN.
     """
     for mode in MODES:
-        print(f"Testing a routine with many arguments  in {mode}-mode")
+        # print(f"Testing a routine with many arguments  in {mode}-mode")
 
         routine = SubroutineGenerator("routine_many")
 
@@ -751,10 +751,10 @@ def test_many_arguments():
 
         if max_error > MAX_ERROR or np.isnan(max_error):
             raise ValueError(f"Test failed, Linf_error = {max_error}")
-        print("passed")
-        print("-----------------------")
+        # print("passed")
+        # print("-----------------------")
 
-        print("===============================\n")
+        # print("===============================\n")
 
 if __name__ == "__main__":
     test_unary()
