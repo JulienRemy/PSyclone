@@ -56,7 +56,6 @@ The Doxygen documentation built in `doc/reference_guide/build/html/_static/html/
 A tutorial may be found in the `src/psyclone/autodiff/tutorial` subdirectory.  
 
 # Tests #
-
-For now tests are all in the `src/psyclone/autodiff/tests` subdirectory and not in the `tests` one.  
-They include unit tests for *some* of the transformations and numerical comparisons to [Tapenade](https://team.inria.fr/ecuador/en/tapenade/) 3.16.
+ 
+Tests include unit tests for *some* of the transformations and numerical comparisons to [Tapenade](https://team.inria.fr/ecuador/en/tapenade/) 3.16.
 
