@@ -734,6 +734,8 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         """Apply simplifications to the BinaryOperation and Assignment nodes
         of the transformed routine provided as argument.
 
+        :param routine: routine to simplify.
+        :type routine: py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -769,6 +771,17 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                     if simplified_node is not node:
                         node.replace_with(simplified_node)
                         all_nodes[i] = simplified_node
+
+    @abstractmethod
+    def postprocess(self, routine, options=None):
+        """Apply postprocessing steps (simplification, substitution) to the 
+        'routine' argument.
+        :param routine: routine to postprocess.
+        :type routine: py:class:`psyclone.psyir.nodes.Routine`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
 
     def add_to_argument_list(self, symbol_table, argument, after=None):
         """Adds the argument to the symbol table's argument list, if it has \
