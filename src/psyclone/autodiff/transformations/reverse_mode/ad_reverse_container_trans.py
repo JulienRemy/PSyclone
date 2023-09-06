@@ -251,15 +251,15 @@ class ADReverseContainerTrans(ADContainerTrans):
         definitions for both motions using the reverse-mode of automatic \
         differentiation.
 
-        Options:
-        - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
+        | Options:
+        | - bool 'jacobian': whether to generate the Jacobian routine. Defaults \
                            to False.
-        - bool 'verbose' : toggles explanatory comments. Defaults to False.
-        - bool 'simplify': True to apply simplifications after applying AD \
+        | - bool 'verbose' : toggles explanatory comments. Defaults to False.
+        | - bool 'simplify': True to apply simplifications after applying AD \
                            transformations. Defaults to True.
-        - int 'simplify_n_times': number of time to apply simplification \
+        | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        - bool 'inline_operation_adjoints': True to inline all possible \
+        | - bool 'inline_operation_adjoints': True to inline all possible \
                                             operation adjoints definitions. \
                                             Defaults to True.
 

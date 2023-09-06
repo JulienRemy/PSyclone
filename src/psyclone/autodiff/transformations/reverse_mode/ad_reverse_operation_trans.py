@@ -146,8 +146,8 @@ class ADReverseOperationTrans(ADOperationTrans):
         Note that is only returns **returning motion** statements. Indeed \
         operation results are not recorded to the tape for now.
 
-        Options:
-        - bool 'verbose' : toggles preceding and inline comments around the \
+        | Options:
+        | - bool 'verbose' : toggles preceding and inline comments around the \
                            adjoining of the operation in the returning motion.
 
         :param operation: operation Node to be transformed.
