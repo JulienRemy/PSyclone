@@ -495,10 +495,10 @@ def test_ad_call_trans_apply():
         call = ad_container_trans.container.walk(Call)[0]
         ad_call_trans.apply(call)
 
-        test_arguments(ad_call_trans)
+        _test_arguments(ad_call_trans)
 
 
-def test_arguments(applied_ad_call_trans):
+def _test_arguments(applied_ad_call_trans):
     arg_list = applied_ad_call_trans.routine_table.argument_list
     recording_args = applied_ad_call_trans.recording.symbol_table.argument_list
     returning_args = applied_ad_call_trans.returning.symbol_table.argument_list
