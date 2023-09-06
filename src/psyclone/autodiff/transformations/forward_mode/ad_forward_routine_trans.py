@@ -246,11 +246,9 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         # Transform the statements found in the Schedule
         self.transform_children(options)
 
-        # Simplify the BinaryOperation and Assignment nodes
-        # in the transformed routine
-        simplify = self.unpack_option("simplify", options)
-        if simplify:
-            self.simplify(self.transformed[0], options)
+        # Postprocess the transformed routine (simplify the BinaryOperation
+        # and Assignment nodes)
+        self.postprocess(self.transformed[0], options)
 
         # Add the transformed routines symbol to the container_trans map
         self.container_trans.add_transformed_routine(
@@ -384,3 +382,25 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             self.add_to_argument_list(
                 self.transformed_tables[0], derivative_symbol, after=symbol
             )
+
+    def postprocess(self, routine, options=None):
+        """Apply postprocessing steps (simplification) to the 
+        'routine' argument.
+        
+        Options:
+        - bool 'simplify': True to apply simplifications. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+                                  rules to BinaryOperation nodes. Defaults to 5.
+
+        :param routine: routine to postprocess.
+        :type routine: py:class:`psyclone.psyir.nodes.Routine`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
+
+        # Simplify the BinaryOperation and Assignment nodes
+        # in the transformed routine
+        simplify = self.unpack_option("simplify", options)
+        if simplify:
+            self.simplify(routine, options)

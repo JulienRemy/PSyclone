@@ -41,6 +41,7 @@ from psyclone.psyir.nodes import (
     Call,
     Reference,
     Assignment,
+    Literal
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -469,19 +470,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Transform the statements found in the Routine
         self.transform_children(options)
 
-        # Inline the operation adjoints definitions
-        # (rhs of Assignment nodes whose LHS is an operation adjoint)
-        inline_operation_adjoints = self.unpack_option(
-            "inline_operation_adjoints", options
-        )
-        if inline_operation_adjoints:
-            self.inline_operation_adjoints(options)
-
-        # Simplify the BinaryOperation and Assignment nodes
-        # in the returning routine
-        simplify = self.unpack_option("simplify", options)
-        if simplify:
-            self.simplify(self.returning, options)
+        # Postprocess (simplify, substitute operation adjoints) the returning
+        # routine
+        self.postprocess(self.returning, options)
 
         # Add the transformed routines symbols to the container_trans map
         self.container_trans.add_transformed_routines(
@@ -794,21 +785,23 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         return adjoint
 
-    def inline_operation_adjoints(self, options=None):
+    def inline_operation_adjoints(self, routine, options=None):
         """Inline the definitions of operations adjoints, ie. the RHS of 
         Assignment nodes with LHS being an operation adjoint, 
-        everywhere it's possible in the returning routine, ie. except 
+        everywhere it's possible in the 'routine', ie. except 
         for those used as Call arguments.
 
+        :param routine: routine to simplify.
+        :type routine: py:class:`psyclone.psyir.nodes.Routine`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
         """
-        # pylint: disable=protected-access
+        # pylint: disable=protected-access, too-many-locals
 
         # NOTE: must NOT be done for independent adjoints...
-        all_assignments = self.returning.walk(Assignment)
-        all_calls = self.returning.walk(Call)
+        all_assignments = routine.walk(Assignment)
+        all_calls = routine.walk(Call)
         # Only assignments to operation adjoints
         op_adj_assignments = [
             assignment
@@ -833,21 +826,68 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                     if ref == assignment.lhs:
                         rhs_occurences.append(ref)
                         # If already 1 occurence, we won't inline unless rhs
-                        # is a Reference
+                        # is a Reference or Literal
                         # so stop there
-                        if (not isinstance(assignment.rhs, Reference)) and (
-                            len(rhs_occurences) == 2
-                        ):
+                        if (
+                            not isinstance(
+                                assignment.rhs, (Reference, Literal)
+                            )
+                        ) and (len(rhs_occurences) == 2):
                             break
 
-            if len(rhs_occurences) == 1:
+            # Substitute if the RHS is a Reference or Literal
+            # (to avoid unnecessary declarations of operation adjoints)
+            # or if it only occurs once in a RHS.
+            if len(rhs_occurences) == 1 or isinstance(
+                assignment.rhs, (Reference, Literal)
+            ):
                 substitute = assignment.rhs.detach()
                 assignment.detach()
                 all_assignments.remove(assignment)
                 # TODO: this might not be right for vectors...
-                self.returning_table._symbols.pop(assignment.lhs.name)
+                routine.symbol_table._symbols.pop(assignment.lhs.name)
                 for rhs_occurence in rhs_occurences:
                     rhs_occurence.replace_with(substitute.copy())
+
+    def postprocess(self, routine, options=None):
+        """Apply postprocessing steps (simplification, operation adjoints 
+        substitution) to the 'routine' argument.
+
+        Options:
+        - bool 'simplify': True to apply simplifications. Defaults to True.
+        - int 'simplify_n_times': number of time to apply simplification \
+                                  rules to BinaryOperation nodes. Defaults to 5.
+        - bool 'inline_operation_adjoints': True to inline all possible \
+                                            operation adjoints definitions. \
+                                            Defaults to True.
+
+        :param routine: routine to postprocess.
+        :type routine: py:class:`psyclone.psyir.nodes.Routine`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
+
+        # Inline the operation adjoints definitions
+        # (rhs of Assignment nodes whose LHS is an operation adjoint)
+        # if only used once (unecessary declaration)
+        inline_operation_adjoints = self.unpack_option(
+            "inline_operation_adjoints", options
+        )
+        if inline_operation_adjoints:
+            self.inline_operation_adjoints(routine, options)
+
+        # Simplify the BinaryOperation and Assignment nodes
+        # in the returning routine
+        simplify = self.unpack_option("simplify", options)
+        if simplify:
+            self.simplify(routine, options)
+
+        # Inline the operation adjoints again (in case the RHS simplified to a
+        # Reference)
+        # eg. 'op_adj = x_adj' should be substituted.
+        if inline_operation_adjoints:
+            self.inline_operation_adjoints(routine, options)
 
     def value_tape_non_written_values(self, options):
         """Record and restore the last values of non-argument variables \
