@@ -45,7 +45,8 @@ from enum import Enum
 import re
 
 from psyclone.errors import GenerationError
-from psyclone.psyir.nodes import DataNode, Literal
+from psyclone.psyir.nodes.datanode import DataNode
+from psyclone.psyir.nodes.literal import Literal
 
 from psyclone.psyir.symbols.datatypes import (INTEGER_TYPE, BOOLEAN_TYPE,
                                               REAL_TYPE, ScalarType, ArrayType)
