@@ -37,47 +37,39 @@
 "taping" (storing and recovering) of function values.
 """
 
-from psyclone.psyir.nodes import Assignment, Reference
-from psyclone.psyir.symbols import ScalarType, ArrayType
+from psyclone.psyir.nodes import Assignment, Reference, IntrinsicCall
+from psyclone.psyir.symbols import ScalarType
 
 from psyclone.autodiff.tapes import ADTape
 
 
 class ADValueTape(ADTape):
     """A class for recording and recovering function values in reverse-mode \
-    automatic differentiation. \
-    The **prevalues** of references are recorded. \
+    automatic differentiation. 
+    The **prevalues** of references are recorded. 
     Based on static arrays storing a single type of data rather than a LIFO \
-    stack. \
+    stack. 
     Provides methods to create the PSyIR assignments for recording and \
     restoring operations.
 
     :param name: name of the value_tape (after a prefix).
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
-    :type datatype: Union[:py:class:`psyclone.psyir.symbols.ScalarType`,
-                          :py:class:`psyclone.psyir.symbols.ArrayType`]
+    :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`.
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
-    :raises NotImplementedError: if datatype is not of type 'ScalarType'.
     """
 
     _node_types = (Reference,)
     _tape_prefix = "value_tape_"
 
     def __init__(self, name, datatype):
-        if not isinstance(datatype, (ScalarType, ArrayType)):
+        if not isinstance(datatype, (ScalarType)):
             raise TypeError(
                 f"'datatype' argument should be of type "
-                f"'ScalarType' or 'ArrayType' but found "
+                f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
-            )
-        if not isinstance(datatype, ScalarType):
-            raise NotImplementedError(
-                f"Only ScalarType symbols can be value_taped "
-                f"for now but found DataType "
-                f"'{datatype}' instead."
             )
 
         super().__init__(name, datatype)
@@ -93,7 +85,6 @@ class ADValueTape(ADTape):
         :raises TypeError: if the intrinsic of reference's datatype is not the \
                            same as the intrinsic of the value_tape's elements \
                            datatype.
-        :raises NotImplementedError: if the reference's datatype is ArrayType.
 
         :return: an Assignment node for recording the prevalue of the reference\
                  as last element of the value_tape.
@@ -106,18 +97,31 @@ class ADValueTape(ADTape):
                            f"'Reference' but found "
                            f"'{type(reference).__name__}'.")
 
-        if reference.datatype.intrinsic != self.datatype.intrinsic:
+        if isinstance(reference.datatype, ScalarType):
+            scalar_type = reference.datatype
+        else:
+            scalar_type = reference.datatype.datatype
+
+        if scalar_type.intrinsic != self.datatype.intrinsic:
             raise TypeError(
                 f"The intrinsic datatype of the 'reference' argument "
                 f"should be {self.datatype.intrinsic} but found "
-                f"{reference.datatype.intrinsic}."
+                f"{scalar_type.intrinsic}."
             )
-        if isinstance(reference.datatype, ArrayType):
-            raise NotImplementedError("Taping arrays is not implemented yet.")
 
         value_tape_ref = super().record(reference)
 
-        return Assignment.create(value_tape_ref, reference.copy())
+        if isinstance(reference.datatype, ScalarType):
+            assignment = Assignment.create(value_tape_ref, reference.copy())
+
+        else:
+            # Create an IntrinsicCall to RESHAPE to reshape the reference array
+            # to the value_tape_ref slice
+            reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
+                                            [reference.copy(), value_tape_ref])
+            assignment = Assignment.create(value_tape_ref.copy(), reshaped)
+
+        return assignment
 
     def restore(self, reference):
         """Restore the last element of the value_tape if it is the symbol \
@@ -145,4 +149,14 @@ class ADValueTape(ADTape):
 
         value_tape_ref = super().restore(reference)
 
-        return Assignment.create(reference.copy(), value_tape_ref)
+        if isinstance(reference.datatype, ScalarType):
+            assignment = Assignment.create(reference.copy(), value_tape_ref)
+
+        else:
+            # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
+            # slice to the reference array
+            reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
+                                            [value_tape_ref, reference.copy()])
+            assignment = Assignment.create(reference.copy(), reshaped)
+
+        return assignment

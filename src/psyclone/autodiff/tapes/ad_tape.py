@@ -34,12 +34,13 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This module provides an abstract class for reverse-mode 
-automatic differentiation "taping" (storing and recovering) of different values."""
+automatic differentiation "taping" (storing and recovering) of different values.
+"""
 
 from abc import ABCMeta
 
 from psyclone.psyir.nodes import ArrayReference, Literal, Node, Range
-from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, DataType, ArrayType
+from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, ScalarType, ArrayType
 
 
 class ADTape(object, metaclass=ABCMeta):
@@ -51,7 +52,7 @@ class ADTape(object, metaclass=ABCMeta):
     :param name: name of the value_tape (after a prefix).
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
-    :type datatype: :py:class:`psyclone.psyir.symbols.DataType`
+    :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
@@ -68,10 +69,10 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'name' argument should be of type "
                 f"'str' but found '{type(name).__name__}'."
             )
-        if not isinstance(datatype, DataType):
+        if not isinstance(datatype, ScalarType):
             raise TypeError(
                 f"'datatype' argument should be of type "
-                f"'DataType' but found "
+                f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
             )
 
@@ -101,16 +102,16 @@ class ADTape(object, metaclass=ABCMeta):
         """PSyIR datatype of the tape elements.
 
         :return: datatype.
-        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
+        :rtype: :py:class:`psyclone.psyir.symbols.ScalarType`
         """
         return self._datatype
 
     @datatype.setter
     def datatype(self, datatype):
-        if not isinstance(datatype, DataType):
+        if not isinstance(datatype, ScalarType):
             raise TypeError(
                 f"'datatype' argument should be of type "
-                f"'ScalarType' or 'ArrayType' but found "
+                f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
             )
         self._datatype = datatype
@@ -163,12 +164,50 @@ class ADTape(object, metaclass=ABCMeta):
 
     @property
     def length(self):
-        """Length of the tape ie. number of recorded nodes.
+        """Length of the tape (Fortran) array, which is the sum of the sizes
+        of its elements.
 
         :return: length of the tape.
         :rtype: int
         """
-        return len(self.recorded_nodes)
+        length = 0
+
+        for node in self.recorded_nodes:
+            if isinstance(node.datatype, ScalarType):
+                length += 1
+            # For arrays, compute their size
+            else:
+                size = self._array_size(node.datatype)
+                length += size
+
+        return length
+
+    @staticmethod
+    def _array_size(array_type):
+        """Computes the size of arrays of a datatype 'array_type'.
+
+        :param array_type: datatype of an array.
+        :type array_type: py:class:`psyclone.psyir.symbols.ArrayType`
+
+        :raises NotImplementedError: if a dimension of the array is not an \
+                                     `ArrayType.ArrayBounds`.
+        :raises NotImplementedError: if a the upper or lower bound of a \
+                                     dimension of the array is not a `Literal`.
+
+        :return: size of the array.
+        :rtype: int
+        """
+        size = 1
+        for dim in array_type.shape:
+            # TODO: deal with other cases using SIZE, etc.
+            if not isinstance(dim, ArrayType.ArrayBounds):
+                raise NotImplementedError("")
+            if not isinstance(dim.lower, Literal):
+                raise NotImplementedError("")
+            if not isinstance(dim.upper, Literal):
+                raise NotImplementedError("")
+            size *= int(dim.upper.value) - int(dim.lower.value) + 1
+        return size
 
     def _has_last(self, node):
         """Check that the last node recorded to the tape is the one passed \
@@ -215,14 +254,25 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(node).__name__}'."
             )
 
-        self.recorded_nodes.append(node)
-        self.reshape()
+        # Nodes of ScalarType correspond to one index of the tape
+        if isinstance(node.datatype, ScalarType):
+            self.recorded_nodes.append(node)
+            self.reshape()
+            # This is the Fortran index, starting at 1
+            tape_index_literal = Literal(str(self.length), INTEGER_TYPE)
+            tape_ref = ArrayReference.create(self.symbol, [tape_index_literal])
 
-        # This is the Fortran index, starting at 1
-        tape_index_literal = Literal(str(self.length), INTEGER_TYPE)
-        tape_ref = ArrayReference.create(self.symbol, [tape_index_literal])
+        # Nodes of ArrayType correspond to a range
+        else:
+            first_index_literal = Literal(str(self.length + 1), INTEGER_TYPE)
+            self.recorded_nodes.append(node)
+            self.reshape()
+            last_index_literal = Literal(str(self.length), INTEGER_TYPE)
+            tape_range = Range.create(first_index_literal, last_index_literal)
+            tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
+
 
     def restore(self, node):
         """Check that node is the last element of the tape and return an \
@@ -245,9 +295,19 @@ class ADTape(object, metaclass=ABCMeta):
 
         self._has_last(node)
 
-        # This is the Fortran index, starting at 1
-        tape_index_literal = Literal(str(self.length), INTEGER_TYPE)
-        tape_ref = ArrayReference.create(self.symbol, [tape_index_literal])
+        # Nodes of ScalarType correspond to one index of the tape
+        if isinstance(node.datatype, ScalarType):
+            # This is the Fortran index, starting at 1
+            tape_index_literal = Literal(str(self.length), INTEGER_TYPE)
+            tape_ref = ArrayReference.create(self.symbol, [tape_index_literal])
+
+        # Nodes of ArrayType correspond to a range
+        else:
+            last_index_literal = Literal(str(self.length), INTEGER_TYPE)
+            first_index = self.length - self._array_size(node.datatype) + 1
+            first_index_literal = Literal(str(first_index), INTEGER_TYPE)
+            tape_range = Range.create(first_index_literal, last_index_literal)
+            tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
 

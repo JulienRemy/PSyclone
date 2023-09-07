@@ -63,26 +63,9 @@ def test_ad_value_tape_initialization():
         ADValueTape("name", None)
     assert (
         "'datatype' argument should be of type "
-        "'ScalarType' or 'ArrayType' but found "
+        "'ScalarType' but found "
         "'NoneType'." in str(info.value)
     )
-
-    array_type = ArrayType(REAL_TYPE, [2])
-    with pytest.raises(NotImplementedError) as info:
-        ADValueTape("name", array_type)
-    assert (
-        "Only ScalarType symbols can be value_taped "
-        "for now but found DataType "
-        "'Array<Scalar<REAL, UNDEFINED>, shape=[2]>' instead." in str(info.value)
-    )
-
-    # with pytest.raises(NotImplementedError) as info:
-    #    ADValueTape("name", INTEGER_TYPE)
-    # assert (
-    #    "Only REAL symbols can be value_taped "
-    #    "for now but found "
-    #    "'Intrinsic.INTEGER' instead." in str(info.value)
-    # )
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
 
@@ -118,12 +101,23 @@ def test_ad_value_tape_record(fortran_writer):
         "Intrinsic.INTEGER." in str(info.value)
     )
 
-    array_sym = DataSymbol("array_var", ArrayType(REAL_TYPE, [2]))
-    ref = Reference(array_sym)
-    with pytest.raises(NotImplementedError) as info:
-        ad_value_tape.record(ref)
-    assert "Taping arrays is not implemented yet." in str(info.value)
+    ad_value_tape = ADValueTape("name", REAL_TYPE)
+    array_sym = DataSymbol("array", ArrayType(REAL_TYPE, [2]))
+    array_ref = Reference(array_sym)
+    rec_array = ad_value_tape.record(array_ref)
+    assert (fortran_writer(rec_array)
+            == f"{TaP}name(:) = RESHAPE(array, {TaP}name(:))\n")
+    assert ad_value_tape.length == 2
+    
+    ad_value_tape = ADValueTape("name", REAL_TYPE)
+    matrix_sym = DataSymbol("matrix", ArrayType(REAL_TYPE, [2, 2]))
+    matrix_ref = Reference(matrix_sym)
+    rec_matrix = ad_value_tape.record(matrix_ref)
+    assert (fortran_writer(rec_matrix)
+            == f"{TaP}name(:) = RESHAPE(matrix, {TaP}name(:))\n")
+    assert ad_value_tape.length == 4
 
+    ad_value_tape = ADValueTape("name", REAL_TYPE)
     sym_1 = DataSymbol("var_1", REAL_TYPE)
     var_1 = Reference(sym_1)
     sym_2 = DataSymbol("var_2", REAL_TYPE)
@@ -143,6 +137,31 @@ def test_ad_value_tape_record(fortran_writer):
     assert fortran_writer(rec_3) == f"{TaP}name(3) = var_2\n"
     assert ad_value_tape.length == 3
     assert ad_value_tape.recorded_nodes == [var_1, var_1, var_2]
+
+    rec_4_5 = ad_value_tape.record(array_ref)
+    assert (fortran_writer(rec_4_5)
+            == f"{TaP}name(4:) = RESHAPE(array, {TaP}name(4:))\n")
+    assert ad_value_tape.length == 5
+    assert ad_value_tape.recorded_nodes == [var_1, var_1, var_2,
+                                            array_ref]
+
+    rec_6_9 = ad_value_tape.record(matrix_ref)
+    assert (fortran_writer(rec_6_9)
+            == f"{TaP}name(6:) = RESHAPE(matrix, {TaP}name(6:))\n")
+    assert ad_value_tape.length == 9
+    assert ad_value_tape.recorded_nodes == [var_1, var_1, var_2,
+                                            array_ref, matrix_ref]
+
+    rec_10 = ad_value_tape.record(var_2)
+    assert fortran_writer(rec_10) == f"{TaP}name(10) = var_2\n"
+    assert ad_value_tape.length == 10
+    assert ad_value_tape.recorded_nodes == [var_1, var_1, var_2,
+                                            array_ref, matrix_ref, var_2]
+
+    assert (fortran_writer(rec_4_5)
+            == f"{TaP}name(4:5) = RESHAPE(array, {TaP}name(4:5))\n")
+    assert (fortran_writer(rec_6_9)
+            == f"{TaP}name(6:9) = RESHAPE(matrix, {TaP}name(6:9))\n")
 
 
 def test_ad_value_tape__has_last():
@@ -204,6 +223,32 @@ def test_ad_value_tape_restore(fortran_writer):
     rest_3 = ad_value_tape.restore(var_2)
     assert ad_value_tape.length == 3
     assert fortran_writer(rest_3) == f"var_2 = {TaP}name(3)\n"
+
+    ad_value_tape = ADValueTape("name", REAL_TYPE)
+    array_sym = DataSymbol("array", ArrayType(REAL_TYPE, [2]))
+    array_ref = Reference(array_sym)
+    ad_value_tape.record(array_ref)
+    rest_array = ad_value_tape.restore(array_ref)
+    assert (fortran_writer(rest_array)
+            == f"array = RESHAPE({TaP}name(:), array)\n")
+    ad_value_tape.record(var_1)
+    ad_value_tape.record(array_ref)
+    rest_array_2 = ad_value_tape.restore(array_ref)
+    assert (fortran_writer(rest_array_2)
+            == f"array = RESHAPE({TaP}name(4:), array)\n")
+
+    ad_value_tape = ADValueTape("name", REAL_TYPE)
+    matrix_sym = DataSymbol("matrix", ArrayType(REAL_TYPE, [2, 2]))
+    matrix_ref = Reference(matrix_sym)
+    ad_value_tape.record(matrix_ref)
+    rest_matrix = ad_value_tape.restore(matrix_ref)
+    assert (fortran_writer(rest_matrix)
+            == f"matrix = RESHAPE({TaP}name(:), matrix)\n")
+    ad_value_tape.record(var_1)
+    ad_value_tape.record(matrix_ref)
+    rest_matrix_2 = ad_value_tape.restore(matrix_ref)
+    assert (fortran_writer(rest_matrix_2)
+            == f"matrix = RESHAPE({TaP}name(6:), matrix)\n")
 
 
 def test_ad_value_tape_reshape(fortran_writer):
