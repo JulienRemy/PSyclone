@@ -237,7 +237,7 @@ class ADReverseCallTrans(ADCallTrans):
             #                                     child.children)]
 
             # If the value_tape has null length, it's unused
-            if self.value_tape.length > 0:
+            if len(self.value_tape.recorded_nodes) != 0:
                 # Extend the calling routine value tape by the called routine 
                 # one and get the corresponding slice of the first
                 value_tape_slice = (

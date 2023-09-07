@@ -503,7 +503,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Add the value_tape as argument of both routines
         # iff it's actually used
-        if self.value_tape.length != 0:
+        if len(self.value_tape.recorded_nodes) != 0:
             self.add_value_tape_argument(options)
 
         # Add the assignments of 0 to other adjoints
