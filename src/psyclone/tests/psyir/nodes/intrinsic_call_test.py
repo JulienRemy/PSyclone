@@ -239,6 +239,51 @@ def test_intrinsiccall_tinyhuge_create(intrinsic_call, form):
     else:  # "literal"
         assert intrinsic.children[0] is arg
 
+def test_intrinsiccall_reshape_create():
+    '''Tests for the creation of the different argument options for
+    'reshape' IntrinsicCall.
+
+    '''
+    intrinsic_call = IntrinsicCall.Intrinsic.RESHAPE
+
+    array = DataSymbol("array", ArrayType(INTEGER_TYPE, [4]))
+    shape = DataSymbol("shape", ArrayType(INTEGER_TYPE, [2, 2]))
+    pad = DataSymbol("array", ArrayType(INTEGER_TYPE, [1]))
+    order = DataSymbol("shape", ArrayType(INTEGER_TYPE, [2, 2]))
+
+    # array and shape
+    intrinsic = IntrinsicCall.create(intrinsic_call,
+                                       [Reference(array),
+                                        Reference(shape)])
+    assert isinstance(intrinsic, IntrinsicCall)
+    assert intrinsic.intrinsic is intrinsic_call
+    assert isinstance(intrinsic.routine, IntrinsicSymbol)
+    intrinsic_name = intrinsic_call.name
+    assert intrinsic.routine.name == intrinsic_name
+    assert intrinsic.children[0].symbol is array
+    assert intrinsic.children[1].symbol is shape
+    # array, shape and optional pad
+    intrinsic = IntrinsicCall.create(
+        intrinsic_call, [Reference(array), Reference(shape),
+                         ("pad", Reference(pad))])
+    assert intrinsic.argument_names == [None, None, "pad"]
+    # array, shape and optional order
+    intrinsic = IntrinsicCall.create(
+        intrinsic_call, [Reference(array), Reference(shape),
+                         ("order", Reference(order))])
+    assert intrinsic.argument_names == [None, None, "order"]
+    # array, shape and optional pad then optional order
+    intrinsic = IntrinsicCall.create(
+        intrinsic_call, [Reference(array), Reference(shape),
+                         ("pad", Reference(pad)),
+                         ("order", Reference(order))])
+    assert intrinsic.argument_names == [None, None, "pad", "order"]
+    # array, shape and optional order then optional pad
+    intrinsic = IntrinsicCall.create(
+        intrinsic_call, [Reference(array), Reference(shape),
+                         ("order", Reference(order)),
+                         ("pad", Reference(pad))])
+    assert intrinsic.argument_names == [None, None, "order", "pad"]
 
 def test_intrinsiccall_create_errors():
     '''Checks for the validation/type checking in the create() method.
