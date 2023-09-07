@@ -37,8 +37,9 @@
 "taping" (storing and recovering) of function values.
 """
 
-from psyclone.psyir.nodes import Assignment, Reference, IntrinsicCall
-from psyclone.psyir.symbols import ScalarType
+from psyclone.psyir.nodes import Assignment, Reference, IntrinsicCall, Literal
+from psyclone.psyir.symbols import ScalarType, ArrayType, INTEGER_TYPE
+from psyclone.psyir.backend.fortran import FortranWriter
 
 from psyclone.autodiff.tapes import ADTape
 
@@ -116,10 +117,15 @@ class ADValueTape(ADTape):
 
         else:
             # Create an IntrinsicCall to RESHAPE to reshape the reference array
-            # to the value_tape_ref slice
+            # to 1D vector
+            fortran_writer = FortranWriter()
+            size = self._array_size(reference)
+            size_str = fortran_writer(size)
+            shape_array = Literal(f"(/ {size_str} /)",
+                                  ArrayType(INTEGER_TYPE, [1]))
             reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                            [reference.copy(), value_tape_ref])
-            assignment = Assignment.create(value_tape_ref.copy(), reshaped)
+                                            [reference.copy(), shape_array])
+            assignment = Assignment.create(value_tape_ref, reshaped)
 
         return assignment
 
@@ -154,9 +160,15 @@ class ADValueTape(ADTape):
 
         else:
             # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
-            # slice to the reference array
+            # slice to the dimensions of the reference array
+            fortran_writer = FortranWriter()
+            dimensions = self._array_dimensions(reference)
+            str_dimensions = [fortran_writer(dim) for dim in dimensions]
+            shape_str = "(/ " + ", ".join(str_dimensions) + " /)"
+            shape_datatype = ArrayType(INTEGER_TYPE, [len(dimensions)])
+            shape_array = Literal(shape_str, shape_datatype)
             reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                            [value_tape_ref, reference.copy()])
+                                            [value_tape_ref, shape_array])
             assignment = Assignment.create(reference.copy(), reshaped)
 
         return assignment
