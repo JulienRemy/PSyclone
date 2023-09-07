@@ -2070,6 +2070,14 @@ def test_fw_intrinsic_call_node(fortran_writer):
         gen = fortran_writer(assignment)
         assert gen == f"var = {intrinsic_function.name}(var)\n"
 
+    array_sym = DataSymbol("array", ArrayType(INTEGER_TYPE, [4]))
+    shape_sym = DataSymbol("shape", ArrayType(INTEGER_TYPE, [2, 2]))
+    reshape_call = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
+                                       [Reference(array_sym),
+                                        Reference(shape_sym)])
+    assignment = Assignment.create(Reference(shape_sym), reshape_call)
+    gen = fortran_writer(assignment)
+    assert gen == "shape = RESHAPE(array, shape)\n"
 
 def test_fw_comments(fortran_writer):
     ''' Test the generation of Fortran from PSyIR with comments. '''

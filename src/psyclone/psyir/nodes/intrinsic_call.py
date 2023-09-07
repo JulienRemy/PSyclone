@@ -74,7 +74,7 @@ class IntrinsicCall(Call):
     #: The intrinsics that can be represented by this node.
     Intrinsic = Enum('Intrinsic', [
         'ALLOCATE', 'DEALLOCATE', 'RANDOM_NUMBER', 'MINVAL', 'MAXVAL', "SUM",
-        "TINY", "HUGE"])
+        "TINY", "HUGE", "RESHAPE"])
     #: Named tuple for describing the properties of the required arguments to
     #: a particular intrinsic. If there's no limit on the number of arguments
     #: then `max_count` will be None.
@@ -116,6 +116,9 @@ class IntrinsicCall(Call):
     _optional_args[Intrinsic.TINY] = {}
     _required_args[Intrinsic.HUGE] = ArgDesc(1, 1, (Reference, Literal))
     _optional_args[Intrinsic.HUGE] = {}
+    _required_args[Intrinsic.RESHAPE] = ArgDesc(2, 2, DataNode)
+    _optional_args[Intrinsic.RESHAPE] = {
+        "pad": DataNode, "order": DataNode}
 
     def __init__(self, routine, **kwargs):
         if not isinstance(routine, Enum) or routine not in self.Intrinsic:
@@ -268,4 +271,5 @@ PURE_INTRINSICS = [IntrinsicCall.Intrinsic.SUM,
                    IntrinsicCall.Intrinsic.MINVAL,
                    IntrinsicCall.Intrinsic.MAXVAL,
                    IntrinsicCall.Intrinsic.TINY,
-                   IntrinsicCall.Intrinsic.HUGE]
+                   IntrinsicCall.Intrinsic.HUGE,
+                   IntrinsicCall.Intrinsic.RESHAPE]
