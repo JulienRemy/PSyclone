@@ -72,6 +72,10 @@ def _input_shape(n, vector):
         return (n, 5)
     return n
 
+def _file_dir():
+    file_path = __file__
+    return file_path[:file_path.rfind("/")]
+
 @pytest.mark.parametrize("mode, iterative, vector, op",
                          product(MODES,
                                  (True, False),
@@ -111,7 +115,7 @@ def test_unary(mode, iterative, vector, op):
         print("without iterative assignment")
         routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rg = np.random.default_rng(123456)
@@ -132,8 +136,8 @@ def test_unary(mode, iterative, vector, op):
     rev_schedule = ADJointReversalSchedule()
 
     max_error, associated_values = NumericalComparator.compare(
-        "./tapenade_3.16",
-        "./outputs/routine.f90",
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
         "routine_unary",
         ["f"],
         ["x"],
@@ -192,7 +196,7 @@ def test_binary(mode, iterative, vector, op):
 
     # routine.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rg = np.random.default_rng(123456)
@@ -205,8 +209,8 @@ def test_binary(mode, iterative, vector, op):
     rev_schedule = ADJointReversalSchedule()
 
     max_error, associated_values = NumericalComparator.compare(
-        "./tapenade_3.16",
-        "./outputs/routine.f90",
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
         "routine_binary",
         ["f"],
         ["x", "y"],
@@ -282,7 +286,7 @@ def test_unary_composition(mode, iterative, inline, vector, unaries):
             ),
         )
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rg = np.random.default_rng(123456)
@@ -291,8 +295,8 @@ def test_unary_composition(mode, iterative, inline, vector, unaries):
     rev_schedule = ADJointReversalSchedule()
 
     max_error, associated_values = NumericalComparator.compare(
-        "./tapenade_3.16",
-        "./outputs/routine.f90",
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
         "routine_unary_composition",
         ["f"],
         ["x"],
@@ -366,7 +370,7 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
                 ),
             )
 
-        with open("./outputs/routine.f90", "w") as file:
+        with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
             file.write(routine.write())
 
         rg = np.random.default_rng(123456)
@@ -379,8 +383,8 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
             print(f"with option 'inline_operation_adjoints' = {inline}")
 
             max_error, associated_values = NumericalComparator.compare(
-                "./tapenade_3.16",
-                "./outputs/routine.f90",
+                f"{_file_dir()}/tapenade_3.16",
+                f"{_file_dir()}/outputs/routine.f90",
                 "routine_binary_composition",
                 ["f"],
                 ["x", "y"],
@@ -505,7 +509,7 @@ def test_taping(vector, inline):
     """
     routine = _create_taping_routine("routine_taping", vector)
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rev_schedule = ADJointReversalSchedule()
@@ -520,8 +524,8 @@ def test_taping(vector, inline):
         x_val = rg.uniform(0.1, 0.12, 1)
 
     max_error, associated_values = NumericalComparator.compare(
-        "./tapenade_3.16",
-        "./outputs/routine.f90",
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
         "routine_taping",
         ["f"],
         ["x"],
@@ -598,7 +602,7 @@ def test_nested_calls(vector, schedule):
         )
         calling_routine.new_call(called_routine_2, [y, f])
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(called_routine_1.write())
         file.write(called_routine_2.write())
         file.write(calling_routine.write())
@@ -613,8 +617,8 @@ def test_nested_calls(vector, schedule):
 
     if schedule:
         max_error, associated_values = NumericalComparator.compare(
-            "./tapenade_3.16",
-            "./outputs/routine.f90",
+            f"{_file_dir()}/tapenade_3.16",
+            f"{_file_dir()}/outputs/routine.f90",
             "calling",
             ["f"],
             ["x"],
@@ -626,8 +630,8 @@ def test_nested_calls(vector, schedule):
         )
     else:
         max_error, associated_values = NumericalComparator.compare(
-            "./tapenade_3.16",
-            "./outputs/routine.f90",
+            f"{_file_dir()}/tapenade_3.16",
+            f"{_file_dir()}/outputs/routine.f90",
             "calling",
             ["f"],
             ["x"],
@@ -744,7 +748,7 @@ def test_many_arguments(mode, vector):
                 ),
             )
 
-    with open("./outputs/routine.f90", "w") as file:
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
 
     rev_schedule = ADJointReversalSchedule()
@@ -763,8 +767,8 @@ def test_many_arguments(mode, vector):
         values[arg.name] = [[float(i)]*5]
 
     max_error, associated_values = NumericalComparator.compare(
-        "./tapenade_3.16",
-        "./outputs/routine.f90",
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
         "routine_many",
         dependent_names,
         independent_names,
@@ -783,4 +787,4 @@ def test_many_arguments(mode, vector):
     print("===============================\n")
 
 if __name__ == "__main__":
-    pytest.main(['numerical_test.py'])
+    pytest.main(['numerical_test.py', '-rx'])
