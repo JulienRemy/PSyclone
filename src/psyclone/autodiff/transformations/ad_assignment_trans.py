@@ -95,7 +95,6 @@ class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignment`
 
         :raises TypeError: if assignment is of the wrong type.
-        :raises NotImplementedError: if assigning to an array.
 
         :return: True if the assignment is iterative, False otherwise.
         :rtype: bool
@@ -105,10 +104,6 @@ class ADAssignmentTrans(ADElementTrans, metaclass=ABCMeta):
             raise TypeError(
                 f"'assignment' argument in is_iterative should be a "
                 f"PSyIR 'Assignment' but found '{type(assignment).__name__}'."
-            )
-        if assignment.is_array_assignment:
-            raise NotImplementedError(
-                "Array assignment are not implemented yet."
             )
 
         lhs = assignment.lhs

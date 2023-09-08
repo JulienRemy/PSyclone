@@ -331,11 +331,6 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                 f"type 'DataSymbol' but found"
                 f"'{type(datasymbol).__name__}'."
             )
-        #if not datasymbol.is_scalar:
-        #    raise NotImplementedError(
-        #        "'datasymbol' is not a scalar. "
-        #        "Arrays are not implemented yet."
-        #    )
 
         # NOTE: subclasses need to redefine the
         # _differential_prefix, _differential_postfix and _differential_table_index
