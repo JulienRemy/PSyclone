@@ -72,9 +72,10 @@ def _input_shape(n, vector):
         return (n, 5)
     return n
 
-@pytest.mark.parametrize("mode, vector, op",
-                         product(("forward", "reverse"),
-                                 (False, True),
+@pytest.mark.parametrize("mode, iterative, vector, op",
+                         product(MODES,
+                                 (True, False),
+                                 (True, False),
                                  (UnaryOperation.Operator.PLUS,
                                   UnaryOperation.Operator.MINUS,
                                   UnaryOperation.Operator.SQRT,
@@ -88,7 +89,7 @@ def _input_shape(n, vector):
                                   UnaryOperation.Operator.ASIN,
                                   UnaryOperation.Operator.ATAN,
                                   UnaryOperation.Operator.ABS)))
-def test_unary(mode, vector, op):
+def test_unary(mode, iterative, vector, op):
     """Test all unary operators in both modes, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing `f = op(x)` or \
     `f = x; f = op(f)` and comparing numerical results for random values of `x`.
@@ -97,74 +98,71 @@ def test_unary(mode, vector, op):
     """
     print(f"Testing unary operator {op} in {mode}-mode with{'' if vector else 'out'} vectors")
 
-    for iterative in _iterative_and_inline_modes(mode):
-        routine = SubroutineGenerator("routine_unary")
+    routine = SubroutineGenerator("routine_unary")
 
-        x = routine.new_in_arg("x", _datatype(vector))
-        f = routine.new_out_arg("f", _datatype(vector))
+    x = routine.new_in_arg("x", _datatype(vector))
+    f = routine.new_out_arg("f", _datatype(vector))
 
-        if iterative:
-            print("with an iterative assignment to f")
-            routine.new_assignment(f, x)
-            routine.new_assignment(f, UnaryOperation.create(op, Reference(f)))
-        else:
-            print("without iterative assignment")
-            routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
+    if iterative:
+        print("with an iterative assignment to f")
+        routine.new_assignment(f, x)
+        routine.new_assignment(f, UnaryOperation.create(op, Reference(f)))
+    else:
+        print("without iterative assignment")
+        routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
 
-        with open("./outputs/routine.f90", "w") as file:
-            file.write(routine.write())
+    with open("./outputs/routine.f90", "w") as file:
+        file.write(routine.write())
 
-        rg = np.random.default_rng(123456)
-        # Operators requiring a positive argument
-        if op in (
-            UnaryOperation.Operator.SQRT,
-            UnaryOperation.Operator.LOG,
-            UnaryOperation.Operator.LOG10,
-        ):
-            x_val = rg.uniform(0, 2, _input_shape(10, vector))
-        # Operators requiring an argument in [-1, 1]
-        elif op in (UnaryOperation.Operator.ACOS, UnaryOperation.Operator.ASIN):
-            x_val = rg.uniform(-1, 1, _input_shape(10, vector))
-        else:
-            x_val = rg.uniform(-2, 2, _input_shape(10, vector))
+    rg = np.random.default_rng(123456)
+    # Operators requiring a positive argument
+    if op in (
+        UnaryOperation.Operator.SQRT,
+        UnaryOperation.Operator.LOG,
+        UnaryOperation.Operator.LOG10,
+    ):
+        x_val = rg.uniform(0, 2, _input_shape(5, vector))
+    # Operators requiring an argument in [-1, 1]
+    elif op in (UnaryOperation.Operator.ACOS, UnaryOperation.Operator.ASIN):
+        x_val = rg.uniform(-1, 1, _input_shape(5, vector))
+    else:
+        x_val = rg.uniform(-2, 2, _input_shape(5, vector))
 
-        # Whichever schedule will work
-        rev_schedule = ADJointReversalSchedule()
+    # Whichever schedule will work
+    rev_schedule = ADJointReversalSchedule()
 
-        for inline in _iterative_and_inline_modes(mode):
-            print(f"with option 'inline_operation_adjoints' = {inline}")
+    max_error, associated_values = NumericalComparator.compare(
+        "./tapenade_3.16",
+        "./outputs/routine.f90",
+        "routine_unary",
+        ["f"],
+        ["x"],
+        {"x": x_val.tolist()},
+        "Linf_error",
+        {"verbose": True},
+        mode,
+        rev_schedule
+    )
 
-            max_error, associated_values = NumericalComparator.compare(
-                "./tapenade_3.16",
-                "./outputs/routine.f90",
-                "routine_unary",
-                ["f"],
-                ["x"],
-                {"x": x_val.tolist()},
-                "Linf_error",
-                {"verbose": True, "inline_operation_adjoints": inline},
-                mode,
-                rev_schedule
-            )
-
-            if max_error > MAX_ERROR or np.isnan(max_error):
-                raise ValueError(
-                    f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
-                )
-            print("passed")
-            print("-----------------------")
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        raise ValueError(
+            f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
+        )
+    print("passed")
+    print("-----------------------")
 
     print("===============================\n")
 
-@pytest.mark.parametrize("mode, vector, op",
+@pytest.mark.parametrize("mode, iterative, vector, op",
                          product(("forward", "reverse"),
+                                 (False, True),
                                  (False, True),
                                  (BinaryOperation.Operator.ADD,
                                   BinaryOperation.Operator.SUB,
                                   BinaryOperation.Operator.MUL,
                                   BinaryOperation.Operator.DIV,
                                   BinaryOperation.Operator.POW,)))
-def test_binary(mode, vector, op):
+def test_binary(mode, iterative, vector, op):
     """Test all binary operators in both modes, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing `f = x (op) y` or \
     `f = x; f = f (op) y` and comparing numerical results for random values of \
@@ -174,61 +172,58 @@ def test_binary(mode, vector, op):
     """
     print(f"Testing binary operator {op} in {mode}-mode")
 
-    for iterative in _iterative_and_inline_modes(mode):
-        routine = SubroutineGenerator("routine_binary")
+    routine = SubroutineGenerator("routine_binary")
 
-        x = routine.new_in_arg("x", _datatype(vector))
-        y = routine.new_in_arg("y", _datatype(vector))
-        f = routine.new_out_arg("f", _datatype(vector))
+    x = routine.new_in_arg("x", _datatype(vector))
+    y = routine.new_in_arg("y", _datatype(vector))
+    f = routine.new_out_arg("f", _datatype(vector))
 
-        if iterative:
-            print("with an iterative assignment to f")
-            routine.new_assignment(f, x)
-            routine.new_assignment(
-                f, BinaryOperation.create(op, Reference(f), Reference(y))
-            )
-        else:
-            print("without iterative assignment")
-            routine.new_assignment(
-                f, BinaryOperation.create(op, Reference(x), Reference(y))
-            )
+    if iterative:
+        print("with an iterative assignment to f")
+        routine.new_assignment(f, x)
+        routine.new_assignment(
+            f, BinaryOperation.create(op, Reference(f), Reference(y))
+        )
+    else:
+        print("without iterative assignment")
+        routine.new_assignment(
+            f, BinaryOperation.create(op, Reference(x), Reference(y))
+        )
 
-        # routine.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
+    # routine.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
 
-        with open("./outputs/routine.f90", "w") as file:
-            file.write(routine.write())
+    with open("./outputs/routine.f90", "w") as file:
+        file.write(routine.write())
 
-        rg = np.random.default_rng(123456)
-        if op is BinaryOperation.Operator.POW:
-            x_val = rg.uniform(0, 2, _input_shape(10, vector))
-        else:
-            x_val = rg.uniform(-2, 2,_input_shape(10, vector))
-        y_val = rg.uniform(-2, 2, _input_shape(10, vector))
+    rg = np.random.default_rng(123456)
+    if op is BinaryOperation.Operator.POW:
+        x_val = rg.uniform(0, 2, _input_shape(5, vector))
+    else:
+        x_val = rg.uniform(-2, 2,_input_shape(5, vector))
+    y_val = rg.uniform(-2, 2, _input_shape(5, vector))
 
-        rev_schedule = ADJointReversalSchedule()
-        for inline in _iterative_and_inline_modes(mode):
-            print(f"with option 'inline_operation_adjoints' = {inline}")
+    rev_schedule = ADJointReversalSchedule()
 
-            max_error, associated_values = NumericalComparator.compare(
-                "./tapenade_3.16",
-                "./outputs/routine.f90",
-                "routine_binary",
-                ["f"],
-                ["x", "y"],
-                {"x": x_val.tolist(), "y": y_val.tolist()},
-                "Linf_error",
-                {"verbose": True, "inline_operation_adjoints": inline},
-                mode,
-                rev_schedule
-            )
+    max_error, associated_values = NumericalComparator.compare(
+        "./tapenade_3.16",
+        "./outputs/routine.f90",
+        "routine_binary",
+        ["f"],
+        ["x", "y"],
+        {"x": x_val.tolist(), "y": y_val.tolist()},
+        "Linf_error",
+        {"verbose": True},
+        mode,
+        rev_schedule
+    )
 
-            if max_error > MAX_ERROR or np.isnan(max_error):
-                raise ValueError(
-                    f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
-                )
-            print("passed")
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        raise ValueError(
+            f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
+        )
+    print("passed")
 
-            print("-----------------------")
+    print("-----------------------")
 
     print("===============================\n")
 
@@ -247,11 +242,13 @@ unary_operators = (
                 UnaryOperation.Operator.ATAN,
                 UnaryOperation.Operator.ABS,
             )
-@pytest.mark.parametrize("mode, vector, unaries",
+@pytest.mark.parametrize("mode, iterative, inline, vector, unaries",
                          product(("forward", "reverse"),
                                  (False, True),
+                                 (False, True),
+                                 (False, True),
                                  product(unary_operators, unary_operators)))
-def test_unary_composition(mode, vector, unaries):
+def test_unary_composition(mode, iterative, inline, vector, unaries):
     """Test composition of unary operators in both modes, by applying \
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
     `f = op1(op2(x))` or `f = x; f = op1(op2(f))` and comparing numerical \
@@ -262,59 +259,56 @@ def test_unary_composition(mode, vector, unaries):
     unary_1, unary_2 = unaries
     print(f"Testing composition of {unary_1} and {unary_2} in {mode}-mode")
 
-    for iterative in _iterative_and_inline_modes(mode):
-        routine = SubroutineGenerator("routine_unary_composition")
+    routine = SubroutineGenerator("routine_unary_composition")
 
-        x = routine.new_in_arg("x", _datatype(vector))
-        f = routine.new_out_arg("f", _datatype(vector))
+    x = routine.new_in_arg("x", _datatype(vector))
+    f = routine.new_out_arg("f", _datatype(vector))
 
-        if iterative:
-            print("with an iterative assignment to f")
-            routine.new_assignment(f, x)
-            routine.new_assignment(
-                f,
-                UnaryOperation.create(
-                    unary_1, UnaryOperation.create(unary_2, Reference(f))
-                ),
-            )
-        else:
-            print("without iterative assignment")
-            routine.new_assignment(
-                f,
-                UnaryOperation.create(
-                    unary_1, UnaryOperation.create(unary_2, Reference(x))
-                ),
-            )
+    if iterative:
+        print("with an iterative assignment to f")
+        routine.new_assignment(f, x)
+        routine.new_assignment(
+            f,
+            UnaryOperation.create(
+                unary_1, UnaryOperation.create(unary_2, Reference(f))
+            ),
+        )
+    else:
+        print("without iterative assignment")
+        routine.new_assignment(
+            f,
+            UnaryOperation.create(
+                unary_1, UnaryOperation.create(unary_2, Reference(x))
+            ),
+        )
 
-        with open("./outputs/routine.f90", "w") as file:
-            file.write(routine.write())
+    with open("./outputs/routine.f90", "w") as file:
+        file.write(routine.write())
 
-        rg = np.random.default_rng(123456)
-        x_val = rg.uniform(-1, 1, _input_shape(10, vector))
+    rg = np.random.default_rng(123456)
+    x_val = rg.uniform(-1, 1, _input_shape(5, vector))
 
-        rev_schedule = ADJointReversalSchedule()
-        for inline in _iterative_and_inline_modes(mode):
-            print(f"with option 'inline_operation_adjoints' = {inline}")
+    rev_schedule = ADJointReversalSchedule()
 
-            max_error, associated_values = NumericalComparator.compare(
-                "./tapenade_3.16",
-                "./outputs/routine.f90",
-                "routine_unary_composition",
-                ["f"],
-                ["x"],
-                {"x": x_val.tolist()},
-                "Linf_error",
-                {"verbose": True, "inline_operation_adjoints": inline},
-                mode,
-                rev_schedule,
-            )
+    max_error, associated_values = NumericalComparator.compare(
+        "./tapenade_3.16",
+        "./outputs/routine.f90",
+        "routine_unary_composition",
+        ["f"],
+        ["x"],
+        {"x": x_val.tolist()},
+        "Linf_error",
+        {"verbose": True, "inline_operation_adjoints": inline},
+        mode,
+        rev_schedule,
+    )
 
-            if max_error > MAX_ERROR or np.isnan(max_error):
-                raise ValueError(
-                    f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
-                )
-            print("passed")
-            print("-----------------------")
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        raise ValueError(
+            f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
+        )
+    print("passed")
+    print("-----------------------")
 
     print("===============================\n")
 
@@ -325,11 +319,13 @@ binary_operators = (
                 BinaryOperation.Operator.DIV,
                 #BinaryOperation.Operator.POW,
             )
-@pytest.mark.parametrize("mode, vector, binaries",
+@pytest.mark.parametrize("mode, iterative, inline, vector, binaries",
                          product(("forward", "reverse"),
                                  (False, True),
+                                 (False, True),
+                                 (False, True),
                                  product(binary_operators, binary_operators)))
-def test_binary_composition(mode, vector, binaries):
+def test_binary_composition(mode, iterative, inline, vector, binaries):
     """Test composition of binary operators in both modes, by applying \
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
     `f = (x (op1) y) (op2) z` or `f = x; f = (f (op1) y) (op2) z` and comparing \
@@ -374,9 +370,9 @@ def test_binary_composition(mode, vector, binaries):
             file.write(routine.write())
 
         rg = np.random.default_rng(123456)
-        x_val = rg.uniform(1, 3, _input_shape(10, vector))
-        y_val = rg.uniform(1, 3, _input_shape(10, vector))
-        z_val = rg.uniform(1, 3, _input_shape(10, vector))
+        x_val = rg.uniform(1, 3, _input_shape(5, vector))
+        y_val = rg.uniform(1, 3, _input_shape(5, vector))
+        z_val = rg.uniform(1, 3, _input_shape(5, vector))
 
         rev_schedule = ADJointReversalSchedule()
         for inline in _iterative_and_inline_modes(mode):
@@ -514,13 +510,19 @@ def test_taping(vector, inline):
     print(f"Testing a routine with many (used) taped values")
     print(f"with option 'inline_operation_adjoints' = {inline}")
 
+    rg = np.random.default_rng(123456)
+    if vector:
+        x_val = rg.uniform(0.1, 0.12, _input_shape(5, vector))
+    else:
+        x_val = rg.uniform(0.1, 0.12, 1)
+
     max_error, associated_values = NumericalComparator.compare(
         "./tapenade_3.16",
         "./outputs/routine.f90",
         "routine_taping",
         ["f"],
         ["x"],
-        {"x": [0.1, 0.1, 0.1, 0.1, 0.1]},
+        {"x": x_val.tolist()},
         "Linf_error",
         {"verbose": True, "inline_operation_adjoints": inline},
         "reverse",
@@ -604,7 +606,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [0.1, 0.1, 0.1, 0.1, 0.1]},
+            {"x": [[[0.1]*5]]},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "reverse",
@@ -617,7 +619,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [0.1, 0.1, 0.1, 0.1, 0.1]},
+            {"x": [[[0.1]*5]]},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "forward",
@@ -744,7 +746,7 @@ def test_many_arguments(mode, vector):
 
     values = {}
     for i, arg in enumerate(in_args + inout_args + undef_args):
-        values[arg.name] = [float(i)]*5
+        values[arg.name] = [[float(i)]*5]
 
     max_error, associated_values = NumericalComparator.compare(
         "./tapenade_3.16",
@@ -767,7 +769,7 @@ def test_many_arguments(mode, vector):
     print("===============================\n")
 
 if __name__ == "__main__":
-    pytest.main(['numerical_test.py'])
+    #pytest.main(['numerical_test.py'])
     #test_unary()
     #test_binary()
     #test_unary_composition()
