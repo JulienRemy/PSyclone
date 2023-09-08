@@ -331,11 +331,11 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                 f"type 'DataSymbol' but found"
                 f"'{type(datasymbol).__name__}'."
             )
-        if not datasymbol.is_scalar:
-            raise NotImplementedError(
-                "'datasymbol' is not a scalar. "
-                "Arrays are not implemented yet."
-            )
+        #if not datasymbol.is_scalar:
+        #    raise NotImplementedError(
+        #        "'datasymbol' is not a scalar. "
+        #        "Arrays are not implemented yet."
+        #    )
 
         # NOTE: subclasses need to redefine the
         # _differential_prefix, _differential_postfix and _differential_table_index
@@ -346,13 +346,19 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         # Name using pre- and postfix
         differential_name = self._differential_prefix + datasymbol.name
         differential_name += self._differential_postfix
+        # ScalarType
+        datatype = self._default_differential_datatype
+        # ArrayType if array datasymbol
+        if isinstance(datasymbol.datatype, ArrayType):
+            datatype = ArrayType(self._default_differential_datatype,
+                                 datasymbol.datatype.shape)
         # New adjoint symbol with unique name in the correct transformed table
         differential = self.transformed_tables[
             self._differential_table_index
         ].new_symbol(
             differential_name,
             symbol_type=DataSymbol,
-            datatype=self._default_differential_datatype,
+            datatype=datatype,
         )
 
         # Add it to the map

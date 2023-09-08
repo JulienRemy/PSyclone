@@ -433,9 +433,7 @@ class ADReverseCallTrans(ADCallTrans):
 
         # TODO: correct datatype
         # New adjoint for the operation
-        op_adj = self.routine_trans.new_operation_adjoint(
-            self.routine_trans._default_differential_datatype
-        )
+        op_adj = self.routine_trans.new_operation_adjoint(operation)
         # op_adj = 0.0
         op_adj_zero = assign_zero(op_adj)
 

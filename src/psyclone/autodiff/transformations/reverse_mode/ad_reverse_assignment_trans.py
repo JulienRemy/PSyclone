@@ -36,7 +36,8 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Assignment nodes."""
 
-from psyclone.psyir.nodes import Literal, Reference, Operation
+from psyclone.psyir.nodes import Literal, Reference, Operation, IntrinsicCall
+from psyclone.psyir.symbols import ScalarType, ArrayType
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff import assign_zero, assign, increment
@@ -150,6 +151,11 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                     rhs_adj = self.routine_trans.data_symbol_differential_map[
                         rhs.symbol
                     ]
+                    if (isinstance(rhs_adj.datatype, ScalarType)
+                        and isinstance(lhs_adj.datatype, ArrayType)):
+                        lhs_adj = IntrinsicCall.create(
+                                            IntrinsicCall.Intrinsic.SUM,
+                                            [Reference(lhs_adj)])
                     # Increment it
                     rhs_adj_op = increment(rhs_adj, lhs_adj)
                     # Add the incrementation to the returning motion

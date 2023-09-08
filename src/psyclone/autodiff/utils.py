@@ -165,7 +165,12 @@ def assign_zero(variable):
             f"'{type(variable).__name__}'."
         )
 
-    return assign(variable, zero(variable.datatype))
+    if isinstance(variable.datatype, ScalarType):
+        datatype = variable.datatype
+    else:
+        datatype = variable.datatype.datatype
+
+    return assign(variable, zero(datatype))
 
 
 def increment(variable, value):
@@ -215,7 +220,6 @@ def zero(datatype=INTEGER_TYPE):
                               :py:class:`psyclone.psyir.symbols.ArrayType`]\
                     ]
 
-    :raises NotImplementedError: if datatype is an instance of `ArrayType`.
     :raises TypeError: if datatype is not an instance of `ArrayType` or \
                        `ScalarType`.
     :raises NotImplementedError: if the intrinsic of the 'ScalarType` is \
@@ -224,10 +228,6 @@ def zero(datatype=INTEGER_TYPE):
     :return: a Literal Node with value 0 of correct datatype.
     :rtype: :py:class:`psyclone.psyir.nodes.Literal`
     """
-    if isinstance(datatype, ArrayType):
-        raise NotImplementedError(
-            "Creating arrays with null coefficients is not implemented yet."
-        )
     if not isinstance(datatype, (ScalarType, ArrayType)):
         raise TypeError(
             f"The datatype argument of zero should be of type "
@@ -235,15 +235,18 @@ def zero(datatype=INTEGER_TYPE):
             f"but found '{type(datatype).__name__}'."
         )
 
-    # TODO: extend this to arrays
+    if isinstance(datatype, ScalarType):
+        new_datatype = datatype
+    else:
+        new_datatype = datatype.datatype
 
-    if datatype.intrinsic == ScalarType.Intrinsic.INTEGER:
+    if new_datatype.intrinsic == ScalarType.Intrinsic.INTEGER:
         return Literal("0", datatype)
-    if datatype.intrinsic == ScalarType.Intrinsic.REAL:
+    if new_datatype.intrinsic == ScalarType.Intrinsic.REAL:
         # TODO: Literal doesn't accept "0d0", seems like a bug
         # if datatype.precision == ScalarType.Precision.DOUBLE:
         #    return Literal("0d0", datatype)
-        return Literal("0.0", datatype)
+        return Literal("0.0", new_datatype)
 
     raise NotImplementedError(
         "Creating null Literals for types other than integer "
@@ -270,10 +273,6 @@ def one(datatype=INTEGER_TYPE):
     :return: a Literal Node with value 1 of correct datatype.
     :rtype: :py:class:`psyclone.psyir.nodes.Literal`
     """
-    if isinstance(datatype, ArrayType):
-        raise NotImplementedError(
-            "Creating arrays with unitary coefficients is not implemented yet."
-        )
     if not isinstance(datatype, (ScalarType, ArrayType)):
         raise TypeError(
             f"The datatype argument of one should be of type "
@@ -281,15 +280,18 @@ def one(datatype=INTEGER_TYPE):
             f"but found '{type(datatype).__name__}'."
         )
 
-    # TODO: extend this to arrays
+    if isinstance(datatype, ScalarType):
+        new_datatype = datatype
+    else:
+        new_datatype = datatype.datatype
 
-    if datatype.intrinsic == ScalarType.Intrinsic.INTEGER:
+    if new_datatype.intrinsic == ScalarType.Intrinsic.INTEGER:
         return Literal("1", datatype)
-    if datatype.intrinsic == ScalarType.Intrinsic.REAL:
+    if new_datatype.intrinsic == ScalarType.Intrinsic.REAL:
         # TODO: Literal doesn't accept "1d0", seems like a bug
         # if datatype.precision == ScalarType.Precision.DOUBLE:
         #    return Literal("1d0", datatype)
-        return Literal("1.0", datatype)
+        return Literal("1.0", new_datatype)
 
     raise NotImplementedError(
         "Creating unitary Literals for types other than "

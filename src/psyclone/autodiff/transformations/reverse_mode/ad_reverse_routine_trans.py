@@ -41,7 +41,8 @@ from psyclone.psyir.nodes import (
     Call,
     Reference,
     Assignment,
-    Literal
+    Literal,
+    Operation
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -756,24 +757,30 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Add the value_tape restores before the call
         self.add_children(self.returning, value_tape_restores, reverse=True)
 
-    def new_operation_adjoint(self, datatype):
+    def new_operation_adjoint(self, operation):
         """Creates a new adjoint symbol for an Operation node in the \
         returning table. Also appends it to the operation_adjoints list.
 
-        :param datatype: datatype of the adjoint symbol
-        :type datatype: Union[:py:class:`psyclone.psyir.symbols.ScalarType`,
-                              :py:class:`psyclone.psyir.symbols.ArrayType`]
+        :param operation: operation node.
+        :type operation: :py:class:`psyclone.psyir.symbols.Operation`
 
-        :raises TypeError: if datatype is of the wrong type.
+        :raises TypeError: if operation is of the wrong type.
 
         :return: the adjoint symbol generated.
         :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
         """
+        if not isinstance(operation, Operation):
+            raise TypeError(
+                f"'operation' argument should be of type "
+                f"'Operation' but found "
+                f"'{type(operation).__name__}'.")
+
+        datatype = operation.datatype
         if not isinstance(datatype, (ScalarType, ArrayType)):
             raise TypeError(
-                f"'datatype' argument should be of type "
-                f"'ScalarType' or 'ArrayType' but found "
-                f"'{type(datatype).__name__}'."
+                f"'datatype' attribute of 'operation' argument should be of "
+                f"type 'ScalarType' or 'ArrayType' but found "
+                f"'{type(datatype).__name__}'." 
             )
 
         adjoint = self.returning_table.new_symbol(

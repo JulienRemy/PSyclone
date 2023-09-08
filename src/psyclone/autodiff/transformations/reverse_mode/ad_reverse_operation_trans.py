@@ -43,8 +43,10 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Operation,
+    IntrinsicCall
 )
-from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, REAL_TYPE
+from psyclone.psyir.symbols import (DataSymbol, INTEGER_TYPE, REAL_TYPE, 
+                                    ScalarType, ArrayType)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADOperationTrans
@@ -179,7 +181,7 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         # This is None if the operation is not on the RHS of an Assignment node
         ancestor_assignment = operation.ancestor(Assignment)
-        # List storing incrementations to the LHS adjoint of the 
+        # List storing incrementations to the LHS adjoint of the
         # ancestor assignment.
         # Used if the assignment is iterative. eg. var = operations(var, ...)
         assignment_lhs_adj_incr = []
@@ -205,8 +207,8 @@ class ADReverseOperationTrans(ADOperationTrans):
             parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
             adj_incr = increment(adj, parent_adj_mul)
 
-            # If this operand is the LHS of an Assignment of which this 
-            # operation node is a descendant, the incrementation to the adjoint 
+            # If this operand is the LHS of an Assignment of which this
+            # operation node is a descendant, the incrementation to the adjoint
             # will be done last
             if (ancestor_assignment is not None) and (
                 ancestor_assignment.lhs == first_operand
@@ -222,7 +224,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             # Increment the adjoints of the operands where needed
             for operand, partial in zip(operation.children, partials):
                 if isinstance(operand, Literal):
-                    # If the operand is a Literal, it has no adjoint 
+                    # If the operand is a Literal, it has no adjoint
                     # to increment
                     pass
                 elif isinstance(operand, Reference):
@@ -231,10 +233,15 @@ class ADReverseOperationTrans(ADOperationTrans):
                         operand.symbol
                     ]
                     parent_adj_mul = mul(parent_adj, partial)
+                    if (isinstance(adj.datatype, ScalarType)
+                            and isinstance(parent_adj.datatype, ArrayType)):
+                        parent_adj_mul = IntrinsicCall.create(
+                                            IntrinsicCall.Intrinsic.SUM,
+                                            [parent_adj_mul])
                     adj_incr = increment(adj, parent_adj_mul)
 
-                    # If this operand is the LHS of an Assignment of which this 
-                    # operation node is a descendant, the incrementation to the 
+                    # If this operand is the LHS of an Assignment of which this
+                    # operation node is a descendant, the incrementation to the
                     # adjoint will be done last
                     if (ancestor_assignment is not None) and (
                         ancestor_assignment.lhs == operand
@@ -246,17 +253,17 @@ class ADReverseOperationTrans(ADOperationTrans):
                         returning.append(adj_incr)
 
                 elif isinstance(operand, Operation):
-                    # If the operand is an Operation, create and assign its 
+                    # If the operand is an Operation, create and assign its
                     # adjoint
                     # TODO: correct datatype
                     op_adj = self.routine_trans.new_operation_adjoint(
-                        self.routine_trans._default_differential_datatype
-                    )
+                        operation)
+
                     parent_adj_mul = mul(parent_adj, partial)
                     adj_assign = assign(op_adj, parent_adj_mul)
                     returning.append(adj_assign)
 
-                    # then recursively apply the transformation and collect the 
+                    # then recursively apply the transformation and collect the
                     # statements
                     op_returning, op_lhs_adj_incr = self.apply(
                         operand, op_adj, options
@@ -274,7 +281,7 @@ class ADReverseOperationTrans(ADOperationTrans):
                     )
 
         # Verbose mode adds comments to the first and last returning statements
-        # TODO: writer should be initialization argument of the (container?) 
+        # TODO: writer should be initialization argument of the (container?)
         # transformation
         if verbose and len(returning) != 0:
             from psyclone.psyir.backend.fortran import FortranWriter
