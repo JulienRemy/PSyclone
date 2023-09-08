@@ -370,19 +370,3 @@ def test_ad_value_tape_extend_and_slice(fortran_writer):
     tape1.record(refs2[0])
     assert tape1.length.value == "26"
     assert fortran_writer(tape_slice) == f"{TaP}1(11:25)"
-
-if __name__ == "__main__":
-    print("Testing ADValueTape")
-    from psyclone.psyir.backend.fortran import FortranWriter
-
-    fwriter = FortranWriter()
-
-    test_ad_value_tape_initialization()
-    test_ad_value_tape__has_last()
-    test_ad_value_tape_record(fwriter)
-    test_ad_value_tape_restore(fwriter)
-    test_ad_value_tape_reshape(fwriter)
-    test_ad_value_tape_extend()
-    test_ad_value_tape_extend_and_slice(fwriter)
-
-    print("passed")

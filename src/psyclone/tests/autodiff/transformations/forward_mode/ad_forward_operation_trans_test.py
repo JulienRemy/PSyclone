@@ -377,18 +377,3 @@ def test_ad_operation_trans_apply(fortran_writer):
         fortran_writer(transformed)
         == f"{PRE}var2{POST} * (-var3 * var2) + (-({PRE}var3{POST} * var2 + {PRE}var2{POST} * var3)) * var2"
     )
-
-
-if __name__ == "__main__":
-    print("Testing ADForwardOperationTrans")
-    from psyclone.psyir.backend.fortran import FortranWriter
-
-    fwriter = FortranWriter()
-
-    test_ad_operation_trans_initialization()
-    test_ad_operation_trans_validate()
-    test_ad_operation_trans_differentiate()
-    test_ad_operation_trans_differentiate_unary(fwriter)
-    test_ad_operation_trans_differentiate_binary(fwriter)
-    test_ad_operation_trans_apply(fwriter)
-    print("passed")

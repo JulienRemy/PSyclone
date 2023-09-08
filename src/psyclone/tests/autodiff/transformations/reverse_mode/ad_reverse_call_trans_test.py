@@ -542,19 +542,3 @@ def _test_arguments(applied_ad_call_trans):
 # tape slices
 # arguments
 # temp and adjoint assignments?
-
-if __name__ == "__main__":
-    print("Testing ADReverseCallTrans")
-    from psyclone.psyir.backend.fortran import FortranWriter
-
-    fwriter = FortranWriter()
-
-    test_ad_call_trans_initialization()
-    test_ad_call_trans_validate()
-    test_ad_call_trans_transform_literal_argument()
-    test_ad_call_trans_transform_reference_argument()
-    test_ad_call_trans_transform_operation_argument()
-    test_ad_call_trans_transform_call_arguments()
-    test_ad_call_trans_transform_called_routine()
-    test_ad_call_trans_apply()
-    print("passed")

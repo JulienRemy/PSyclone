@@ -783,13 +783,4 @@ def test_many_arguments(mode, vector):
     print("===============================\n")
 
 if __name__ == "__main__":
-    #test_taping(True, True)
     pytest.main(['numerical_test.py'])
-    #test_unary()
-    #test_binary()
-    #test_unary_composition()
-    #test_binary_composition()
-    #test_taping()
-    #test_nested_calls()
-    #test_many_arguments()
-    # test_vars()

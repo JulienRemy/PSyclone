@@ -209,14 +209,6 @@ def test_zero_error():
         "but found 'NoneType'." in str(info.value)
     )
 
-    array_type = ArrayType(INTEGER_TYPE, [2])
-    with pytest.raises(NotImplementedError) as info:
-        zero(array_type)
-    assert (
-        "Creating arrays with null coefficients is "
-        "not implemented yet." in str(info.value)
-    )
-
     with pytest.raises(NotImplementedError) as info:
         zero(CHARACTER_TYPE)
     assert (
@@ -228,9 +220,13 @@ def test_zero_error():
 def test_zero(fortran_writer):
     int_zero = zero(INTEGER_TYPE)
     real_zero = zero(REAL_TYPE)
+    array_int_zero = zero(ArrayType(INTEGER_TYPE, [2]))
+    array_real_zero = zero(ArrayType(REAL_TYPE, [2]))
 
     assert fortran_writer(int_zero) == "0"
     assert fortran_writer(real_zero) == "0.0"
+    assert fortran_writer(array_int_zero) == "0"
+    assert fortran_writer(array_real_zero) == "0.0"
 
 
 def test_one_error():
@@ -240,14 +236,6 @@ def test_one_error():
         "The datatype argument of one should be of type "
         "psyir.symbols.ScalarType or psyir.symbols.ArrayType "
         "but found 'NoneType'." in str(info.value)
-    )
-
-    array_type = ArrayType(INTEGER_TYPE, [2])
-    with pytest.raises(NotImplementedError) as info:
-        one(array_type)
-    assert (
-        "Creating arrays with unitary coefficients is "
-        "not implemented yet." in str(info.value)
     )
 
     with pytest.raises(NotImplementedError) as info:
@@ -261,9 +249,13 @@ def test_one_error():
 def test_one(fortran_writer):
     int_one = one(INTEGER_TYPE)
     real_one = one(REAL_TYPE)
+    array_int_one = one(ArrayType(INTEGER_TYPE, [2]))
+    array_real_one = one(ArrayType(REAL_TYPE, [2]))
 
     assert fortran_writer(int_one) == "1"
     assert fortran_writer(real_one) == "1.0"
+    assert fortran_writer(array_int_one) == "1"
+    assert fortran_writer(array_real_one) == "1.0"
 
 
 def test_minus_error():
@@ -569,54 +561,3 @@ def test_own_routine_symbol():
 
     assert isinstance(routine_symbol, RoutineSymbol)
     assert routine_symbol.name == "routine_name"
-
-
-if __name__ == "__main__":
-    print("Testing utils")
-    from psyclone.psyir.backend.fortran import FortranWriter
-    fwriter = FortranWriter()
-
-    test_own_routine_symbol()
-    test_own_routine_symbol_error()
-    test_add(fwriter)
-    test_add_error()
-    test_assign(fwriter)
-    test_assign_error()
-    test_assign_zero(fwriter)
-    test_assign_zero_error()
-    test_cos(fwriter)
-    test_cos_error()
-    test_datanode()
-    test_datanode_error()
-    test_div(fwriter)
-    test_div_error()
-    test_exp(fwriter)
-    test_exp_error()
-    test_increment(fwriter)
-    test_increment_error()
-    test_inverse(fwriter)
-    test_inverse_error()
-    test_log(fwriter)
-    test_log_error()
-    test_minus(fwriter)
-    test_minus_error()
-    test_mul(fwriter)
-    test_mul_error()
-    test_one(fwriter)
-    test_one_error()
-    test_power(fwriter)
-    test_power_error()
-    test_sign(fwriter)
-    test_sign_error()
-    test_sin(fwriter)
-    test_sin_error()
-    test_sqrt(fwriter)
-    test_sqrt_error()
-    test_square(fwriter)
-    test_sqrt_error()
-    test_sub(fwriter)
-    test_sub_error()
-    test_zero(fwriter)
-    test_zero_error()
-
-    print("passed")
