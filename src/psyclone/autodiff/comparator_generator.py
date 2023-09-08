@@ -68,6 +68,7 @@ from psyclone.psyir.nodes import (
     Routine,
     Reference,
 )
+from psyclone.psyir.nodes.operation import NaryOperation
 from psyclone.psyir.symbols import (
     ArrayType,
     REAL_TYPE,
@@ -389,8 +390,9 @@ class ComparatorGenerator(object):
                         + original_arg.name
                         + ADReverseRoutineTrans._differential_postfix
                     )
+
                 arg_diff = comparator.new_variable(
-                    arg_diff_name, cls._default_scalar_datatype
+                    arg_diff_name, original_arg.datatype
                 )
 
                 # Add it to the correct list of diff symbols
@@ -406,9 +408,28 @@ class ComparatorGenerator(object):
         # the transformed routines repeatedly
         # Create an ArrayType of correct dimensions for the 
         # autodiff/Tapenade Jacobians
+        dims = []
+        for diff in dependent_diffs:
+            if isinstance(diff.datatype, ArrayType):
+                if len(diff.datatype.shape) != 1:
+                    raise NotImplementedError("Can't generate a Jacobian for "
+                                              "arrays differentials of more "
+                                              "than 1D for now.") 
+                if (not isinstance(diff.datatype.shape[0],
+                                  ArrayType.ArrayBounds)
+                    or not isinstance(diff.datatype.shape[0].upper, Literal)):
+                    raise NotImplementedError("Only Literal shapes are "
+                                              "implemented.")
+                dims.append(int(diff.datatype.shape[0].upper.value))
+
+        if not dims:
+            shape = [len(independent_vars), len(dependent_vars)]
+        else:
+            shape = [len(independent_vars), len(dependent_vars), max(dims)]
+
         jacobian_datatype = ArrayType(
             cls._default_scalar_datatype,
-            [len(independent_vars), len(dependent_vars)],
+            shape,
         )
 
         # Create variables for them, as intent(out) argument or local variable
@@ -502,13 +523,19 @@ class ComparatorGenerator(object):
                         row = first_dim
                         col = second_dim
 
-                    J_element_ref = ArrayReference.create(
-                        J,
-                        [
+                    if not dims:
+                        shape = [
                             Literal(str(col + 1), INTEGER_TYPE),
                             Literal(str(row + 1), INTEGER_TYPE),
-                        ],
-                    )
+                        ]
+                    else:
+                        shape = [
+                            Literal(str(col + 1), INTEGER_TYPE),
+                            Literal(str(row + 1), INTEGER_TYPE),
+                            ":"
+                        ]
+
+                    J_element_ref = ArrayReference.create(J, shape)
                     comparator.new_assignment(J_element_ref, second_diff)
 
         # Generate the required output if different from 'Jacobians_values'
