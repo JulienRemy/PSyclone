@@ -107,7 +107,7 @@ def test_ad_value_tape_record(fortran_writer):
     array_ref = Reference(array_sym)
     rec_array = ad_value_tape.record(array_ref)
     assert (fortran_writer(rec_array)
-            == f"{TaP}name(:) = RESHAPE(array, (/ 2 /))\n")
+            == f"{TaP}name(:) = array(:)\n")
     assert ad_value_tape.length.value == "2"
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
@@ -141,7 +141,7 @@ def test_ad_value_tape_record(fortran_writer):
 
     rec_4_5 = ad_value_tape.record(array_ref)
     assert (fortran_writer(rec_4_5)
-            == f"{TaP}name(4:) = RESHAPE(array, (/ 2 /))\n")
+            == f"{TaP}name(4:) = array(:)\n")
     assert ad_value_tape.length.value == "5"
     assert ad_value_tape.recorded_nodes == [var_1, var_1, var_2,
                                             array_ref]
@@ -160,7 +160,7 @@ def test_ad_value_tape_record(fortran_writer):
                                             array_ref, matrix_ref, var_2]
 
     assert (fortran_writer(rec_4_5)
-            == f"{TaP}name(4:5) = RESHAPE(array, (/ 2 /))\n")
+            == f"{TaP}name(4:5) = array(:)\n")
     assert (fortran_writer(rec_6_9)
             == f"{TaP}name(6:9) = RESHAPE(matrix, (/ 4 /))\n")
 
@@ -231,12 +231,12 @@ def test_ad_value_tape_restore(fortran_writer):
     ad_value_tape.record(array_ref)
     rest_array = ad_value_tape.restore(array_ref)
     assert (fortran_writer(rest_array)
-            == f"array = RESHAPE({TaP}name(:), (/ 2 /))\n")
+            == f"array(:) = {TaP}name(:)\n")
     ad_value_tape.record(var_1)
     ad_value_tape.record(array_ref)
     rest_array_2 = ad_value_tape.restore(array_ref)
     assert (fortran_writer(rest_array_2)
-            == f"array = RESHAPE({TaP}name(4:), (/ 2 /))\n")
+            == f"array(:) = {TaP}name(4:)\n")
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
     matrix_sym = DataSymbol("matrix", ArrayType(REAL_TYPE, [2, 2]))

@@ -37,7 +37,8 @@
 "taping" (storing and recovering) of function values.
 """
 
-from psyclone.psyir.nodes import Assignment, Reference, IntrinsicCall, Literal
+from psyclone.psyir.nodes import (Assignment, Reference, IntrinsicCall, Literal,
+                                  ArrayReference)
 from psyclone.psyir.symbols import ScalarType, ArrayType, INTEGER_TYPE
 from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -115,6 +116,12 @@ class ADValueTape(ADTape):
         if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(value_tape_ref, reference.copy())
 
+        elif len(reference.datatype.shape) == 1:
+            assignment = Assignment.create(value_tape_ref,
+                                           ArrayReference.create(
+                                               reference.symbol,
+                                               [":"]))
+
         else:
             # Create an IntrinsicCall to RESHAPE to reshape the reference array
             # to 1D vector
@@ -157,6 +164,12 @@ class ADValueTape(ADTape):
 
         if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(reference.copy(), value_tape_ref)
+
+        elif len(reference.datatype.shape) == 1:
+            assignment = Assignment.create(ArrayReference.create(
+                                                reference.symbol,
+                                                [":"]),
+                                           value_tape_ref)
 
         else:
             # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
