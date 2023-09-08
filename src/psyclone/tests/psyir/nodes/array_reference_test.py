@@ -524,7 +524,45 @@ def test_array_datatype(fortran_writer):
 def test_array_create_colon(fortran_writer):
     '''Test that the create method accepts ":" as shortcut to automatically
     create a Range that represents ":".'''
-    test_sym = DataSymbol("test", ArrayType(REAL_TYPE, [10, 10]))
+    # Test explicit shape
+    test_sym = DataSymbol("test", ArrayType(REAL_TYPE,
+                                            [10,
+                                             ArrayType.ArrayBounds(2, 20)]))
+    aref = ArrayReference.create(test_sym, [":", ":"])
+    # Check that ranges are `1:10` and `2:20`
+    assert isinstance(aref.indices[0], Range)
+    assert isinstance(aref.indices[0].start, Literal)
+    assert isinstance(aref.indices[0].stop, Literal)
+    assert isinstance(aref.indices[0].step, Literal)
+    assert aref.indices[0].start.value == "1"
+    assert aref.indices[0].stop.value == "10"
+    assert aref.indices[0].step.value == "1"
+    assert isinstance(aref.indices[1], Range)
+    assert isinstance(aref.indices[1].start, Literal)
+    assert isinstance(aref.indices[1].stop, Literal)
+    assert isinstance(aref.indices[1].step, Literal)
+    assert aref.indices[1].start.value == "2"
+    assert aref.indices[1].stop.value == "20"
+    assert aref.indices[1].step.value == "1"
+
+    # Test attribute shape
+    test_sym = DataSymbol("test", ArrayType(REAL_TYPE,
+                                            [ArrayType.Extent.ATTRIBUTE,
+                                             ArrayType.Extent.ATTRIBUTE]))
+    aref = ArrayReference.create(test_sym, [":", ":"])
+    # Check that each dimension is `lbound(...):ubound(...)`
+    for child in aref.indices:
+        assert isinstance(child, Range)
+        assert isinstance(child.children[1], BinaryOperation)
+        assert child.children[0].operator == \
+               BinaryOperation.Operator.LBOUND
+        assert child.children[1].operator == \
+               BinaryOperation.Operator.UBOUND
+
+    # Test deferred shape
+    test_sym = DataSymbol("test", ArrayType(REAL_TYPE,
+                                            [ArrayType.Extent.DEFERRED,
+                                             ArrayType.Extent.DEFERRED]))
     aref = ArrayReference.create(test_sym, [":", ":"])
     # Check that each dimension is `lbound(...):ubound(...)`
     for child in aref.indices:
