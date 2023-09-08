@@ -479,7 +479,7 @@ class SubroutineGenerator(object):
         # its datatype is implemented
         for i, sym in enumerate(arg_symbols):
             if isinstance(sym, DataSymbol) and (
-                sym.datatype is not subroutine_generator.arguments[i].datatype
+                sym.datatype != subroutine_generator.arguments[i].datatype
             ):
                 raise ValueError(
                     f"The datatype of {sym} doesn't match that "

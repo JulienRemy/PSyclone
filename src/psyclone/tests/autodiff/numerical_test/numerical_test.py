@@ -435,21 +435,24 @@ def _create_taping_routine(name, vector):
     )
     routine = SubroutineGenerator(name)
 
-    x = routine.new_inout_arg("x", _datatype(vector))
+    x = routine.new_in_arg("x", _datatype(vector))
+    w = routine.new_variable("w", _datatype(vector))
     a = routine.new_variable("a")
     f = routine.new_out_arg("f", _datatype(vector))
 
     rg = np.random.default_rng(123456)
 
-    # x = 1.01 * x          ! to force taping argument
-    # f = f + unary_op(x)
+    routine.new_assignment(w, x)
+
+    # w = 1.01 * w          ! to force taping argument
+    # f = f + unary_op(y)
     for unary in unary_operators:
         routine.new_assignment(
-            x,
+            w,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
-                Reference(x),
+                Reference(w),
             ),
         )
 
@@ -458,20 +461,20 @@ def _create_taping_routine(name, vector):
             BinaryOperation.create(
                 BinaryOperation.Operator.ADD,
                 Reference(f),
-                UnaryOperation.create(unary, Reference(x)),
+                UnaryOperation.create(unary, Reference(w)),
             ),
         )
 
-    # x = 1.01 * x          ! to force taping argument
+    # w = 1.01 * w          ! to force taping argument
     # a = random(-1, 1)     ! to force taping literal argument
-    # f = f + x (binary_op) a
+    # f = f + w (binary_op) a
     for binary in binary_operators:
         routine.new_assignment(
-            x,
+            w,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
-                Reference(x),
+                Reference(w),
             ),
         )
 
@@ -484,7 +487,7 @@ def _create_taping_routine(name, vector):
             BinaryOperation.create(
                 BinaryOperation.Operator.ADD,
                 Reference(f),
-                BinaryOperation.create(binary, Reference(x), Reference(a)),
+                BinaryOperation.create(binary, Reference(w), Reference(a)),
             ),
         )
 
@@ -512,7 +515,7 @@ def test_taping(vector, inline):
 
     rg = np.random.default_rng(123456)
     if vector:
-        x_val = rg.uniform(0.1, 0.12, _input_shape(5, vector))
+        x_val = rg.uniform(0.1, 0.12, _input_shape(5, vector), )
     else:
         x_val = rg.uniform(0.1, 0.12, 1)
 
@@ -522,7 +525,7 @@ def test_taping(vector, inline):
         "routine_taping",
         ["f"],
         ["x"],
-        {"x": x_val.tolist()},
+        {"x": x_val},
         "Linf_error",
         {"verbose": True, "inline_operation_adjoints": inline},
         "reverse",
@@ -560,37 +563,40 @@ def test_nested_calls(vector, schedule):
 
     calling_routine = SubroutineGenerator("calling")
 
-    x = calling_routine.new_inout_arg("x", _datatype(vector))
+    x = calling_routine.new_in_arg("x", _datatype(vector))
+    y = calling_routine.new_variable("y", _datatype(vector))
     f = calling_routine.new_out_arg("f", _datatype(vector))
 
     # f = 0.0
     calling_routine.new_assignment(f, Literal("0.0", REAL_TYPE))
 
+    calling_routine.new_assignment(y, x)
+
     # Thrice
-    # x = 1.01 * x
-    # call called_routine_1(x, f)
-    # x = 1.01 * x
-    # call called_routine_2(x, f)
+    # y = 1.01 * y
+    # call called_routine_1(y, f)
+    # y = 1.01 * y
+    # call called_routine_2(y, f)
     for i in range(3):
         calling_routine.new_assignment(
-            x,
+            y,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
-                Reference(x),
+                Reference(y),
             ),
         )
-        calling_routine.new_call(called_routine_1, [x, f])
+        calling_routine.new_call(called_routine_1, [y, f])
 
         calling_routine.new_assignment(
-            x,
+            y,
             BinaryOperation.create(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
-                Reference(x),
+                Reference(y),
             ),
         )
-        calling_routine.new_call(called_routine_2, [x, f])
+        calling_routine.new_call(called_routine_2, [y, f])
 
     with open("./outputs/routine.f90", "w") as file:
         file.write(called_routine_1.write())
@@ -599,6 +605,12 @@ def test_nested_calls(vector, schedule):
 
     print(f"Testing in reverse-mode using reversal schedule {type(schedule).__name__}")
 
+    rg = np.random.default_rng(123456)
+    if vector:
+        x_val = rg.uniform(0.1, 0.12, _input_shape(5, vector), )
+    else:
+        x_val = rg.uniform(0.1, 0.12, 1)
+
     if schedule:
         max_error, associated_values = NumericalComparator.compare(
             "./tapenade_3.16",
@@ -606,7 +618,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [[[0.1]*5]]},
+            {"x": x_val},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "reverse",
@@ -619,7 +631,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [[[0.1]*5]]},
+            {"x": x_val},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "forward",
@@ -632,6 +644,7 @@ def test_nested_calls(vector, schedule):
         )
     print("passed")
     print("-----------------------")
+
 
 @pytest.mark.parametrize("mode, vector",
                          product(("forward", "reverse"),
@@ -663,6 +676,7 @@ def test_many_arguments(mode, vector):
             arg = routine.new_out_arg(f"arg{i}", _datatype(vector))
             out_args.append(arg)
         elif i < n*3:
+            # TODO: fix this issue between f2py and intent(inout)
             arg = routine.new_inout_arg(f"arg{i}", _datatype(vector))
             inout_args.append(arg)
         elif i < n*4:
@@ -769,7 +783,8 @@ def test_many_arguments(mode, vector):
     print("===============================\n")
 
 if __name__ == "__main__":
-    #pytest.main(['numerical_test.py'])
+    #test_taping(True, True)
+    pytest.main(['numerical_test.py'])
     #test_unary()
     #test_binary()
     #test_unary_composition()
