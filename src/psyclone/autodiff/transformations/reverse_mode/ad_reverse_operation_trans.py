@@ -83,33 +83,33 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
-        :param parent_adj: symbol of the adjoint of the parent Node, where \
+        :param parent_adj: reference of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, 
                            an enclosing Operation, etc.
-        :type parent_adj: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :type parent_adj: :py:class:`psyclone.psyir.symbols.Reference`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if operation is of the wrong type.
         :raises TransformationError: if parent_adj is of the wrong type.
-        :raises TransformationError: if parent_adj is not found among the \
-                                     adjoint symbols of the contextual \
+        :raises TransformationError: if parent_adj.symbol is not found among \
+                                     the adjoint symbols of the contextual \
                                      `ADReverseRoutineTrans`.
         """
         # pylint: disable=arguments-renamed
 
         super().validate(operation, options)
 
-        if not isinstance(parent_adj, DataSymbol):
+        if not isinstance(parent_adj, Reference):
             raise TransformationError(
                 f"'parent_adj' argument should be a "
-                f"PSyIR 'DataSymbol' but found '{type(parent_adj).__name__}'."
+                f"PSyIR 'Reference' but found '{type(parent_adj).__name__}'."
             )
 
-        if parent_adj not in self.routine_trans.adjoint_symbols:
+        if parent_adj.symbol not in self.routine_trans.adjoint_symbols:
             raise TransformationError(
-                f"'parent_adj' DataSymbol "
+                f"'parent_adj.symbol' DataSymbol "
                 f"'{parent_adj.name}' cannot be found "
                 f"among the existing adjoint symbols."
             )
@@ -154,10 +154,10 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         :param operation: operation Node to be transformed.
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
-        :param parent_adj: symbol of the adjoint of the parent Node, where \
+        :param parent_adj: reference of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, \
                            an enclosing Operation, etc.
-        :type parent_adj: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :type parent_adj: :py:class:`psyclone.psyir.symbols.Reference`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -200,9 +200,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            adj = self.routine_trans.data_symbol_differential_map[
-                first_operand.symbol
-            ]
+            adj = self.routine_trans.reference_to_differential_of(first_operand) #self.routine_trans.data_symbol_differential_map[first_operand.symbol]
 
             parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
             adj_incr = increment(adj, parent_adj_mul)
@@ -229,9 +227,8 @@ class ADReverseOperationTrans(ADOperationTrans):
                     pass
                 elif isinstance(operand, Reference):
                     # If the operand is a Reference, increment its adjoint
-                    adj = self.routine_trans.data_symbol_differential_map[
-                        operand.symbol
-                    ]
+                    adj \
+                        = self.routine_trans.reference_to_differential_of(operand) #self.routine_trans.data_symbol_differential_map[operand.symbol]
                     parent_adj_mul = mul(parent_adj, partial)
                     if (isinstance(adj.datatype, ScalarType)
                             and isinstance(parent_adj.datatype, ArrayType)):
@@ -266,7 +263,7 @@ class ADReverseOperationTrans(ADOperationTrans):
                     # then recursively apply the transformation and collect the
                     # statements
                     op_returning, op_lhs_adj_incr = self.apply(
-                        operand, op_adj, options
+                        operand, Reference(op_adj), options
                     )
                     returning.extend(op_returning)
                     assignment_lhs_adj_incr.extend(op_lhs_adj_incr)

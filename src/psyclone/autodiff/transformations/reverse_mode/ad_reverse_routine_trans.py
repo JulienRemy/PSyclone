@@ -112,7 +112,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.container_trans = container_trans
 
         # DataSymbol => adjoint DataSymbol
-        self.data_symbol_differential_map = dict()
+        # self.data_symbol_differential_map = dict()
 
         # Lists of adjoint symbols for operations
         self.operation_adjoints = []

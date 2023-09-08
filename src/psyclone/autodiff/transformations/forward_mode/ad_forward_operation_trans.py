@@ -137,10 +137,11 @@ class ADForwardOperationTrans(ADOperationTrans):
             return zero()
 
         if isinstance(operand, Reference):
-            operand_d_sym = self.routine_trans.data_symbol_differential_map[
-                operand.symbol
-            ]
-            operand_d = Reference(operand_d_sym)
+            # operand_d_sym = self.routine_trans.data_symbol_differential_map[
+            #     operand.symbol
+            # ]
+            # operand_d = Reference(operand_d_sym)
+            operand_d = self.routine_trans.reference_to_differential_of(operand)
 
         if isinstance(operand, Operation):
             operand_d = self.apply(operand)
@@ -221,12 +222,15 @@ class ADForwardOperationTrans(ADOperationTrans):
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
-                operand_d_sym = (
-                    self.routine_trans.data_symbol_differential_map[
-                        operand.symbol
-                    ]
-                )
-                operands_d.append(Reference(operand_d_sym))
+                # operand_d_sym = (
+                #     self.routine_trans.data_symbol_differential_map[
+                #         operand.symbol
+                #     ]
+                # )
+                # operands_d.append(Reference(operand_d_sym))
+                operand_d \
+                    = self.routine_trans.reference_to_differential_of(operand)
+                operands_d.append(operand_d)
             else:  # Operation
                 operands_d.append(self.apply(operand))
 

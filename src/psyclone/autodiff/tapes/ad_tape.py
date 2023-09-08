@@ -501,6 +501,11 @@ class ADTape(object, metaclass=ABCMeta):
                                     Literal(str(dim), INTEGER_TYPE))
                 dimensions.append(size_operation)
 
+        # from psyclone.psyir.backend.fortran import FortranWriter
+        # fortran_writer = FortranWriter()
+        # dim_str = [fortran_writer(dim) for dim in dimensions]
+        # print(f"Array {fortran_writer(array)}, found dimensions {dim_str}")
+
         return dimensions
 
     def _has_last(self, node):

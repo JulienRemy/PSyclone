@@ -104,6 +104,40 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         # DataSymbol => derivative DataSymbol
         self.data_symbol_differential_map = dict()
 
+    def reference_to_differential_of(self, reference):
+        """Gives a Reference or ArrayReference to the differential (derivative \
+        or adjoint) of the symbol of 'reference', preserving indices for \
+        ArrayReference.
+
+        :param reference: Reference from which to create a differential \
+                          Reference.
+        :type reference: :py:class:`psyclone.psyir.nodes.Reference`
+
+        :raises TypeError: if reference is of the wrong type.
+        :raises ValueError: if the symbol of reference is not in the \
+                            differential map.
+
+        :return: Reference to the differential symbol, with same indices if \
+                 reference is an ArrayReference.
+        :rtype: :py:class:`psyclone.psyir.nodes.Reference`
+        """
+        if not isinstance(reference, Reference):
+            raise TypeError(f"'reference' argument should be of type "
+                            f"'Reference' but found "
+                            f"'{type(reference).__name__}'.")
+        if reference.symbol not in self.data_symbol_differential_map:
+            raise TypeError("'reference' argument's symbol should be in the "
+                            "data_symbol_differential_map of this "
+                            "transformation but it isn't.")
+
+        diff_sym = self.data_symbol_differential_map[reference.symbol]
+
+        if isinstance(reference, ArrayReference):
+            indices = [index.copy() for index in reference.indices]
+            return ArrayReference.create(diff_sym, indices)
+
+        return Reference(diff_sym)
+
     @property
     @abstractmethod
     def container_trans(self):

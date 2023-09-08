@@ -113,7 +113,8 @@ class ADValueTape(ADTape):
 
         value_tape_ref = super().record(reference)
 
-        if isinstance(reference.datatype, ScalarType):
+        if (isinstance(reference, ArrayReference)
+            or isinstance(reference.datatype, ScalarType)):
             assignment = Assignment.create(value_tape_ref, reference.copy())
 
         elif len(reference.datatype.shape) == 1:
@@ -162,7 +163,8 @@ class ADValueTape(ADTape):
 
         value_tape_ref = super().restore(reference)
 
-        if isinstance(reference.datatype, ScalarType):
+        if (isinstance(reference, ArrayReference)
+            or isinstance(reference.datatype, ScalarType)):
             assignment = Assignment.create(reference.copy(), value_tape_ref)
 
         elif len(reference.datatype.shape) == 1:

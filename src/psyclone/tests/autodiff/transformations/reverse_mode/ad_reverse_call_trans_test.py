@@ -520,7 +520,7 @@ def _test_arguments(applied_ad_call_trans):
                 arg_adj = called_routine_trans.data_symbol_differential_map[sym]
                 assert arg_adj in returning_args
                 assert returning_args.index(arg_adj) == returning_args.index(arg) + 1
-    
+
     # Tape
     if len(recording_args) > 0:
         # joint reversal : no tape

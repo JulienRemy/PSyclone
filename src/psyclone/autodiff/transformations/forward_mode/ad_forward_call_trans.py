@@ -187,13 +187,17 @@ class ADForwardCallTrans(ADCallTrans):
         super().transform_reference_argument(reference, options)
 
         # Symbol and derivative symbol of the argument
-        symbol = reference.symbol
-        derivative_symbol = self.routine_trans.data_symbol_differential_map[
-            symbol
-        ]
+        #symbol = reference.symbol
+        #derivative_symbol = self.routine_trans.data_symbol_differential_map[
+        #    symbol
+        #]
 
         # Add (var, var_d) as arguments of the transformed routine
-        return [Reference(symbol), Reference(derivative_symbol)]
+        # return [Reference(symbol), Reference(derivative_symbol)]
+        derivative_reference \
+            = self.routine_trans.reference_to_differential_of(reference)
+
+        return [reference.copy(), derivative_reference]
 
     def transform_operation_argument(self, operation, options=None):
         """Transforms an Operation argument of the Call.

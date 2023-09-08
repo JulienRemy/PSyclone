@@ -375,13 +375,15 @@ class ADReverseCallTrans(ADCallTrans):
         super().transform_reference_argument(reference, options)
 
         # Symbol and adjoint symbol of the argument
-        symbol = reference.symbol
-        adjoint_symbol = self.routine_trans.data_symbol_differential_map[
-            symbol
-        ]
+        # symbol = reference.symbol
+        # adjoint_symbol = self.routine_trans.data_symbol_differential_map[
+        #     symbol
+        # ]
+        adjoint = self.routine_trans.reference_to_differential_of(reference)
 
         # Add (var, var_adj) as arguments of the returning/reversing routines
-        returning_args = [Reference(symbol), Reference(adjoint_symbol)]
+        # returning_args = [Reference(symbol), Reference(adjoint_symbol)]
+        returning_args = [reference.copy(), adjoint]
         # No temporary assignments
         # TODO: functions would potentially have some eg y = f(y)
         temp_assignments = []
@@ -443,7 +445,7 @@ class ADReverseCallTrans(ADCallTrans):
         returning_args = [operation.copy(), Reference(op_adj)]
         # Incrementing the adjoints of the operation is done after the call
         adjoints_assignments = self.routine_trans.operation_trans.apply(
-            operation, op_adj, options
+            operation, Reference(op_adj), options
         )[
             0
         ]  # NOTE: [0] since a Call to a subroutine cannot be iterative
