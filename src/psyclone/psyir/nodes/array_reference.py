@@ -102,12 +102,16 @@ class ArrayReference(ArrayMixin, Reference):
         array = ArrayReference(symbol)
         for ind, child in enumerate(indices):
             if child == ":":
-                lbound = BinaryOperation.create(
-                    BinaryOperation.Operator.LBOUND,
-                    Reference(symbol), Literal(f"{ind+1}", INTEGER_TYPE))
-                ubound = BinaryOperation.create(
-                    BinaryOperation.Operator.UBOUND,
-                    Reference(symbol), Literal(f"{ind+1}", INTEGER_TYPE))
+                if not isinstance(symbol.shape[ind], ArrayType.ArrayBounds):
+                    lbound = BinaryOperation.create(
+                        BinaryOperation.Operator.LBOUND,
+                        Reference(symbol), Literal(f"{ind+1}", INTEGER_TYPE))
+                    ubound = BinaryOperation.create(
+                        BinaryOperation.Operator.UBOUND,
+                        Reference(symbol), Literal(f"{ind+1}", INTEGER_TYPE))
+                else:
+                    lbound = symbol.shape[ind].lower.copy()
+                    ubound = symbol.shape[ind].upper.copy()
                 my_range = Range.create(lbound, ubound)
                 array.addchild(my_range)
             else:
