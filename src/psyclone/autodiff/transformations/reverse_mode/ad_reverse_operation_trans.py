@@ -45,7 +45,7 @@ from psyclone.psyir.nodes import (
     Operation,
     IntrinsicCall
 )
-from psyclone.psyir.symbols import (DataSymbol, INTEGER_TYPE, REAL_TYPE, 
+from psyclone.psyir.symbols import (INTEGER_TYPE, REAL_TYPE,
                                     ScalarType, ArrayType)
 from psyclone.psyir.transformations import TransformationError
 
@@ -200,7 +200,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            adj = self.routine_trans.reference_to_differential_of(first_operand) #self.routine_trans.data_symbol_differential_map[first_operand.symbol]
+            adj = self.routine_trans.reference_to_differential_of(first_operand)
 
             parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
             adj_incr = increment(adj, parent_adj_mul)
@@ -227,8 +227,8 @@ class ADReverseOperationTrans(ADOperationTrans):
                     pass
                 elif isinstance(operand, Reference):
                     # If the operand is a Reference, increment its adjoint
-                    adj \
-                        = self.routine_trans.reference_to_differential_of(operand) #self.routine_trans.data_symbol_differential_map[operand.symbol]
+                    adj = self.routine_trans.\
+                        reference_to_differential_of(operand)
                     parent_adj_mul = mul(parent_adj, partial)
                     if (isinstance(adj.datatype, ScalarType)
                             and isinstance(parent_adj.datatype, ArrayType)):

@@ -82,7 +82,7 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         transformed = []
 
         # Derivative symbol of LHS
-        lhs_d = self.routine_trans.reference_to_differential_of(lhs) #data_symbol_differential_map[lhs.symbol]
+        lhs_d = self.routine_trans.reference_to_differential_of(lhs)
 
         if isinstance(rhs, Literal):
             # RHS is a constant:
@@ -93,7 +93,7 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         elif isinstance(rhs, Reference):
             # RHS is a reference:
             #   LHS derivative is set to RHS derivative
-            rhs_d = self.routine_trans.reference_to_differential_of(rhs) #data_symbol_differential_map[rhs.symbol]
+            rhs_d = self.routine_trans.reference_to_differential_of(rhs)
             lhs_d_assignment = assign(lhs_d, rhs_d)
             transformed.append(lhs_d_assignment)
 

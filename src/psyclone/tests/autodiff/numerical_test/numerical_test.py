@@ -334,6 +334,10 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
     `f = (x (op1) y) (op2) z` or `f = x; f = (f (op1) y) (op2) z` and comparing \
     numerical results for random values of `x`, `y` and `z`.
+    NOTE: the non-iterative form of the test (`f = (x (op1) y) (op2) z`) also \
+    covers the case where `z` is an argument of the routine but not an \
+    (in)dependent variable, so `z_adj` or `z_d` must be assigned 0.0 at the \
+    beginning of the returning/tangent routine.
 
     :raises ValueError: if the error is above MAX_ERROR or is NaN.
     """

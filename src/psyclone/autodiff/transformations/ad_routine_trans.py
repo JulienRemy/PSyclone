@@ -807,6 +807,27 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
                         node.replace_with(simplified_node)
                         all_nodes[i] = simplified_node
 
+    def add_differentials_zero_assignments(self, routine, options=None):
+        """Assign the value 0 to every differential (derivative or adjoint) \
+        that is not an argument of the routine, at its beginning.
+
+        :param routine: routine to which to add the assignments.
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
+        # pylint: disable=protected-access
+
+        differential_adjoints = list(self.data_symbol_differential_map.values())
+        # Reverse it so that the assignments are in variables appearance order
+        # when inserting at index 0
+        differential_adjoints.reverse()
+        for diff_symbol in differential_adjoints:
+            if diff_symbol not in routine.symbol_table._argument_list:
+                assignment = assign_zero(diff_symbol)
+                routine.addchild(assignment, index=0)
+
     @abstractmethod
     def postprocess(self, routine, options=None):
         """Apply postprocessing steps (simplification, substitution) to the 

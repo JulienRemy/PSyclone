@@ -103,7 +103,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         rhs = assignment.rhs
 
         # Adjoint symbol of LHS
-        lhs_adj = self.routine_trans.reference_to_differential_of(lhs) #self.routine_trans.data_symbol_differential_map[lhs.symbol]
+        lhs_adj = self.routine_trans.reference_to_differential_of(lhs)
 
         # In any case the LHS adjoint will be set to 0
         # after it's been used in incrementing the adjoints of variables
@@ -148,8 +148,8 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # This is not an iterative assignment
                 if lhs != rhs:
                     # Adjoint symbol of RHS
-                    rhs_adj \
-                        = self.routine_trans.reference_to_differential_of(rhs) #self.routine_trans.data_symbol_differential_map[rhs.symbol]
+                    rhs_adj = self.routine_trans.\
+                        reference_to_differential_of(rhs)
                     if (isinstance(rhs_adj.datatype, ScalarType)
                         and isinstance(lhs_adj.datatype, ArrayType)):
                         lhs_adj = IntrinsicCall.create(
@@ -169,7 +169,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                         verbose_comment += ", this is self-assignment"
 
             else:  # isinstance(rhs, Operation)
-                # Apply the ADElementTransOperation to all children of the 
+                # Apply the ADElementTransOperation to all children of the
                 # operation with parent_adj being the LHS adjoint
 
                 (
@@ -207,7 +207,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                     lhs_adj_incrementations[0] = lhs_adj_assign
 
                     # If this was an iterative statement,
-                    # verbose comment on the LHS adjoint incrementations 
+                    # verbose comment on the LHS adjoint incrementations
                     # coming last
                     if verbose:
                         verbose_comment += ", iterative"
@@ -229,7 +229,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # Now increment the LHS adjoint as needed for its RHS occurences
                 returning.extend(lhs_adj_incrementations)
 
-                # TODO: this should always pass, is_iterative method is 
+                # TODO: this should always pass, is_iterative method is
                 # not actually needed
                 # TODO: drop these once it's certain
                 if len(lhs_adj_incrementations) != 0 and not self.is_iterative(
@@ -252,7 +252,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
             )
 
         # Verbose mode adds comments to the first and last returning statements
-        # TODO: writer should be initialization argument of the (container?) 
+        # TODO: writer should be initialization argument of the (container?)
         # transformation
         if verbose and len(returning) != 0:
             from psyclone.psyir.backend.fortran import FortranWriter

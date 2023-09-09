@@ -507,8 +507,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if len(self.value_tape.recorded_nodes) != 0:
             self.add_value_tape_argument(options)
 
-        # Add the assignments of 0 to other adjoints
-        self.add_adjoint_assignments(options)
+        # Add the assignments of 0 to non-argument adjoints at the beginning of
+        # the returning routine
+        self.add_differentials_zero_assignments(self. returning, options)
 
         # Combine the calls to recording and returning in reversing
         self.add_calls_to_reversing(options)
@@ -1044,26 +1045,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         for table, symbol in zip(self.transformed_tables[:-1], symbols[:-1]):
             table._argument_list.append(symbol)
         # The value_tape is not an argument of the reversing routine
-
-    def add_adjoint_assignments(self, options=None):
-        """Assign the value 0 to every variable adjoint (ie. not temporary \
-        adjoint nor operation adjoint) that is not an argument of the \
-        returning routine, at its beginning.
-
-        :param options: a dictionary with options for transformations, \
-                        defaults to None.
-        :type options: Optional[Dict[Str, Any]]
-        """
-        # pylint: disable=protected-access
-
-        variables_adjoints = list(self.data_symbol_differential_map.values())
-        # Reverse it so that the assignments are in variables appearance order
-        # when inserting at index 0
-        variables_adjoints.reverse()
-        for adjoint_symbol in variables_adjoints:
-            if adjoint_symbol not in self.returning_table._argument_list:
-                assignment = assign_zero(adjoint_symbol)
-                self.returning.addchild(assignment, index=0)
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \

@@ -262,6 +262,9 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         # Add the necessary adjoints as arguments of the returning routine
         self.add_derivative_arguments(diff_variables, options)
 
+        # Add the assignments of 0 to other (non-argument) derivatives
+        self.add_differentials_zero_assignments(self.transformed[0], options)
+
         # Add the transformed routine to the container
         self.container_trans.container.addchild(self.transformed[0])
 
