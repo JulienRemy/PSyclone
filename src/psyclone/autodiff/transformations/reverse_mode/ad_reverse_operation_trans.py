@@ -399,7 +399,8 @@ class ADReverseOperationTrans(ADOperationTrans):
             return [one(REAL_TYPE), one(REAL_TYPE)]
         if operator == BinaryOperation.Operator.SUB:
             return [one(REAL_TYPE), minus(one(REAL_TYPE))]
-        if operator == BinaryOperation.Operator.MUL:
+        if operator in (BinaryOperation.Operator.MUL,
+                        BinaryOperation.Operator.DOT_PRODUCT):
             return [rhs, lhs]
         if operator == BinaryOperation.Operator.DIV:
             return [inverse(rhs), minus(div(lhs, square(rhs)))]
@@ -423,19 +424,33 @@ class ADReverseOperationTrans(ADOperationTrans):
             #    xb = y*x**(y-1)*zb
             #    yb = x**y*LOG(x)*zb
             # END IF
+
+        # - MATMUL(matrix, vector): to be implemented in reverse-mode
+        #   using the new IntrinsicCall SPREAD operation from PR #1987
+        #   to compute an outer product.
+        #   NOTE: also requires getting 'parent_adj' argument from apply
+        #         see c_adj below.
+        #         => move 'parent_adj_mul' op. to differentiate_... functions.
+
+        #   c = matmul(a, b)
+        #   ! with b a matrix :
+        #   a_adj = a_adj + MATMUL(c_adj, TRANSPOSE(b))
+        #   ! with b a vector :
+        #   a_adj = a_adj + SPREAD(b, dim=2, ncopies=SIZE(b))
+        #                          * SPREAD(c_adj, dim=1, ncopies=SIZE(b))
+        #   b_adj = b_adj + MATMUL(TRANSPOSE(a), c_adj)
+
         # TODO:
         # REM? undefined for some values of lhs/rhs
         # MIN if block
         # MAX if block
-        # MATMUL
-        # DOT_PRODUCT
+        # MATMUL pending
 
         _not_implemented = [
             "REM",
             "MIN",
             "MAX",
             "MATMUL",
-            "DOT_PRODUCT",
             "EQ",
             "NE",
             "GT",

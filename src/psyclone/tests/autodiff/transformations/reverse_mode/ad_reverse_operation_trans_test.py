@@ -43,6 +43,7 @@ from psyclone.psyir.symbols import (
     DataSymbol,
     INTEGER_TYPE,
     REAL_TYPE,
+    ArrayType
 )
 from psyclone.psyir.nodes import (
     Literal,
@@ -248,6 +249,14 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
 
     ref1 = Reference(DataSymbol("var1", REAL_TYPE))
     ref2 = Reference(DataSymbol("var2", REAL_TYPE))
+    vec1_sym = DataSymbol("vec1", ArrayType(REAL_TYPE, [3]))
+    vec1 = Reference(vec1_sym)
+    vec2_sym = DataSymbol("vec2", ArrayType(REAL_TYPE, [3]))
+    vec2 = Reference(vec2_sym)
+    mat1_sym = DataSymbol("mat1", ArrayType(REAL_TYPE, [3, 3]))
+    mat1 = Reference(mat1_sym)
+    mat2_sym = DataSymbol("mat2", ArrayType(REAL_TYPE, [3, 3]))
+    mat2 = Reference(mat2_sym)
     add = BinaryOperation.create(BinaryOperation.Operator.ADD, ref1.copy(), ref2.copy())
     sub = BinaryOperation.create(BinaryOperation.Operator.SUB, ref1.copy(), ref2.copy())
     mul = BinaryOperation.create(BinaryOperation.Operator.MUL, ref1.copy(), ref2.copy())
@@ -258,8 +267,15 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
     power_literal = BinaryOperation.create(
         BinaryOperation.Operator.POW, ref1.copy(), Literal("1.35", REAL_TYPE)
     )
+    dot_product = BinaryOperation.create(BinaryOperation.Operator.DOT_PRODUCT,
+                                         vec1.copy(), vec2.copy())
+    matmul_mat_vec = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
+                                            mat1.copy(), vec1.copy())
+    matmul_mat_mat = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
+                                            mat1.copy(), mat2.copy())
 
-    ops = (add, sub, mul, div, power, power_literal)
+    # TODO: implement and test MATMUL
+    ops = (add, sub, mul, div, power, power_literal, dot_product)
     expected = (
         ("1.0", "1.0"),
         ("1.0", "-1.0"),
@@ -267,6 +283,7 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
         ("1.0 / var2", "-var1 / var2 ** 2"),
         ("var2 * var1 ** (var2 - 1)", "var1 ** var2 * LOG(var1)"),
         ("1.35 * var1 ** 0.35", "var1 ** 1.35 * LOG(var1)"),
+        ("vec2", "vec1")
     )
 
     for operation, exp in zip(ops, expected):

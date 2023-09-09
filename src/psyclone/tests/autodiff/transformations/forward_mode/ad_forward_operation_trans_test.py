@@ -43,6 +43,7 @@ from psyclone.psyir.symbols import (
     DataSymbol,
     INTEGER_TYPE,
     REAL_TYPE,
+    ArrayType
 )
 from psyclone.psyir.nodes import (
     Literal,
@@ -51,6 +52,7 @@ from psyclone.psyir.nodes import (
     NaryOperation,
     Reference,
     Container,
+    Assignment
 )
 from psyclone.psyir.transformations import TransformationError
 from psyclone.autodiff.transformations import (
@@ -58,7 +60,7 @@ from psyclone.autodiff.transformations import (
     ADForwardRoutineTrans,
     ADForwardContainerTrans,
 )
-from psyclone.autodiff import one, ADSplitReversalSchedule
+from psyclone.autodiff import one
 
 PRE = ADForwardRoutineTrans._differential_prefix
 POST = ADForwardRoutineTrans._differential_postfix
@@ -252,6 +254,15 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
     sym2 = DataSymbol("var2", REAL_TYPE)
     ref2 = Reference(sym2)
     ad_routine_trans.create_differential_symbol(sym2)
+    vec1_sym = DataSymbol("vec1", ArrayType(REAL_TYPE, [3]))
+    vec1 = Reference(vec1_sym)
+    ad_routine_trans.create_differential_symbol(vec1_sym)
+    vec2_sym = DataSymbol("vec2", ArrayType(REAL_TYPE, [3]))
+    vec2 = Reference(vec2_sym)
+    ad_routine_trans.create_differential_symbol(vec2_sym)
+    mat1_sym = DataSymbol("mat1", ArrayType(REAL_TYPE, [3, 3]))
+    mat1 = Reference(mat1_sym)
+    ad_routine_trans.create_differential_symbol(mat1_sym)
     add = BinaryOperation.create(BinaryOperation.Operator.ADD, ref1.copy(), ref2.copy())
     sub = BinaryOperation.create(BinaryOperation.Operator.SUB, ref1.copy(), ref2.copy())
     mul = BinaryOperation.create(BinaryOperation.Operator.MUL, ref1.copy(), ref2.copy())
@@ -262,8 +273,12 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
     power_literal = BinaryOperation.create(
         BinaryOperation.Operator.POW, ref1.copy(), Literal("1.35", REAL_TYPE)
     )
+    dot_product = BinaryOperation.create(BinaryOperation.Operator.DOT_PRODUCT,
+                                         vec1.copy(), vec2.copy())
+    matmul = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
+                                    mat1.copy(), vec1.copy())
 
-    ops = (add, sub, mul, div, power, power_literal)
+    ops = (add, sub, mul, div, power, power_literal, dot_product, matmul)
     expected = (
         f"{PRE}var1{POST} + {PRE}var2{POST}",
         f"{PRE}var1{POST} - {PRE}var2{POST}",
@@ -271,6 +286,10 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
         f"({PRE}var1{POST} - {PRE}var2{POST} * var1 / var2) / var2",
         f"{PRE}var1{POST} * (var2 * var1 ** (var2 - 1)) + {PRE}var2{POST} * (var1 ** var2 * LOG(var1))",
         f"{PRE}var1{POST} * (1.35 * var1 ** 0.35) + 0 * (var1 ** 1.35 * LOG(var1))",
+        # NOTE: 'call' and '\n' are not printed in practice but SUM is guessed
+        # to be a subroutine by FortranWriter because it has no parent here
+        f"call SUM(vec2 * {PRE}vec1{POST} + vec1 * {PRE}vec2{POST})\n",
+        f"MATMUL({PRE}mat1{POST}, vec1) + MATMUL(mat1, {PRE}vec1{POST})"
     )
 
     transformed = [ad_operation_trans.differentiate_binary(op) for op in ops]

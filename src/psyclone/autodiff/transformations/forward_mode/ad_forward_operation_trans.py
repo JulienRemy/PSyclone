@@ -42,6 +42,7 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Operation,
+    IntrinsicCall
 )
 from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE
 
@@ -85,7 +86,8 @@ class ADForwardOperationTrans(ADOperationTrans):
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
                       :py:class:`psyclone.psyir.nodes.Reference`,
-                      :py:class:`psyclone.psyir.nodes.Operation`]
+                      :py:class:`psyclone.psyir.nodes.Operation`,
+                      :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
         self.validate(operation, options)
 
@@ -103,7 +105,8 @@ class ADForwardOperationTrans(ADOperationTrans):
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
                       :py:class:`psyclone.psyir.nodes.Reference`,
-                      :py:class:`psyclone.psyir.nodes.Operation`]
+                      :py:class:`psyclone.psyir.nodes.Operation`,
+                      :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
         super().differentiate(operation)
 
@@ -208,7 +211,8 @@ class ADForwardOperationTrans(ADOperationTrans):
                                      implemented yet.
 
         :return: derivative.
-        :rtype: :py:class:`psyclone.psyir.nodes.Operation`
+        :rtype: Union[:py:class:`psyclone.psyir.nodes.BinaryOperation`,
+                      :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
         # pylint: disable=too-many-locals, unbalanced-tuple-unpacking
 
@@ -222,12 +226,6 @@ class ADForwardOperationTrans(ADOperationTrans):
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
-                # operand_d_sym = (
-                #     self.routine_trans.data_symbol_differential_map[
-                #         operand.symbol
-                #     ]
-                # )
-                # operands_d.append(Reference(operand_d_sym))
                 operand_d \
                     = self.routine_trans.reference_to_differential_of(operand)
                 operands_d.append(operand_d)
@@ -256,9 +254,17 @@ class ADForwardOperationTrans(ADOperationTrans):
                 mul(lhs_d, mul(rhs, power(lhs, exponent))),
                 mul(rhs_d, mul(operation, log(lhs))),
             )
+        if operator == BinaryOperation.Operator.DOT_PRODUCT:
+            return IntrinsicCall.create(IntrinsicCall.Intrinsic.SUM,
+                                        [add(mul(rhs, lhs_d), mul(lhs, rhs_d))])
+        if operator == BinaryOperation.Operator.MATMUL:
+            return add(BinaryOperation.create(BinaryOperation.Operator.MATMUL,
+                                              lhs_d, rhs),
+                       BinaryOperation.create(BinaryOperation.Operator.MATMUL,
+                                              lhs, rhs_d))
 
-            # TODO: should this take cases where derivatives are undefined
-            # into account, like Tapenade does?
+            # TODO: should POW, SQRT, etc. take into account non-derivability ?
+            # like Tapenade does?
 
             # IF (lhs .LE. 0.0)
             #    IF (rhs .EQ. 0.0 .OR. rhs .NE. INT(rhs))) THEN
@@ -309,15 +315,11 @@ class ADForwardOperationTrans(ADOperationTrans):
         # REM? undefined for some values of lhs/rhs
         # MIN if block
         # MAX if block
-        # MATMUL
-        # DOT_PRODUCT
 
         _not_implemented = [
             "REM",
             "MIN",
             "MAX",
-            "MATMUL",
-            "DOT_PRODUCT",
             "EQ",
             "NE",
             "GT",
