@@ -565,6 +565,7 @@ class IntrinsicCall(Call):
         NORM2 = IAttr(
             'NORM2', True, False, False,
             ArgDesc(1, 2, DataNode), {})
+        # FIXME: NOT is both in UnaryOperation and IntrinsicCall?
         NOT = IAttr(
             'NOT', True, True, False,
             ArgDesc(1, 1, DataNode), {})

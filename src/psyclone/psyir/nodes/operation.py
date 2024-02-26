@@ -141,6 +141,7 @@ class UnaryOperation(Operation):
     # Textual description of the node.
     _children_valid_format = "DataNode"
 
+    # FIXME: NOT is both in UnaryOperation and IntrinsicCall?
     Operator = Enum('Operator', [
         # Arithmetic Operators
         'MINUS', 'PLUS',
