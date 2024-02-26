@@ -2,7 +2,7 @@
 # -----------------------------------------------------------------------------
 # BSD 3-Clause License
 #
-# Copyright (c) 2017-2023, Science and Technology Facilities Council.
+# Copyright (c) 2017-2024, Science and Technology Facilities Council.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -58,23 +58,24 @@ from psyclone.domain.common.psylayer import PSyLoop
 from psyclone.domain.gocean import GOceanConstants, GOSymbolTable
 from psyclone.errors import GenerationError, InternalError
 import psyclone.expression as expr
-from psyclone.f2pygen import DeclGen, UseGen, ModuleGen, SubroutineGen, \
-    TypeDeclGen, PSyIRGen
+from psyclone.f2pygen import (
+    DeclGen, UseGen, ModuleGen, SubroutineGen, TypeDeclGen, PSyIRGen)
 from psyclone.parse.algorithm import Arg
 from psyclone.parse.kernel import Descriptor, KernelType
 from psyclone.parse.utils import ParseError
-from psyclone.psyGen import PSy, Invokes, Invoke, InvokeSchedule, \
-    CodedKern, Arguments, Argument, KernelArgument, args_filter, \
-    AccessType, HaloExchange
+from psyclone.psyGen import (
+    PSy, Invokes, Invoke, InvokeSchedule, CodedKern, Arguments, Argument,
+    KernelArgument, args_filter, AccessType, HaloExchange)
 from psyclone.psyir.frontend.fparser2 import Fparser2Reader
 from psyclone.psyir.frontend.fortran import FortranReader
-from psyclone.psyir.nodes import Literal, Schedule, KernelSchedule, \
-    StructureReference, BinaryOperation, Reference, Call, Assignment, \
-    ACCEnterDataDirective, ACCParallelDirective, \
-    ACCKernelsDirective, Container, ACCUpdateDirective, Routine
-from psyclone.psyir.symbols import ScalarType, INTEGER_TYPE, \
-    DataSymbol, RoutineSymbol, ContainerSymbol, DeferredType, DataTypeSymbol, \
-    UnresolvedInterface, BOOLEAN_TYPE, REAL_TYPE
+from psyclone.psyir.nodes import (
+    Literal, Schedule, KernelSchedule, StructureReference, IntrinsicCall,
+    Reference, Call, Assignment, ACCEnterDataDirective, ACCParallelDirective,
+    ACCKernelsDirective, Container, ACCUpdateDirective, Routine)
+from psyclone.psyir.symbols import (
+    ScalarType, INTEGER_TYPE, DataSymbol, RoutineSymbol, ContainerSymbol,
+    UnresolvedType, DataTypeSymbol, UnresolvedInterface, BOOLEAN_TYPE,
+    REAL_TYPE)
 
 
 class GOPSy(PSy):
@@ -511,6 +512,48 @@ class GOLoop(PSyLoop):
         '''
         return self._bounds_lookup
 
+    def independent_iterations(self,
+                               test_all_variables=False,
+                               signatures_to_ignore=None,
+                               dep_tools=None):
+        '''
+        This function is a GOcean-specific override of the default method
+        in the Loop class. It allows domain-specific rules to be applied when
+        determining whether or not loop iterations are independent.
+
+        :param bool test_all_variables: if True, it will test if all variable
+            accesses are independent, otherwise it will stop after the first
+            variable access is found that isn't.
+        :param signatures_to_ignore: list of signatures for which to skip
+            the access checks.
+        :type signatures_to_ignore: Optional[
+            List[:py:class:`psyclone.core.Signature`]]
+        :param dep_tools: an optional instance of DependencyTools so that the
+            caller can access any diagnostic messages detailing why the loop
+            iterations are not independent.
+        :type dep_tools: Optional[
+            :py:class:`psyclone.psyir.tools.DependencyTools`]
+
+        :returns: True if the loop iterations are independent, False otherwise.
+        :rtype: bool
+
+        '''
+        if not dep_tools:
+            from psyclone.psyir.tools import DependencyTools
+            dtools = DependencyTools()
+        else:
+            dtools = dep_tools
+
+        try:
+            stat = dtools.can_loop_be_parallelised(
+                self, test_all_variables=test_all_variables,
+                signatures_to_ignore=signatures_to_ignore)
+            return stat
+        except InternalError:
+            # The dependence analysis in GOcean doesn't yet use PSyIR
+            # consistently and that causes failures - TODO #845.
+            return True
+
     # -------------------------------------------------------------------------
     def _halo_read_access(self, arg):
         '''Determines whether the supplied argument has (or might have) its
@@ -852,7 +895,7 @@ class GOLoop(PSyLoop):
             # Bounds are independent of the grid-offset convention in use
             # We look-up the upper bounds by enquiring about the SIZE of
             # the array itself
-            stop = BinaryOperation(BinaryOperation.Operator.SIZE)
+            stop = IntrinsicCall(IntrinsicCall.Intrinsic.SIZE)
             # Use the data property to access the member of the field that
             # contains the actual grid points.
             api_config = Config.get().api_conf("gocean1.0")
@@ -1471,18 +1514,18 @@ class GOKernelArgument(KernelArgument):
         '''
         # All GOcean fields are r2d_field
         if self.argument_type == "field":
-            # r2d_field can have DeferredType and UnresolvedInterface because
+            # r2d_field can have UnresolvedType and UnresolvedInterface because
             # it is an unnamed import from a module.
             type_symbol = self._call.root.symbol_table.find_or_create_tag(
                 "r2d_field", symbol_type=DataTypeSymbol,
-                datatype=DeferredType(), interface=UnresolvedInterface())
+                datatype=UnresolvedType(), interface=UnresolvedInterface())
             return type_symbol
 
         # Gocean scalars can be REAL or INTEGER
         if self.argument_type == "scalar":
             if self.space.lower() == "go_r_scalar":
                 go_wp = self._call.root.symbol_table.find_or_create_tag(
-                    "go_wp", symbol_type=DataSymbol, datatype=DeferredType(),
+                    "go_wp", symbol_type=DataSymbol, datatype=UnresolvedType(),
                     interface=UnresolvedInterface())
                 return ScalarType(ScalarType.Intrinsic.REAL, go_wp)
             if self.space.lower() == "go_i_scalar":

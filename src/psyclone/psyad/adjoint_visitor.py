@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BSD 3-Clause License
 #
-# Copyright (c) 2021-2023, Science and Technology Facilities Council.
+# Copyright (c) 2021-2024, Science and Technology Facilities Council.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -47,9 +47,9 @@ from psyclone.psyir.backend.fortran import FortranWriter
 from psyclone.psyir.backend.visitor import PSyIRVisitor, VisitorError
 from psyclone.psyir.nodes import (Routine, Schedule, Reference, Node, Literal,
                                   CodeBlock, BinaryOperation, Assignment,
-                                  IfBlock)
+                                  IfBlock, IntrinsicCall)
 from psyclone.psyir.symbols import ArgumentInterface
-from psyclone.psyir.tools import DependencyTools
+from psyclone.psyir.tools.call_tree_utils import CallTreeUtils
 
 
 class AdjointVisitor(PSyIRVisitor):
@@ -186,12 +186,12 @@ class AdjointVisitor(PSyIRVisitor):
         # Since a piece of code could contain many Schedules, ensure we are
         # currently handling the one representing the routine.
         if isinstance(node, Routine):
-            dtools = DependencyTools()
+            ctu = CallTreeUtils()
             # Input signatures ('in_sigs') are those whose first access is a
             # read.
             # Output signatures ('out_sigs') are those that are written to at
             # some point.
-            read_write_info = dtools.get_in_out_parameters(node_copy.children)
+            read_write_info = ctu.get_in_out_parameters(node_copy.children)
             # Get the variable name associated with each of these signatures.
             in_names = [sig.var_name
                         for sig in read_write_info.signatures_read]
@@ -292,11 +292,11 @@ class AdjointVisitor(PSyIRVisitor):
             for ref in expr.walk(Reference):
                 if ref.symbol in self._active_variables:
                     # Ignore LBOUND and UBOUND
-                    if not (isinstance(ref.parent, BinaryOperation) and
+                    if not (isinstance(ref.parent, IntrinsicCall) and
                             ref.position == 0 and
-                            ref.parent.operator in [
-                                BinaryOperation.Operator.LBOUND,
-                                BinaryOperation.Operator.UBOUND]):
+                            ref.parent.intrinsic in [
+                                IntrinsicCall.Intrinsic.LBOUND,
+                                IntrinsicCall.Intrinsic.UBOUND]):
                         raise VisitorError(
                             f"The {description} of a loop should not contain "
                             f"active variables, but found '{ref.name}' in "
