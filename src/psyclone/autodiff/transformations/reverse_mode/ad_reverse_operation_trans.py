@@ -337,33 +337,33 @@ class ADReverseOperationTrans(ADOperationTrans):
             return one(REAL_TYPE)
         if operator == UnaryOperation.Operator.MINUS:
             return minus(one(REAL_TYPE))
-        if operator == UnaryOperation.Operator.SQRT:
+        if operator == IntrinsicCall.Intrinsic.SQRT:
             # TODO: x=0 should print something, raise an exception or something?
             return inverse(mul(Literal("2", INTEGER_TYPE), operation))
-        if operator == UnaryOperation.Operator.EXP:
+        if operator == IntrinsicCall.Intrinsic.EXP:
             return operation.copy()
-        if operator == UnaryOperation.Operator.LOG:
+        if operator == IntrinsicCall.Intrinsic.LOG:
             return inverse(operand)
-        if operator == UnaryOperation.Operator.LOG10:
+        if operator == IntrinsicCall.Intrinsic.LOG10:
             return inverse(mul(operand, log(Literal("10.0", REAL_TYPE))))
-        if operator == UnaryOperation.Operator.COS:
+        if operator == IntrinsicCall.Intrinsic.COS:
             return minus(sin(operand))
-        if operator == UnaryOperation.Operator.SIN:
+        if operator == IntrinsicCall.Intrinsic.SIN:
             return cos(operand)
-        if operator == UnaryOperation.Operator.TAN:
+        if operator == IntrinsicCall.Intrinsic.TAN:
             return add(one(REAL_TYPE), square(operation))
             # return inverse(square(cos(operand)))
-        if operator == UnaryOperation.Operator.ACOS:
+        if operator == IntrinsicCall.Intrinsic.ACOS:
             return minus(inverse(sqrt(sub(one(REAL_TYPE), square(operand)))))
-        if operator == UnaryOperation.Operator.ASIN:
+        if operator == IntrinsicCall.Intrinsic.ASIN:
             return inverse(sqrt(sub(one(REAL_TYPE), square(operand))))
-        if operator == UnaryOperation.Operator.ATAN:
+        if operator == IntrinsicCall.Intrinsic.ATAN:
             return inverse(add(one(REAL_TYPE), square(operand)))
-        if operator == UnaryOperation.Operator.ABS:
+        if operator == IntrinsicCall.Intrinsic.ABS:
             # This could also be implemented using an if block
             return div(operand, operation.copy())
             # return sign(one(operand.datatype), operand)
-        # if operator == UnaryOperation.Operator.CEIL:
+        # if operator == IntrinsicCall.Intrinsic.CEILING:
         #    # 0             if sin(pi * operand) == 0
         #    # undefined     otherwise...
         #    could return 0 but that's error prone
@@ -400,7 +400,7 @@ class ADReverseOperationTrans(ADOperationTrans):
         if operator == BinaryOperation.Operator.SUB:
             return [one(REAL_TYPE), minus(one(REAL_TYPE))]
         if operator in (BinaryOperation.Operator.MUL,
-                        BinaryOperation.Operator.DOT_PRODUCT):
+                        IntrinsicCall.Intrinsic.DOT_PRODUCT):
             return [rhs, lhs]
         if operator == BinaryOperation.Operator.DIV:
             return [inverse(rhs), minus(div(lhs, square(rhs)))]

@@ -153,45 +153,45 @@ class ADForwardOperationTrans(ADOperationTrans):
             return operand_d
         if operator == UnaryOperation.Operator.MINUS:
             return minus(operand_d)
-        if operator == UnaryOperation.Operator.SQRT:
+        if operator == IntrinsicCall.Intrinsic.SQRT:
             # TODO: x=0 should print something, raise an exception or something?
             return div(operand_d, mul(Literal("2", INTEGER_TYPE), operation))
-        if operator == UnaryOperation.Operator.EXP:
+        if operator == IntrinsicCall.Intrinsic.EXP:
             return mul(operation, operand_d)
-        if operator == UnaryOperation.Operator.LOG:
+        if operator == IntrinsicCall.Intrinsic.LOG:
             return div(operand_d, operand)
-        if operator == UnaryOperation.Operator.LOG10:
+        if operator == IntrinsicCall.Intrinsic.LOG10:
             return div(
                 operand_d, mul(operand, log(Literal("10.0", REAL_TYPE)))
             )
-        if operator == UnaryOperation.Operator.COS:
+        if operator == IntrinsicCall.Intrinsic.COS:
             return mul(minus(sin(operand)), operand_d)
-        if operator == UnaryOperation.Operator.SIN:
+        if operator == IntrinsicCall.Intrinsic.SIN:
             return mul(cos(operand), operand_d)
-        if operator == UnaryOperation.Operator.TAN:
+        if operator == IntrinsicCall.Intrinsic.TAN:
             return mul(add(one(REAL_TYPE), square(operation)), operand_d)
             # return div(operand_d, square(cos(operand)))
-        if operator == UnaryOperation.Operator.ACOS:
+        if operator == IntrinsicCall.Intrinsic.ACOS:
             return minus(
                 div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
             )
-        if operator == UnaryOperation.Operator.ASIN:
+        if operator == IntrinsicCall.Intrinsic.ASIN:
             return div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
-        if operator == UnaryOperation.Operator.ATAN:
+        if operator == IntrinsicCall.Intrinsic.ATAN:
             return div(operand_d, add(one(REAL_TYPE), square(operand)))
-        if operator == UnaryOperation.Operator.ABS:
+        if operator == IntrinsicCall.Intrinsic.ABS:
             # This could also be implemented using an if block
             return mul(div(operand, operation.copy()), operand_d)
             # NOTE: version belowed caused large errors compared to Tapenade
             # as operand * ... / abs(operand) != operand / abs(operand) * ...
             # return div(mul(operand, operand_d), operation.copy())
 
-        # if operator == UnaryOperation.Operator.CEIL:
+        # if operator == IntrinsicCall.Intrinsic.CEILING:
         #    # 0             if sin(pi * operand) == 0
         #    # undefined     otherwise...
         #    could return 0 but that's error prone
 
-        _not_implemented = ["NOT", "CEIL", "REAL", "INT", "NINT"]
+        _not_implemented = ["NOT"]#, "CEIL", "REAL", "INT", "NINT"]
         raise NotImplementedError(
             f"Differentiating UnaryOperation with "
             f"operator '{operator}' is not implemented yet. "
@@ -254,14 +254,14 @@ class ADForwardOperationTrans(ADOperationTrans):
                 mul(lhs_d, mul(rhs, power(lhs, exponent))),
                 mul(rhs_d, mul(operation, log(lhs))),
             )
-        if operator == BinaryOperation.Operator.DOT_PRODUCT:
+        if operator == IntrinsicCall.Intrinsic.DOT_PRODUCT:
             return IntrinsicCall.create(IntrinsicCall.Intrinsic.SUM,
                                         [add(mul(rhs, lhs_d), mul(lhs, rhs_d))])
-        if operator == BinaryOperation.Operator.MATMUL:
-            return add(BinaryOperation.create(BinaryOperation.Operator.MATMUL,
-                                              lhs_d, rhs),
-                       BinaryOperation.create(BinaryOperation.Operator.MATMUL,
-                                              lhs, rhs_d))
+        if operator == IntrinsicCall.Intrinsic.MATMUL:
+            return add(IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                            [lhs_d, rhs]),
+                       IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                            [lhs, rhs_d]))
 
             # TODO: should POW, SQRT, etc. take into account non-derivability ?
             # like Tapenade does?
@@ -276,20 +276,20 @@ class ADForwardOperationTrans(ADOperationTrans):
             #    assigned_var_d = rhs*lhs**(rhs-1)*lhs_d + lhs**rhs*LOG(lhs)*rhs_d
             # END IF
             #
-            # lhs_le_0 = BinaryOperation.create(BinaryOperation.Operator.LE,
-            #                                  lhs.copy(),
-            #                                  zero(REAL_TYPE))
-            # rhs_eq_0 = BinaryOperation.create(BinaryOperation.Operator.EQ,
-            #                                  rhs.copy(),
-            #                                  zero(REAL_TYPE))
-            # int_rhs = UnaryOperation.create(UnaryOperation.Operator.INT,
-            #                                rhs.copy())
-            # rhs_ne_int_rhs = BinaryOperation.create(BinaryOperation.Operator.NE,
-            #                                        rhs.copy(),
-            #                                        int_rhs)
-            # condition = BinaryOperation.create(BinaryOperation.Operator.OR,
-            #                                   rhs_eq_0,
-            #                                   rhs_ne_int_rhs)
+            # lhs_le_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.LE,
+            #                                  [lhs.copy(),
+            #                                  zero(REAL_TYPE)])
+            # rhs_eq_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.EQ,
+            #                                  [rhs.copy(),
+            #                                  zero(REAL_TYPE)])
+            # int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.INT,
+            #                                [rhs.copy()])
+            # rhs_ne_int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.NE,
+            #                                        [rhs.copy(),
+            #                                        int_rhs])
+            # condition = IntrinsicCall.create(IntrinsicCall.Intrinsic.OR,
+            #                                   [rhs_eq_0,
+            #                                   rhs_ne_int_rhs])
             #
             # dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
             # dummy_d_zero = assign_zero(dummy_sym)
@@ -299,7 +299,7 @@ class ADForwardOperationTrans(ADOperationTrans):
             #                            [dummy_d_zero],
             #                            [dummy_d_1])
             #
-            # log_lhs = UnaryOperation.create(UnaryOperation.Operator.LOG,
+            # log_lhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG,
             #                                lhs.copy())
             # dummy_d_2 = assign(dummy_sym,
             #                   add(dummy_d_1_rhs,

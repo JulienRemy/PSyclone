@@ -44,6 +44,7 @@ import pytest
 from psyclone.autodiff import NumericalComparator, SubroutineGenerator
 
 from psyclone.psyir.nodes import Literal, UnaryOperation, BinaryOperation, Reference
+from psyclone.psyir.nodes.intrinsic_call import IntrinsicCall
 from psyclone.psyir.symbols import REAL_TYPE, ArrayType
 
 from psyclone.autodiff.ad_reversal_schedule import (
@@ -76,23 +77,31 @@ def _file_dir():
     file_path = __file__
     return file_path[:file_path.rfind("/")]
 
+def _intrinsic_or_operation(op, *args):
+    if op in IntrinsicCall.Intrinsic:
+        return IntrinsicCall.create(op, args)
+    if op in UnaryOperation.Operator:
+        return UnaryOperation.create(op, *args)
+    if op in BinaryOperation.Operator:
+        return BinaryOperation.create(op, *args)
+
 @pytest.mark.parametrize("mode, iterative, vector, op",
                          product(MODES,
                                  (True, False),
                                  (True, False),
                                  (UnaryOperation.Operator.PLUS,
                                   UnaryOperation.Operator.MINUS,
-                                  UnaryOperation.Operator.SQRT,
-                                  UnaryOperation.Operator.EXP,
-                                  UnaryOperation.Operator.LOG,
-                                  UnaryOperation.Operator.LOG10,
-                                  UnaryOperation.Operator.COS,
-                                  UnaryOperation.Operator.SIN,
-                                  UnaryOperation.Operator.TAN,
-                                  UnaryOperation.Operator.ACOS,
-                                  UnaryOperation.Operator.ASIN,
-                                  UnaryOperation.Operator.ATAN,
-                                  UnaryOperation.Operator.ABS)))
+                                  IntrinsicCall.Intrinsic.SQRT,
+                                  IntrinsicCall.Intrinsic.EXP,
+                                  IntrinsicCall.Intrinsic.LOG,
+                                  IntrinsicCall.Intrinsic.LOG10,
+                                  IntrinsicCall.Intrinsic.COS,
+                                  IntrinsicCall.Intrinsic.SIN,
+                                  IntrinsicCall.Intrinsic.TAN,
+                                  IntrinsicCall.Intrinsic.ACOS,
+                                  IntrinsicCall.Intrinsic.ASIN,
+                                  IntrinsicCall.Intrinsic.ATAN,
+                                  IntrinsicCall.Intrinsic.ABS)))
 def test_unary(mode, iterative, vector, op):
     """Test all unary operators in both modes, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing `f = op(x)` or \
@@ -110,10 +119,10 @@ def test_unary(mode, iterative, vector, op):
     if iterative:
         print("with an iterative assignment to f")
         routine.new_assignment(f, x)
-        routine.new_assignment(f, UnaryOperation.create(op, Reference(f)))
+        routine.new_assignment(f, _intrinsic_or_operation(op, Reference(f)))
     else:
         print("without iterative assignment")
-        routine.new_assignment(f, UnaryOperation.create(op, Reference(x)))
+        routine.new_assignment(f, _intrinsic_or_operation(op, Reference(x)))
 
     with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
@@ -121,13 +130,13 @@ def test_unary(mode, iterative, vector, op):
     rg = np.random.default_rng(123456)
     # Operators requiring a positive argument
     if op in (
-        UnaryOperation.Operator.SQRT,
-        UnaryOperation.Operator.LOG,
-        UnaryOperation.Operator.LOG10,
+        IntrinsicCall.Intrinsic.SQRT,
+        IntrinsicCall.Intrinsic.LOG,
+        IntrinsicCall.Intrinsic.LOG10,
     ):
         x_val = rg.uniform(0, 2, _input_shape(5, vector))
     # Operators requiring an argument in [-1, 1]
-    elif op in (UnaryOperation.Operator.ACOS, UnaryOperation.Operator.ASIN):
+    elif op in (IntrinsicCall.Intrinsic.ACOS, IntrinsicCall.Intrinsic.ASIN):
         x_val = rg.uniform(-1, 1, _input_shape(5, vector))
     else:
         x_val = rg.uniform(-2, 2, _input_shape(5, vector))
@@ -186,15 +195,15 @@ def test_binary(mode, iterative, vector, op):
         print("with an iterative assignment to f")
         routine.new_assignment(f, x)
         routine.new_assignment(
-            f, BinaryOperation.create(op, Reference(f), Reference(y))
+            f, _intrinsic_or_operation(op, Reference(f), Reference(y))
         )
     else:
         print("without iterative assignment")
         routine.new_assignment(
-            f, BinaryOperation.create(op, Reference(x), Reference(y))
+            f, _intrinsic_or_operation(op, Reference(x), Reference(y))
         )
 
-    # routine.new_assignment(f, BinaryOperation.create(op, Reference(x), Reference(y)))
+    # routine.new_assignment(f, _intrinsic_or_operation(op, Reference(x), Reference(y)))
 
     with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
         file.write(routine.write())
@@ -234,17 +243,17 @@ def test_binary(mode, iterative, vector, op):
 unary_operators = (
                 UnaryOperation.Operator.PLUS,
                 UnaryOperation.Operator.MINUS,
-                # UnaryOperation.Operator.SQRT,      #positive arg only
-                UnaryOperation.Operator.EXP,
-                # UnaryOperation.Operator.LOG,       #positive arg only
-                # UnaryOperation.Operator.LOG10,     #positive arg only
-                UnaryOperation.Operator.COS,
-                UnaryOperation.Operator.SIN,
-                UnaryOperation.Operator.TAN,
-                # UnaryOperation.Operator.ACOS,      #[1,1] arg only
-                # UnaryOperation.Operator.ASIN,      #[1,1] arg only
-                UnaryOperation.Operator.ATAN,
-                UnaryOperation.Operator.ABS,
+                # IntrinsicCall.Intrinsic.SQRT,      #positive arg only
+                IntrinsicCall.Intrinsic.EXP,
+                # IntrinsicCall.Intrinsic.LOG,       #positive arg only
+                # IntrinsicCall.Intrinsic.LOG10,     #positive arg only
+                IntrinsicCall.Intrinsic.COS,
+                IntrinsicCall.Intrinsic.SIN,
+                IntrinsicCall.Intrinsic.TAN,
+                # IntrinsicCall.Intrinsic.ACOS,      #[1,1] arg only
+                # IntrinsicCall.Intrinsic.ASIN,      #[1,1] arg only
+                IntrinsicCall.Intrinsic.ATAN,
+                IntrinsicCall.Intrinsic.ABS,
             )
 @pytest.mark.parametrize("mode, iterative, inline, vector, unaries",
                          product(("forward", "reverse"),
@@ -273,16 +282,16 @@ def test_unary_composition(mode, iterative, inline, vector, unaries):
         routine.new_assignment(f, x)
         routine.new_assignment(
             f,
-            UnaryOperation.create(
-                unary_1, UnaryOperation.create(unary_2, Reference(f))
+            _intrinsic_or_operation(
+                unary_1, _intrinsic_or_operation(unary_2, Reference(f))
             ),
         )
     else:
         print("without iterative assignment")
         routine.new_assignment(
             f,
-            UnaryOperation.create(
-                unary_1, UnaryOperation.create(unary_2, Reference(x))
+            _intrinsic_or_operation(
+                unary_1, _intrinsic_or_operation(unary_2, Reference(x))
             ),
         )
 
@@ -357,9 +366,9 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
             routine.new_assignment(f, x)
             routine.new_assignment(
                 f,
-                BinaryOperation.create(
+                _intrinsic_or_operation(
                     binary_1,
-                    BinaryOperation.create(binary_2, Reference(f), Reference(y)),
+                    _intrinsic_or_operation(binary_2, Reference(f), Reference(y)),
                     Reference(z),
                 ),
             )
@@ -367,9 +376,9 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
             print("without iterative assignment")
             routine.new_assignment(
                 f,
-                BinaryOperation.create(
+                _intrinsic_or_operation(
                     binary_1,
-                    BinaryOperation.create(binary_2, Reference(x), Reference(y)),
+                    _intrinsic_or_operation(binary_2, Reference(x), Reference(y)),
                     Reference(z),
                 ),
             )
@@ -422,17 +431,17 @@ def _create_taping_routine(name, vector):
     unary_operators = (
         # UnaryOperation.Operator.PLUS,
         # UnaryOperation.Operator.MINUS,
-        UnaryOperation.Operator.SQRT,
-        UnaryOperation.Operator.EXP,
-        UnaryOperation.Operator.LOG,
-        UnaryOperation.Operator.LOG10,
-        UnaryOperation.Operator.COS,
-        UnaryOperation.Operator.SIN,
-        UnaryOperation.Operator.TAN,
-        # UnaryOperation.Operator.ACOS,
-        # UnaryOperation.Operator.ASIN,
-        UnaryOperation.Operator.ATAN,
-        # UnaryOperation.Operator.ABS,
+        IntrinsicCall.Intrinsic.SQRT,
+        IntrinsicCall.Intrinsic.EXP,
+        IntrinsicCall.Intrinsic.LOG,
+        IntrinsicCall.Intrinsic.LOG10,
+        IntrinsicCall.Intrinsic.COS,
+        IntrinsicCall.Intrinsic.SIN,
+        IntrinsicCall.Intrinsic.TAN,
+        # IntrinsicCall.Intrinsic.ACOS,
+        # IntrinsicCall.Intrinsic.ASIN,
+        IntrinsicCall.Intrinsic.ATAN,
+        # IntrinsicCall.Intrinsic.ABS,
     )
     binary_operators = (
         # BinaryOperation.Operator.ADD,
@@ -457,7 +466,7 @@ def _create_taping_routine(name, vector):
     for unary in unary_operators:
         routine.new_assignment(
             w,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
                 Reference(w),
@@ -466,10 +475,10 @@ def _create_taping_routine(name, vector):
 
         routine.new_assignment(
             f,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.ADD,
                 Reference(f),
-                UnaryOperation.create(unary, Reference(w)),
+                _intrinsic_or_operation(unary, Reference(w)),
             ),
         )
 
@@ -479,7 +488,7 @@ def _create_taping_routine(name, vector):
     for binary in binary_operators:
         routine.new_assignment(
             w,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
                 Reference(w),
@@ -492,10 +501,10 @@ def _create_taping_routine(name, vector):
 
         routine.new_assignment(
             f,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.ADD,
                 Reference(f),
-                BinaryOperation.create(binary, Reference(w), Reference(a)),
+                _intrinsic_or_operation(binary, Reference(w), Reference(a)),
             ),
         )
 
@@ -588,7 +597,7 @@ def test_nested_calls(vector, schedule):
     for i in range(3):
         calling_routine.new_assignment(
             y,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
                 Reference(y),
@@ -598,7 +607,7 @@ def test_nested_calls(vector, schedule):
 
         calling_routine.new_assignment(
             y,
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.MUL,
                 Literal("1.01", REAL_TYPE),
                 Reference(y),
@@ -693,7 +702,7 @@ def test_many_arguments(mode, vector):
         routine.new_assignment(out_args[i], in_args[i])
         # routine.new_assignment(
         #     out_args[i],
-        #     BinaryOperation.create(
+        #     _intrinsic_or_operation(
         #         BinaryOperation.Operator.ADD,
         #         Reference(out_args[i]),
         #         Reference(inout_args[i]),
@@ -701,7 +710,7 @@ def test_many_arguments(mode, vector):
         # )
         routine.new_assignment(
             out_args[i],
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.ADD,
                 Reference(out_args[i]),
                 Reference(undef_args[i]),
@@ -709,7 +718,7 @@ def test_many_arguments(mode, vector):
         )
         routine.new_assignment(
             out_args[i],
-            BinaryOperation.create(
+            _intrinsic_or_operation(
                 BinaryOperation.Operator.ADD,
                 Reference(out_args[i]),
                 Reference(non_args[i])
@@ -719,7 +728,7 @@ def test_many_arguments(mode, vector):
         for modified_args in (undef_args, ):#(inout_args, undef_args):
             routine.new_assignment(
                 modified_args[i],
-                BinaryOperation.create(
+                _intrinsic_or_operation(
                     BinaryOperation.Operator.ADD,
                     Reference(modified_args[i]),
                     Reference(in_args[i]),
@@ -727,7 +736,7 @@ def test_many_arguments(mode, vector):
             )
             # routine.new_assignment(
             #     modified_args[i],
-            #     BinaryOperation.create(
+            #     _intrinsic_or_operation(
             #         BinaryOperation.Operator.ADD,
             #         Reference(modified_args[i]),
             #         Reference(inout_args[i]),
@@ -735,7 +744,7 @@ def test_many_arguments(mode, vector):
             # )
             routine.new_assignment(
                 modified_args[i],
-                BinaryOperation.create(
+                _intrinsic_or_operation(
                     BinaryOperation.Operator.ADD,
                     Reference(modified_args[i]),
                     Reference(undef_args[i]),
@@ -743,7 +752,7 @@ def test_many_arguments(mode, vector):
             )
             routine.new_assignment(
                 modified_args[i],
-                BinaryOperation.create(
+                _intrinsic_or_operation(
                     BinaryOperation.Operator.ADD,
                     Reference(modified_args[i]),
                     Reference(non_args[i])

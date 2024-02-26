@@ -42,7 +42,6 @@ from abc import ABCMeta, abstractmethod
 from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
-    NaryOperation,
     Operation,
 )
 from psyclone.psyir.transformations import TransformationError
@@ -97,17 +96,11 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
         :type operation: :py:class:`psyclone.psyir.nodes.Operation`
 
         :raises TypeError: if operation is of the wrong type.
-        :raises NotImplementedError: if operation is an NaryOperation instance.
         """
         if not isinstance(operation, Operation):
             raise TypeError(
                 f"Argument in differentiate should be a "
                 f"PSyIR 'Operation' but found '{type(operation).__name__}'."
-            )
-
-        if isinstance(operation, NaryOperation):
-            raise NotImplementedError(
-                "Differentiating NaryOperation nodes isn't implement yet."
             )
 
     @abstractmethod

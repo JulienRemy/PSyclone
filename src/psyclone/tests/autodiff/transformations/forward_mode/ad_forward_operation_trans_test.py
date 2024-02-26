@@ -49,7 +49,6 @@ from psyclone.psyir.nodes import (
     Literal,
     UnaryOperation,
     BinaryOperation,
-    NaryOperation,
     Reference,
     Container,
     Assignment
@@ -123,7 +122,6 @@ def test_ad_operation_trans_differentiate():
 
     unary_op = UnaryOperation.create(UnaryOperation.Operator.EXP, one())
     binary_op = BinaryOperation.create(BinaryOperation.Operator.ADD, one(), one())
-    nary_op = NaryOperation.create(NaryOperation.Operator.MAX, [one(), one(), one()])
 
     with pytest.raises(TypeError) as info:
         ad_operation_trans.differentiate(None)
@@ -138,12 +136,6 @@ def test_ad_operation_trans_differentiate():
     assert ad_operation_trans.differentiate(
         binary_op
     ) == ad_operation_trans.differentiate_binary(binary_op)
-
-    with pytest.raises(NotImplementedError) as info:
-        ad_operation_trans.differentiate(nary_op)
-    assert "Differentiating NaryOperation nodes " "isn't implement yet." in str(
-        info.value
-    )
 
 
 def test_ad_operation_trans_differentiate_unary(fortran_writer):

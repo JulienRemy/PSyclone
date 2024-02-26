@@ -50,7 +50,7 @@ from psyclone.tests.utilities import Compile
 
 from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import UnaryOperation, BinaryOperation, \
-    NaryOperation, Literal, Reference, Return, Routine, FileContainer, Call
+    Literal, Reference, Return, Routine, FileContainer, Call
 from psyclone.psyir.symbols import DataSymbol, INTEGER_SINGLE_TYPE, \
     REAL_SINGLE_TYPE, ScalarType, ArrayType
 from psyclone.errors import GenerationError, InternalError

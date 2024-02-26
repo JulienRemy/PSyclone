@@ -68,7 +68,6 @@ from psyclone.psyir.nodes import (
     Routine,
     Reference,
 )
-from psyclone.psyir.nodes.operation import NaryOperation
 from psyclone.psyir.symbols import (
     ArrayType,
     REAL_TYPE,
@@ -548,8 +547,8 @@ class ComparatorGenerator(object):
                 Reference(J_tapenade),
             )
             # This is abs(J_..._autodiff - J_..._tapenade)
-            J_abs_diff = UnaryOperation.create(
-                UnaryOperation.Operator.ABS, J_diff
+            J_abs_diff = IntrinsicCall.create(
+                IntrinsicCall.Intrinsic.ABS, J_diff
             )
 
             # Assign it to an intent(out) argument or not

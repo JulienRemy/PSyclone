@@ -47,6 +47,7 @@ from psyclone.psyir.nodes import (
     BinaryOperation,
     Routine,
 )
+from psyclone.psyir.nodes.intrinsic_call import IntrinsicCall
 from psyclone.psyir.symbols import (
     DataSymbol,
     ScalarType,
@@ -321,7 +322,7 @@ def minus(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.MINUS, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.MINUS, [val])
 
 
 def div(lhs, rhs):
@@ -578,7 +579,7 @@ def log(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.LOG, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG, [val])
 
 
 def exp(operand):
@@ -603,7 +604,7 @@ def exp(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.EXP, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.EXP, [val])
 
 
 def cos(operand):
@@ -628,7 +629,7 @@ def cos(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.COS, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.COS, [val])
 
 
 def sin(operand):
@@ -653,7 +654,7 @@ def sin(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.SIN, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.SIN, [val])
 
 
 def sqrt(operand):
@@ -678,7 +679,7 @@ def sqrt(operand):
 
     val = datanode(operand)
 
-    return UnaryOperation.create(UnaryOperation.Operator.SQRT, val)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.SQRT, [val])
 
 
 def sign(lhs, rhs):
@@ -714,4 +715,4 @@ def sign(lhs, rhs):
     left = datanode(lhs)
     right = datanode(rhs)
 
-    return BinaryOperation.create(BinaryOperation.Operator.SIGN, left, right)
+    return IntrinsicCall.create(IntrinsicCall.Intrinsic.SIGN, [left, right])
