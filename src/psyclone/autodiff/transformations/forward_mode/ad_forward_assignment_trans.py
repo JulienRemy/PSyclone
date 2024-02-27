@@ -36,7 +36,7 @@
 """This module provides a Transformation for forward-mode automatic 
 differentiation of PSyIR Assignment nodes."""
 
-from psyclone.psyir.nodes import Literal, Reference, Operation
+from psyclone.psyir.nodes import Literal, Reference, Operation, IntrinsicCall
 
 from psyclone.autodiff import assign_zero, assign
 from psyclone.autodiff.transformations import ADAssignmentTrans
@@ -52,7 +52,7 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
     def apply(self, assignment, options=None):
         """Applies the transformation, generating the transformed \
         statement associated with this Assignment.
-        If the RHS is an Operation node, `apply` applies an \
+        If the RHS is an Operation or IntrinsicCall node, `apply` applies an \
         `ADForwardOperationTrans` to it.
             
         | Options:
@@ -97,8 +97,8 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
             lhs_d_assignment = assign(lhs_d, rhs_d)
             transformed.append(lhs_d_assignment)
 
-        elif isinstance(rhs, Operation):
-            # RHS is an operation:
+        elif isinstance(rhs, (Operation, IntrinsicCall)):
+            # RHS is an operation or intrinsic:
             #   LHS derivative is set to operation derivative
             result = self.routine_trans.operation_trans.apply(rhs, options)
             lhs_d_assignment = assign(lhs_d, result)

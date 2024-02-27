@@ -48,7 +48,7 @@ from psyclone.psyir.symbols import (
     SymbolTable,
 )
 from psyclone.psyir.nodes import (Routine, Reference, Literal, ArrayReference,
-                                  BinaryOperation, Range)
+                                  BinaryOperation, IntrinsicCall, Range)
 
 TaP = ADValueTape._tape_prefix
 
@@ -117,8 +117,8 @@ def test_ad_value_tape_record(fortran_writer):
     rec_array = ad_value_tape.record(whole_array)
     assert (fortran_writer(rec_array)
             == f"{TaP}name(:) = array(:)\n")
-    assert isinstance(ad_value_tape.length, BinaryOperation)
-    assert fortran_writer(ad_value_tape.length) == "(3 - 1) / 1 + 1"
+    assert isinstance(ad_value_tape.length, Literal)
+    assert fortran_writer(ad_value_tape.length) == "3" #"(3 - 1) / 1 + 1"
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
     array_element = ArrayReference.create(array_sym, [Literal("1", INTEGER_TYPE)])
@@ -134,8 +134,8 @@ def test_ad_value_tape_record(fortran_writer):
     rec_array = ad_value_tape.record(array_slice)
     assert (fortran_writer(rec_array)
             == f"{TaP}name(:) = array(:2)\n")
-    assert isinstance(ad_value_tape.length, BinaryOperation)
-    assert fortran_writer(ad_value_tape.length) == "(2 - 1) / 1 + 1"
+    assert isinstance(ad_value_tape.length, Literal)
+    assert fortran_writer(ad_value_tape.length) == "2" #"(2 - 1) / 1 + 1"
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
     array_slice = ArrayReference.create(array_sym,
@@ -145,7 +145,7 @@ def test_ad_value_tape_record(fortran_writer):
     assert (fortran_writer(rec_array)
             == f"{TaP}name(:) = array(2:)\n")
     assert isinstance(ad_value_tape.length, BinaryOperation)
-    assert fortran_writer(ad_value_tape.length) == "(3 - 2) / 1 + 1"
+    assert fortran_writer(ad_value_tape.length) == "3 - 2 + 1" #"(3 - 2) / 1 + 1"
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
     array_slice = ArrayReference.create(array_sym,
@@ -154,8 +154,8 @@ def test_ad_value_tape_record(fortran_writer):
     rec_array = ad_value_tape.record(array_slice)
     assert (fortran_writer(rec_array)
             == f"{TaP}name(:) = array(:)\n")
-    assert isinstance(ad_value_tape.length, BinaryOperation)
-    assert fortran_writer(ad_value_tape.length) == "(3 - 1) / 1 + 1"
+    assert isinstance(ad_value_tape.length, Literal)
+    assert fortran_writer(ad_value_tape.length) == "3" #"(3 - 1) / 1 + 1"
 
     ad_value_tape = ADValueTape("name", REAL_TYPE)
     matrix_sym = DataSymbol("matrix", ArrayType(REAL_TYPE, [2, 2]))

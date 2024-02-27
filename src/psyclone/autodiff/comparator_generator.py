@@ -548,7 +548,7 @@ class ComparatorGenerator(object):
             )
             # This is abs(J_..._autodiff - J_..._tapenade)
             J_abs_diff = IntrinsicCall.create(
-                IntrinsicCall.Intrinsic.ABS, J_diff
+                IntrinsicCall.Intrinsic.ABS, [J_diff]
             )
 
             # Assign it to an intent(out) argument or not
@@ -637,7 +637,7 @@ class ComparatorGenerator(object):
         # TODO: fix the extension
         subprocess.run(
             [
-                "f2py3",
+                "f2py",
                 "-c",
                 "-m",
                 module_name,

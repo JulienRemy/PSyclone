@@ -40,6 +40,7 @@ from psyclone.psyir.nodes import (
     Call,
     Reference,
     Operation,
+    IntrinsicCall,
     Literal,
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
@@ -200,13 +201,14 @@ class ADForwardCallTrans(ADCallTrans):
         return [reference.copy(), derivative_reference]
 
     def transform_operation_argument(self, operation, options=None):
-        """Transforms an Operation argument of the Call.
-        Returns the associated arguments to use in the transformed call.
-        For an Operation, the arguments are the operation followed by \
-        its derivative (as an operation).
+        """Transforms an Operation or IntrinsicCall argument of the Call.
+        Returns the associated arguments to use in the transformed call, \
+        which are the operation or intrinsic call followed by \
+        its derivative (as an operation or intrinsic call).
 
         :param operation: operation argument to transform.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -214,7 +216,8 @@ class ADForwardCallTrans(ADCallTrans):
         :raises TypeError: if operation is of the wrong type.
 
         :return: list of transformed arguments.
-        :rtype: List[:py:class:`psyclone.psyir.nodes.Operation`]
+        :rtype: List[Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                           :py:class:`psyclone.psyir.nodes.IntrinsicCall`]]
         """
         super().transform_operation_argument(operation, options)
 
@@ -241,7 +244,8 @@ class ADForwardCallTrans(ADCallTrans):
         :return: list of transformed arguments.
         :rtype: List[Union[:py:class:`psyclone.psyir.nodes.Operation`,
                            :py:class:`psyclone.psyir.nodes.Literal`,
-                           :py:class:`psyclone.psyir.nodes.Reference`]]
+                           :py:class:`psyclone.psyir.nodes.Reference`,
+                           :py:class:`psyclone.psyir.nodes.IntrinsicCall`]]
         """
         super().transform_call_arguments(call, options)
 
@@ -254,15 +258,13 @@ class ADForwardCallTrans(ADCallTrans):
                 args = self.transform_literal_argument(arg, options)
             elif isinstance(arg, Reference):
                 args = self.transform_reference_argument(arg, options)
-            elif isinstance(arg, Operation):
+            elif isinstance(arg, (Operation, IntrinsicCall)):
                 args = self.transform_operation_argument(arg, options)
             else:
                 raise NotImplementedError(
-                    f"Transforming Call with  "
-                    f"arguments of type other than "
-                    f"Reference is not "
-                    f"implemented yet but found an "
-                    f"argument of type "
+                    f"Transforming Call with arguments of type other than "
+                    f"Reference, Literal, Operation or IntrinsicCall is not "
+                    f"implemented yet but found an argument of type "
                     f"'{type(arg).__name__}'."
                 )
 

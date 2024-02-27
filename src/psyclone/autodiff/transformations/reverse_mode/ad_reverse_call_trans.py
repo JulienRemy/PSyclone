@@ -40,6 +40,7 @@ from psyclone.psyir.nodes import (
     Call,
     Reference,
     Operation,
+    IntrinsicCall,
     Literal,
 )
 from psyclone.psyir.symbols import DataSymbol
@@ -393,18 +394,19 @@ class ADReverseCallTrans(ADCallTrans):
         return returning_args, temp_assignments, adjoint_assignments
 
     def transform_operation_argument(self, operation, options=None):
-        """Transforms an Operation argument of the Call.
+        """Transforms an Operation or IntrinsicCall argument of the Call.
         Returns the associated arguments to use in the reversing/returning \
         call, as well as the temporary assignments (before the call) and \
         adjoint assignments (after the call).
         Creates an operation adjoint.
-        The temp assignment is `temp_[var]_adj = 0.0`, the \
-        adjoint assignments are those obtained by transforming the Operation \
+        The temp assignment is `temp_[var]_adj = 0.0`, the adjoint assignments \
+        are those obtained by transforming the Operation or IntrinsicCall\
         and the arguments are the Operation followed by a reference to its \
         adjoint.
 
         :param operation: operation argument to transform.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -413,9 +415,10 @@ class ADReverseCallTrans(ADCallTrans):
 
         :return: list of returning arguments, list of temporary assignments, \
             list of adjoint assignments.
-        :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Operation`,
-                                 :py:class:`psyclone.psyir.nodes.Reference`],
-                                 :py:class:`psyclone.psyir.nodes.Assignment`]]
+        :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                                 :py:class:`psyclone.psyir.nodes.IntrinsicCall`, \
+                                 :py:class:`psyclone.psyir.nodes.Reference`], \
+                      :py:class:`psyclone.psyir.nodes.Assignment`]]
         """
         # pylint: disable=protected-access
 
@@ -470,10 +473,11 @@ class ADReverseCallTrans(ADCallTrans):
 
         :return: list of returning arguments, list of temporary assignments, \
                  list of adjoint assignments.
-        :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Operation`,
+        :rtype: Tuple[List[Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                                 :py:class:`psyclone.psyir.nodes.IntrinsicCall`, 
                                  :py:class:`psyclone.psyir.nodes.Literal`,
                                  :py:class:`psyclone.psyir.nodes.Reference`],
-                                 :py:class:`psyclone.psyir.nodes.Assignment`]]
+                      :py:class:`psyclone.psyir.nodes.Assignment`]]
         """
         super().transform_call_arguments(call, options)
 
@@ -501,7 +505,7 @@ class ADReverseCallTrans(ADCallTrans):
                     temp_asgs,
                     adjoint_asgs,
                 ) = self.transform_reference_argument(arg, options)
-            elif isinstance(arg, Operation):
+            elif isinstance(arg, (Operation, IntrinsicCall)):
                 (
                     ret_args,
                     temp_asgs,

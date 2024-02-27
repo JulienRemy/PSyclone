@@ -42,7 +42,8 @@ from psyclone.psyir.nodes import (
     Reference,
     Assignment,
     Literal,
-    Operation
+    Operation,
+    IntrinsicCall
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -759,21 +760,22 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.add_children(self.returning, value_tape_restores, reverse=True)
 
     def new_operation_adjoint(self, operation):
-        """Creates a new adjoint symbol for an Operation node in the \
-        returning table. Also appends it to the operation_adjoints list.
+        """Creates a new adjoint symbol for an Operation or IntrinsicCall node \
+        in the returning table. Also appends it to the operation_adjoints list.
 
         :param operation: operation node.
-        :type operation: :py:class:`psyclone.psyir.symbols.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
 
         :raises TypeError: if operation is of the wrong type.
 
         :return: the adjoint symbol generated.
         :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
         """
-        if not isinstance(operation, Operation):
+        if not isinstance(operation, (Operation, IntrinsicCall)):
             raise TypeError(
                 f"'operation' argument should be of type "
-                f"'Operation' but found "
+                f"'Operation' or 'IntrinsicCall' but found "
                 f"'{type(operation).__name__}'.")
 
         datatype = operation.datatype

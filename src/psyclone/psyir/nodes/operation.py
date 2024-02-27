@@ -204,15 +204,6 @@ class UnaryOperation(Operation):
         unary_op.addchild(operand)
         return unary_op
 
-    @property
-    def datatype(self):
-        '''
-        :returns: the datatype of the result of this UnaryOperation.
-        :rtype: :py:class:`psyclone.psyir.symbols.DataType`
-
-        '''
-        return self.children[0].datatype
-
 
 class BinaryOperation(Operation):
     '''

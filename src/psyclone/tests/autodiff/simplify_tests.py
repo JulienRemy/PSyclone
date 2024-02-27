@@ -193,11 +193,11 @@ def test__typecheck_minus():
         "'NoneType'." in str(info.value)
     )
     with pytest.raises(ValueError) as info:
-        _typecheck_minus(UnaryOperation(UnaryOperation.Operator.EXP))
+        _typecheck_minus(UnaryOperation(UnaryOperation.Operator.PLUS))
     assert (
         "'unary_operation' argument should have "
         "operator 'UnaryOperation.Operator.MINUS' "
-        "but found 'Operator.EXP'." in str(info.value)
+        "but found 'Operator.PLUS'." in str(info.value)
     )
 
 
@@ -383,7 +383,7 @@ def test_simplify_add_minus_minus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
         Reference(DataSymbol("a", INTEGER_TYPE)),
@@ -397,7 +397,7 @@ def test_simplify_add_minus_minus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD, unary.copy(), unary.copy()
     )
@@ -409,7 +409,7 @@ def test_simplify_add_minus_minus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     minus = UnaryOperation(UnaryOperation.Operator.MINUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD, unary.copy(), minus.copy()
@@ -448,7 +448,7 @@ def test_simplify_add_plus_minus_or_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
         Reference(DataSymbol("a", INTEGER_TYPE)),
@@ -462,7 +462,7 @@ def test_simplify_add_plus_minus_or_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.ADD, unary.copy(), unary.copy()
     )
@@ -488,7 +488,7 @@ def test_simplify_add_plus_minus_or_minus_plus_errors():
 
     # Should pass
     unary = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("0", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("0", INTEGER_TYPE)
     )
     minus = UnaryOperation.create(
         UnaryOperation.Operator.MINUS, Literal("0", INTEGER_TYPE)
@@ -601,7 +601,7 @@ def test_simplify_sub_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB,
         Reference(DataSymbol("a", INTEGER_TYPE)),
@@ -615,7 +615,7 @@ def test_simplify_sub_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB, unary.copy(), unary.copy()
     )
@@ -629,7 +629,7 @@ def test_simplify_sub_minus_plus_errors():
 
     # Should pass
     unary = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("0", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("0", INTEGER_TYPE)
     )
     minus = UnaryOperation.create(
         UnaryOperation.Operator.MINUS, Literal("0", INTEGER_TYPE)
@@ -665,7 +665,7 @@ def test_simplify_sub_plus_minus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB,
         Reference(DataSymbol("a", INTEGER_TYPE)),
@@ -679,7 +679,7 @@ def test_simplify_sub_plus_minus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB, unary.copy(), unary.copy()
     )
@@ -693,7 +693,7 @@ def test_simplify_sub_plus_minus_errors():
 
     # Should pass
     unary = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("0", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("0", INTEGER_TYPE)
     )
     minus = UnaryOperation.create(
         UnaryOperation.Operator.MINUS, Literal("0", INTEGER_TYPE)
@@ -861,7 +861,7 @@ def test_simplify_mul_div_plus_minus_or_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL,
         Reference(DataSymbol("a", INTEGER_TYPE)),
@@ -875,7 +875,7 @@ def test_simplify_mul_div_plus_minus_or_minus_plus_errors():
         "but found" in str(info.value)
     )
 
-    unary = UnaryOperation(UnaryOperation.Operator.EXP)
+    unary = UnaryOperation(UnaryOperation.Operator.PLUS)
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, unary.copy(), unary.copy()
     )
@@ -901,7 +901,7 @@ def test_simplify_mul_div_plus_minus_or_minus_plus_errors():
 
     # Should pass
     unary = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("0", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("0", INTEGER_TYPE)
     )
     minus = UnaryOperation.create(
         UnaryOperation.Operator.MINUS, Literal("0", INTEGER_TYPE)

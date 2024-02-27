@@ -48,7 +48,7 @@ from psyclone.psyir.symbols import (
     RoutineSymbol,
 )
 
-from psyclone.psyir.nodes import Reference, Routine
+from psyclone.psyir.nodes import Reference, Routine, UnaryOperation
 
 from psyclone.autodiff.utils import (
     datanode,
@@ -322,8 +322,15 @@ def test_log(fortran_writer):
     int_one = one(INTEGER_TYPE)
     var_sym = DataSymbol("var", REAL_TYPE)
 
-    assert fortran_writer(log(int_one)) == "LOG(1)"
-    assert fortran_writer(log(var_sym)) == "LOG(var)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+    log1 = log(int_one)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, log1)
+    logvar = log(var_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, logvar)
+
+    assert fortran_writer(log1) == "LOG(1)"
+    assert fortran_writer(logvar) == "LOG(var)"
 
 
 def test_exp_error():
@@ -339,8 +346,16 @@ def test_exp(fortran_writer):
     int_one = one(INTEGER_TYPE)
     var_sym = DataSymbol("var", REAL_TYPE)
 
-    assert fortran_writer(exp(int_one)) == "EXP(1)"
-    assert fortran_writer(exp(var_sym)) == "EXP(var)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+
+    exp1 = exp(int_one)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, exp1)
+    assert fortran_writer(exp1) == "EXP(1)"
+
+    expvar = exp(var_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, expvar)
+    assert fortran_writer(expvar) == "EXP(var)"
 
 
 def test_cos_error():
@@ -356,8 +371,16 @@ def test_cos(fortran_writer):
     int_one = one(INTEGER_TYPE)
     var_sym = DataSymbol("var", REAL_TYPE)
 
-    assert fortran_writer(cos(int_one)) == "COS(1)"
-    assert fortran_writer(cos(var_sym)) == "COS(var)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+
+    cos1 = cos(int_one)
+    cosvar = cos(var_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, cos1)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, cosvar)
+
+    assert fortran_writer(cos1) == "COS(1)"
+    assert fortran_writer(cosvar) == "COS(var)"
 
 
 def test_sin_error():
@@ -373,8 +396,16 @@ def test_sin(fortran_writer):
     int_one = one(INTEGER_TYPE)
     var_sym = DataSymbol("var", REAL_TYPE)
 
-    assert fortran_writer(sin(int_one)) == "SIN(1)"
-    assert fortran_writer(sin(var_sym)) == "SIN(var)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+
+    sin1 = sin(int_one)
+    sinvar = sin(var_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, sin1)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, sinvar)
+
+    assert fortran_writer(sin1) == "SIN(1)"
+    assert fortran_writer(sinvar) == "SIN(var)"
 
 
 def test_sqrt_error():
@@ -390,8 +421,16 @@ def test_sqrt(fortran_writer):
     int_one = one(INTEGER_TYPE)
     var_sym = DataSymbol("var", REAL_TYPE)
 
-    assert fortran_writer(sqrt(int_one)) == "SQRT(1)"
-    assert fortran_writer(sqrt(var_sym)) == "SQRT(var)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+
+    sqrt1 = sqrt(int_one)
+    sqrtvar = sqrt(var_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, sqrt1)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, sqrtvar)
+
+    assert fortran_writer(sqrt1) == "SQRT(1)"
+    assert fortran_writer(sqrtvar) == "SQRT(var)"
 
 
 def test_power_error():
@@ -541,7 +580,13 @@ def test_sign(fortran_writer):
     lhs_sym = DataSymbol("lhs", REAL_TYPE)
     rhs_sym = DataSymbol("rhs", REAL_TYPE)
 
-    assert fortran_writer(sign(lhs_sym, rhs_sym)) == "SIGN(lhs, rhs)"
+    # NOTE: the IntrinsicCall nodes need to have a parent so that the backend
+    # doesn't print eg. 'call LOG(1)\n' instead of 'LOG(1)'
+
+    sign_call = sign(lhs_sym, rhs_sym)
+    UnaryOperation.create(UnaryOperation.Operator.MINUS, sign_call)
+
+    assert fortran_writer(sign_call) == "SIGN(lhs, rhs)"
 
 
 def test_own_routine_symbol_error():

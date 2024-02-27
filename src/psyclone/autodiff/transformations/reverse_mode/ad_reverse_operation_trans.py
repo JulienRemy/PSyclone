@@ -34,7 +34,7 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This module provides a Transformation for reverse-mode automatic 
-differentiation of PSyIR Operation nodes."""
+differentiation of PSyIR Operation and IntrinsicCall nodes."""
 
 from psyclone.psyir.nodes import (
     Assignment,
@@ -70,8 +70,8 @@ from psyclone.autodiff import (
 
 
 class ADReverseOperationTrans(ADOperationTrans):
-    """A class for automatic differentation transformations of Operation nodes \
-    using reverse-mode.
+    """A class for automatic differentation transformations of Operation and 
+    IntrinsicCall nodes using reverse-mode.
     Requires an ADReverseRoutineTrans instance as context, where the adjoint \
     symbols can be found.
     This applies the chain rule to all operands and returns the recording and \
@@ -82,7 +82,8 @@ class ADReverseOperationTrans(ADOperationTrans):
         """Validates the arguments of the `apply` method.
 
         :param operation: operation Node to be transformed.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param parent_adj: reference of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, 
                            an enclosing Operation, etc.
@@ -118,27 +119,26 @@ class ADReverseOperationTrans(ADOperationTrans):
         """Applies the transformation. This generates the returning motion \
         statements that increment adjoints as required for reverse-mode \
         automatic differentiation.
-        If some children of the Operation node being transformed are \
-        themselves Operation nodes, `apply` is used recursively.
 
         The `parent_adj` argument is the `DataSymbol` of the adjoint of the \
         parent node of the `operation` node, to use in incrementing the \
         adjoints of the operands of `operation`: 
         - if the parent node is an `Assignment`, this is its LHS adjoint,
-        - if the parent node is an `Operation`, this is the adjoint \
-            of `operation` itself.
+        - if the parent node is an `Operation` or `IntrinsicCall`, \
+            this is the adjoint of `operation` itself.
 
-        For all children of the Operation node:
+        For all children of the Operation or IntrinsicCall node:
         - if they are Literal nodes, nothing is done, \
             there is no adjoint to increment,
         - if they are Reference nodes, the parent node 
-        If some children of the Operation node being transformed are themselves \
-        Operation nodes, `apply` is used recursively.
+        If some children of the Operation or IntrinsicCall node being \
+        transformed are themselves Operation or IntrinsicCall nodes, \
+        `apply` is used recursively.
 
-        If this Operation node has an Assignment node as ancestor, this \
-        distinguishes between children Reference nodes that are the LHS \
-        of the Assignment (in which case it is an **iterative** assignment \
-        *eg* `a = a + ... * (a + ...)`) or not.
+        If this Operation/IntrinsicCall node has an Assignment node as \
+        ancestor, this distinguishes between children Reference nodes that are \
+        the LHS of the Assignment (in which case it is an **iterative** \
+        assignment *eg* `a = a + ... * (a + ...)`) or not.
 
         The adjoints incrementations are returned as two lists:
         - this first contains the adjoint incrementations of \
@@ -153,10 +153,11 @@ class ADReverseOperationTrans(ADOperationTrans):
                            adjoining of the operation in the returning motion.
 
         :param operation: operation Node to be transformed.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param parent_adj: reference of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, \
-                           an enclosing Operation, etc.
+                           an enclosing Operation or IntrinsicCall, etc.
         :type parent_adj: :py:class:`psyclone.psyir.symbols.Reference`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
@@ -196,7 +197,9 @@ class ADReverseOperationTrans(ADOperationTrans):
         # which is wrong
         first_operand = operation.children[0]
         if (
-            (isinstance(operation, BinaryOperation))
+            (isinstance(operation, BinaryOperation)
+             or (isinstance(operation, IntrinsicCall)
+                 and len(operation.children) == 2))
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
@@ -249,7 +252,7 @@ class ADReverseOperationTrans(ADOperationTrans):
                     else:
                         returning.append(adj_incr)
 
-                elif isinstance(operand, Operation):
+                elif isinstance(operand, (Operation, IntrinsicCall)):
                     # If the operand is an Operation, create and assign its
                     # adjoint
                     # TODO: correct datatype
@@ -273,7 +276,8 @@ class ADReverseOperationTrans(ADOperationTrans):
 
                 else:
                     raise NotImplementedError(
-                        f"Transforming an Operation with operand of type "
+                        f"Transforming an Operation or IntrinsicCall with "
+                        f"operand or argument of type "
                         f"'{type(operand).__name__}' is not yet supported."
                     )
 
@@ -294,11 +298,11 @@ class ADReverseOperationTrans(ADOperationTrans):
         """Compute the local partial derivatives of every operand of the \
             operation argument.
 
-        :param operation: operation Node to be differentiated.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :param operation: operation or intrinsic call Node to be differentiated.
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
 
         :raises TypeError: if operation is of the wrong type.
-        :raises NotImplementedError: if operation is an NaryOperation instance.
 
         :return: list of local partial derivatives of operation.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
@@ -311,6 +315,9 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         if isinstance(operation, BinaryOperation):
             return self.differentiate_binary(operation)
+        
+        if isinstance(operation, IntrinsicCall):
+            return self.differentiate_intrinsic(operation)
 
     def differentiate_unary(self, operation):
         """Compute the local derivative of the single operand of the \
@@ -324,51 +331,21 @@ class ADReverseOperationTrans(ADOperationTrans):
                                      implemented yet.
 
         :return: local derivative of operation.
-        :rtype: :py:class:`psyclone.psyir.nodes.Node`
+        :rtype: Union[:py:class:`psyclone.psyir.nodes.UnaryOperation`, \
+                      :py:class:`psyclone.psyir.nodes.Literal`]
         """
         # pylint: disable=too-many-return-statements, too-many-branches
 
         super().differentiate_unary(operation)
 
         operator = operation.operator
-        operand = operation.children[0].copy()
 
         if operator == UnaryOperation.Operator.PLUS:
             return one(REAL_TYPE)
         if operator == UnaryOperation.Operator.MINUS:
             return minus(one(REAL_TYPE))
-        if operator == IntrinsicCall.Intrinsic.SQRT:
-            # TODO: x=0 should print something, raise an exception or something?
-            return inverse(mul(Literal("2", INTEGER_TYPE), operation))
-        if operator == IntrinsicCall.Intrinsic.EXP:
-            return operation.copy()
-        if operator == IntrinsicCall.Intrinsic.LOG:
-            return inverse(operand)
-        if operator == IntrinsicCall.Intrinsic.LOG10:
-            return inverse(mul(operand, log(Literal("10.0", REAL_TYPE))))
-        if operator == IntrinsicCall.Intrinsic.COS:
-            return minus(sin(operand))
-        if operator == IntrinsicCall.Intrinsic.SIN:
-            return cos(operand)
-        if operator == IntrinsicCall.Intrinsic.TAN:
-            return add(one(REAL_TYPE), square(operation))
-            # return inverse(square(cos(operand)))
-        if operator == IntrinsicCall.Intrinsic.ACOS:
-            return minus(inverse(sqrt(sub(one(REAL_TYPE), square(operand)))))
-        if operator == IntrinsicCall.Intrinsic.ASIN:
-            return inverse(sqrt(sub(one(REAL_TYPE), square(operand))))
-        if operator == IntrinsicCall.Intrinsic.ATAN:
-            return inverse(add(one(REAL_TYPE), square(operand)))
-        if operator == IntrinsicCall.Intrinsic.ABS:
-            # This could also be implemented using an if block
-            return div(operand, operation.copy())
-            # return sign(one(operand.datatype), operand)
-        # if operator == IntrinsicCall.Intrinsic.CEILING:
-        #    # 0             if sin(pi * operand) == 0
-        #    # undefined     otherwise...
-        #    could return 0 but that's error prone
 
-        _not_implemented = ["NOT", "CEIL", "REAL", "INT", "NINT"]
+        _not_implemented = ["NOT"]
         raise NotImplementedError(
             f"Differentiating UnaryOperation with "
             f"operator '{operator}' is not implemented yet. "
@@ -399,8 +376,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             return [one(REAL_TYPE), one(REAL_TYPE)]
         if operator == BinaryOperation.Operator.SUB:
             return [one(REAL_TYPE), minus(one(REAL_TYPE))]
-        if operator in (BinaryOperation.Operator.MUL,
-                        IntrinsicCall.Intrinsic.DOT_PRODUCT):
+        if operator == BinaryOperation.Operator.MUL:
             return [rhs, lhs]
         if operator == BinaryOperation.Operator.DIV:
             return [inverse(rhs), minus(div(lhs, square(rhs)))]
@@ -425,32 +401,11 @@ class ADReverseOperationTrans(ADOperationTrans):
             #    yb = x**y*LOG(x)*zb
             # END IF
 
-        # - MATMUL(matrix, vector): to be implemented in reverse-mode
-        #   using the new IntrinsicCall SPREAD operation from PR #1987
-        #   to compute an outer product.
-        #   NOTE: also requires getting 'parent_adj' argument from apply
-        #         see c_adj below.
-        #         => move 'parent_adj_mul' op. to differentiate_... functions.
-
-        #   c = matmul(a, b)
-        #   ! with b a matrix :
-        #   a_adj = a_adj + MATMUL(c_adj, TRANSPOSE(b))
-        #   ! with b a vector :
-        #   a_adj = a_adj + SPREAD(b, dim=2, ncopies=SIZE(b))
-        #                          * SPREAD(c_adj, dim=1, ncopies=SIZE(b))
-        #   b_adj = b_adj + MATMUL(TRANSPOSE(a), c_adj)
-
         # TODO:
         # REM? undefined for some values of lhs/rhs
-        # MIN if block
-        # MAX if block
-        # MATMUL pending
 
         _not_implemented = [
             "REM",
-            "MIN",
-            "MAX",
-            "MATMUL",
             "EQ",
             "NE",
             "GT",
@@ -459,13 +414,8 @@ class ADReverseOperationTrans(ADOperationTrans):
             "LE",
             "AND",
             "OR",
-            "SIGN",
-            "REAL",
-            "INT",
-            "CAST",
-            "SIZE",
-            "LBOUND",
-            "UBOUND",
+            "EQV",
+            "NEQV"
         ]
         raise NotImplementedError(
             f"Differentiating BinaryOperation with "
@@ -474,8 +424,102 @@ class ADReverseOperationTrans(ADOperationTrans):
             f"{_not_implemented}."
         )
 
-    # TODO: implement these
-    # @abstractmethod
-    # def differentiate_nary_operation(self, operation):
-    # MAX
-    # MIN
+    def differentiate_intrinsic(self, intrinsic_call):
+        """Compute the local derivatives of the arguments of the intrinsic call.
+
+        :param intrinsic_call: unary intrinsic_call Node to be differentiated.
+        :type intrinsic_call: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+
+        :raises TypeError: if intrinsic_call is of the wrong type.
+        :raises NotImplementedError: if the intrinsic derivative hasn't been \
+                                     implemented yet.
+
+        :return: list of local partial derivatives of intrinsic_call.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        # pylint: disable=too-many-return-statements, too-many-branches
+
+        super().differentiate_intrinsic(intrinsic_call)
+
+        intrinsic = intrinsic_call.intrinsic
+        arguments = [child.copy() for child in intrinsic_call.children]
+
+        # Unary intrinsics
+        if len(arguments) == 1:
+            argument = arguments[0]
+
+            if intrinsic == IntrinsicCall.Intrinsic.SQRT:
+                # TODO: x=0 should print something,
+                # raise an exception or something?
+                return [inverse(mul(Literal("2", INTEGER_TYPE), intrinsic_call))]
+            if intrinsic == IntrinsicCall.Intrinsic.EXP:
+                return [intrinsic_call.copy()]
+            if intrinsic == IntrinsicCall.Intrinsic.LOG:
+                return [inverse(argument)]
+            if intrinsic == IntrinsicCall.Intrinsic.LOG10:
+                return [inverse(mul(argument, log(Literal("10.0", REAL_TYPE))))]
+            if intrinsic == IntrinsicCall.Intrinsic.COS:
+                return [minus(sin(argument))]
+            if intrinsic == IntrinsicCall.Intrinsic.SIN:
+                return [cos(argument)]
+            if intrinsic == IntrinsicCall.Intrinsic.TAN:
+                return [add(one(REAL_TYPE), square(intrinsic_call))]
+                # return inverse(square(cos(argument)))
+            if intrinsic == IntrinsicCall.Intrinsic.ACOS:
+                return [minus(inverse(sqrt(sub(one(REAL_TYPE),
+                                              square(argument)))))]
+            if intrinsic == IntrinsicCall.Intrinsic.ASIN:
+                return [inverse(sqrt(sub(one(REAL_TYPE), square(argument))))]
+            if intrinsic == IntrinsicCall.Intrinsic.ATAN:
+                return [inverse(add(one(REAL_TYPE), square(argument)))]
+            if intrinsic == IntrinsicCall.Intrinsic.ABS:
+                # This could also be implemented using an if block
+                return [div(argument, intrinsic_call.copy())]
+                # return sign(one(argument.datatype), argument)
+            # if intrinsic == IntrinsicCall.Intrinsic.CEILING:
+            #    # 0             if sin(pi * argument) == 0
+            #    # undefined     otherwise...
+            #    could return 0 but that's error prone
+
+            raise NotImplementedError(
+                f"Differentiating unary IntrinsicCall with "
+                f"intrinsic '{intrinsic.name}' is not implemented yet. "
+            )
+
+        # Binary intrinsic call
+        if len(arguments) == 2:
+            lhs, rhs = arguments
+
+            if intrinsic == IntrinsicCall.Intrinsic.DOT_PRODUCT:
+                return [rhs, lhs]
+
+            # - MATMUL(matrix, vector): to be implemented in reverse-mode
+            #   using the new IntrinsicCall SPREAD operation from PR #1987
+            #   to compute an outer product.
+            #   NOTE: also requires getting 'parent_adj' argument from apply
+            #         see c_adj below.
+            #         => move 'parent_adj_mul' op. to differentiate_... functions.
+
+            #   c = matmul(a, b)
+            #   ! with b a matrix :
+            #   a_adj = a_adj + MATMUL(c_adj, TRANSPOSE(b))
+            #   ! with b a vector :
+            #   a_adj = a_adj + SPREAD(b, dim=2, ncopies=SIZE(b))
+            #                          * SPREAD(c_adj, dim=1, ncopies=SIZE(b))
+            #   b_adj = b_adj + MATMUL(TRANSPOSE(a), c_adj)
+
+            # TODO:
+            # MIN if block
+            # MAX if block
+            # MATMUL pending
+
+            raise NotImplementedError(
+                f"Differentiating binary IntrinsicCall with "
+                f"intrinsic '{intrinsic.name}' is not implemented yet. "
+            )
+
+        raise NotImplementedError(
+                f"Differentiating IntrinsicCall with "
+                f"intrinsic '{intrinsic.name}' is not implemented yet. "
+                f"No intrinsics with arity larger than 2 have been implemented."
+            )

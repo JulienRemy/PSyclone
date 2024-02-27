@@ -44,6 +44,7 @@ from psyclone.psyir.nodes import (
     Call,
     Reference,
     Operation,
+    IntrinsicCall,
     Literal,
     Routine,
 )
@@ -252,20 +253,21 @@ class ADCallTrans(ADElementTrans, metaclass=ABCMeta):
 
     @abstractmethod
     def transform_operation_argument(self, operation, options=None):
-        """Transforms an Operation argument of the Call.
+        """Transforms an Operation or IntrinsicCall argument of the Call.
 
         :param operation: operation argument to transform.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         """
-        if not isinstance(operation, Operation):
+        if not isinstance(operation, (Operation, IntrinsicCall)):
             raise TypeError(
                 f"'operation' argument should be of type "
-                f"'Operation' but found "
+                f"'Operation' or 'IntrinsicCall' but found "
                 f"'{type(operation).__name__}'."
             )
 

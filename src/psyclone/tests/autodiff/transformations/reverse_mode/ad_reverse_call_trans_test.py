@@ -216,7 +216,7 @@ def test_ad_call_trans_transform_operation_argument():
     with pytest.raises(TypeError) as info:
         ad_call_trans.transform_operation_argument(None)
     assert (
-        "'operation' argument should be of type 'Operation' "
+        "'operation' argument should be of type 'Operation' or 'IntrinsicCall' "
         "but found 'NoneType'." in str(info.value)
     )
 

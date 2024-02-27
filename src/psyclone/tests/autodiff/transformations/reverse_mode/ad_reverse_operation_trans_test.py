@@ -49,6 +49,7 @@ from psyclone.psyir.nodes import (
     Literal,
     UnaryOperation,
     BinaryOperation,
+    IntrinsicCall,
     Reference,
     Container,
 )
@@ -104,14 +105,14 @@ def test_ad_operation_trans_validate():
     _, ad_routine_trans, ad_operation_trans = initialize_transformations()
 
     unary_op = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("1", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("1", INTEGER_TYPE)
     )
 
     with pytest.raises(TransformationError) as info:
         ad_operation_trans.validate(None, None)
     assert (
         "'operation' argument should be a "
-        "PSyIR 'Operation' but found 'NoneType'." in str(info.value)
+        "PSyIR 'Operation' or 'IntrinsicCall' but found 'NoneType'." in str(info.value)
     )
 
     with pytest.raises(TransformationError) as info:
@@ -132,7 +133,7 @@ def test_ad_operation_trans_validate():
 
     adj_sym = ad_routine_trans.create_differential_symbol(sym)
     unary_op = UnaryOperation.create(
-        UnaryOperation.Operator.EXP, Literal("1", INTEGER_TYPE)
+        UnaryOperation.Operator.PLUS, Literal("1", INTEGER_TYPE)
     )
     ad_operation_trans.validate(unary_op, Reference(adj_sym))
 
@@ -140,14 +141,14 @@ def test_ad_operation_trans_validate():
 def test_ad_operation_trans_differentiate():
     _, _, ad_operation_trans = initialize_transformations()
 
-    unary_op = UnaryOperation.create(UnaryOperation.Operator.EXP, one())
+    unary_op = UnaryOperation.create(UnaryOperation.Operator.PLUS, one())
     binary_op = BinaryOperation.create(BinaryOperation.Operator.ADD, one(), one())
 
     with pytest.raises(TypeError) as info:
         ad_operation_trans.differentiate(None)
     assert (
         "Argument in differentiate should be a "
-        "PSyIR 'Operation' but found 'NoneType'." in str(info.value)
+        "PSyIR 'Operation' or 'IntrinsicCall' but found 'NoneType'." in str(info.value)
     )
 
     assert ad_operation_trans.differentiate(unary_op) == [
@@ -171,59 +172,16 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     ref = Reference(DataSymbol("var", REAL_TYPE))
     plus = UnaryOperation.create(UnaryOperation.Operator.PLUS, ref.copy())
     minus = UnaryOperation.create(UnaryOperation.Operator.MINUS, ref.copy())
-    sqrt = UnaryOperation.create(UnaryOperation.Operator.SQRT, ref.copy())
-    exp = UnaryOperation.create(UnaryOperation.Operator.EXP, ref.copy())
-    log = UnaryOperation.create(UnaryOperation.Operator.LOG, ref.copy())
-    log10 = UnaryOperation.create(UnaryOperation.Operator.LOG10, ref.copy())
-    cos = UnaryOperation.create(UnaryOperation.Operator.COS, ref.copy())
-    sin = UnaryOperation.create(UnaryOperation.Operator.SIN, ref.copy())
-    tan = UnaryOperation.create(UnaryOperation.Operator.TAN, ref.copy())
-    acos = UnaryOperation.create(UnaryOperation.Operator.ACOS, ref.copy())
-    asin = UnaryOperation.create(UnaryOperation.Operator.ASIN, ref.copy())
-    atan = UnaryOperation.create(UnaryOperation.Operator.ATAN, ref.copy())
-    abs_val = UnaryOperation.create(UnaryOperation.Operator.ABS, ref.copy())
 
     assert fortran_writer(ad_operation_trans.differentiate_unary(plus)) == "1.0"
     assert fortran_writer(ad_operation_trans.differentiate_unary(minus)) == "-1.0"
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(sqrt))
-        == "1.0 / (2 * SQRT(var))"
-    )
-    assert fortran_writer(ad_operation_trans.differentiate_unary(exp)) == "EXP(var)"
-    assert fortran_writer(ad_operation_trans.differentiate_unary(log)) == "1.0 / var"
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(log10))
-        == "1.0 / (var * LOG(10.0))"
-    )
-    assert fortran_writer(ad_operation_trans.differentiate_unary(cos)) == "-SIN(var)"
-    assert fortran_writer(ad_operation_trans.differentiate_unary(sin)) == "COS(var)"
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(tan))
-        == "1.0 + TAN(var) ** 2"
-    )
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(acos))
-        == "-1.0 / SQRT(1.0 - var ** 2)"
-    )
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(asin))
-        == "1.0 / SQRT(1.0 - var ** 2)"
-    )
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(atan))
-        == "1.0 / (1.0 + var ** 2)"
-    )
-    assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(abs_val))
-        == "var / ABS(var)"
-    )
 
-    ceil = UnaryOperation.create(UnaryOperation.Operator.CEIL, ref)
+    not_ = UnaryOperation.create(UnaryOperation.Operator.NOT, ref)
     with pytest.raises(NotImplementedError) as info:
-        ad_operation_trans.differentiate_unary(ceil)
+        ad_operation_trans.differentiate_unary(not_)
     assert (
         "Differentiating UnaryOperation with "
-        "operator 'Operator.CEIL' is not implemented yet." in str(info.value)
+        "operator 'Operator.NOT' is not implemented yet." in str(info.value)
     )
 
 
@@ -259,23 +217,16 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
     power_literal = BinaryOperation.create(
         BinaryOperation.Operator.POW, ref1.copy(), Literal("1.35", REAL_TYPE)
     )
-    dot_product = BinaryOperation.create(BinaryOperation.Operator.DOT_PRODUCT,
-                                         vec1.copy(), vec2.copy())
-    matmul_mat_vec = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
-                                            mat1.copy(), vec1.copy())
-    matmul_mat_mat = BinaryOperation.create(BinaryOperation.Operator.MATMUL,
-                                            mat1.copy(), mat2.copy())
 
     # TODO: implement and test MATMUL
-    ops = (add, sub, mul, div, power, power_literal, dot_product)
+    ops = (add, sub, mul, div, power, power_literal)
     expected = (
         ("1.0", "1.0"),
         ("1.0", "-1.0"),
         ("var2", "var1"),
         ("1.0 / var2", "-var1 / var2 ** 2"),
         ("var2 * var1 ** (var2 - 1)", "var1 ** var2 * LOG(var1)"),
-        ("1.35 * var1 ** 0.35", "var1 ** 1.35 * LOG(var1)"),
-        ("vec2", "vec1")
+        ("1.35 * var1 ** 0.35", "var1 ** 1.35 * LOG(var1)")
     )
 
     for operation, exp in zip(ops, expected):
@@ -291,6 +242,109 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
         "operator 'Operator.EQ' is not implemented yet." in str(info.value)
     )
 
+def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
+    _, _, ad_operation_trans = initialize_transformations()
+
+    with pytest.raises(TypeError) as info:
+        ad_operation_trans.differentiate_intrinsic(None)
+    assert (
+        "Argument in differentiate_intrinsic should be a "
+        "PSyIR IntrinsicCall but found 'NoneType'." in str(info.value)
+    )
+
+    ref = Reference(DataSymbol("var", REAL_TYPE))
+    sqrt = IntrinsicCall.create(IntrinsicCall.Intrinsic.SQRT, [ref.copy()])
+    exp = IntrinsicCall.create(IntrinsicCall.Intrinsic.EXP, [ref.copy()])
+    log = IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG, [ref.copy()])
+    log10 = IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG10, [ref.copy()])
+    cos = IntrinsicCall.create(IntrinsicCall.Intrinsic.COS, [ref.copy()])
+    sin = IntrinsicCall.create(IntrinsicCall.Intrinsic.SIN, [ref.copy()])
+    tan = IntrinsicCall.create(IntrinsicCall.Intrinsic.TAN, [ref.copy()])
+    acos = IntrinsicCall.create(IntrinsicCall.Intrinsic.ACOS, [ref.copy()])
+    asin = IntrinsicCall.create(IntrinsicCall.Intrinsic.ASIN, [ref.copy()])
+    atan = IntrinsicCall.create(IntrinsicCall.Intrinsic.ATAN, [ref.copy()])
+    abs_val = IntrinsicCall.create(IntrinsicCall.Intrinsic.ABS, [ref.copy()])
+
+    # NOTE: the 'call ' and '\n' parts in the compared strings aren't actually
+    # printed by the backend when the nodes have a parent
+
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(sqrt)[0])
+        == "1.0 / (2 * SQRT(var))"
+    )
+    assert fortran_writer(ad_operation_trans.differentiate_intrinsic(exp)[0]) == "call EXP(var)\n"
+    assert fortran_writer(ad_operation_trans.differentiate_intrinsic(log)[0]) == "1.0 / var"
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(log10)[0])
+        == "1.0 / (var * LOG(10.0))"
+    )
+    assert fortran_writer(ad_operation_trans.differentiate_intrinsic(cos)[0]) == "-SIN(var)"
+    assert fortran_writer(ad_operation_trans.differentiate_intrinsic(sin)[0]) == "call COS(var)\n"
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(tan)[0])
+        == "1.0 + TAN(var) ** 2"
+    )
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(acos)[0])
+        == "-1.0 / SQRT(1.0 - var ** 2)"
+    )
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(asin)[0])
+        == "1.0 / SQRT(1.0 - var ** 2)"
+    )
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(atan)[0])
+        == "1.0 / (1.0 + var ** 2)"
+    )
+    assert (
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(abs_val)[0])
+        == "var / ABS(var)"
+    )
+
+    ceil = IntrinsicCall.create(IntrinsicCall.Intrinsic.CEILING, [ref])
+    with pytest.raises(NotImplementedError) as info:
+        ad_operation_trans.differentiate_intrinsic(ceil)[0]
+    assert (
+        "Differentiating unary IntrinsicCall with "
+        "intrinsic 'CEILING' is not implemented yet." in str(info.value)
+    )
+
+    ref1 = Reference(DataSymbol("var1", REAL_TYPE))
+    ref2 = Reference(DataSymbol("var2", REAL_TYPE))
+    vec1_sym = DataSymbol("vec1", ArrayType(REAL_TYPE, [3]))
+    vec1 = Reference(vec1_sym)
+    vec2_sym = DataSymbol("vec2", ArrayType(REAL_TYPE, [3]))
+    vec2 = Reference(vec2_sym)
+    mat1_sym = DataSymbol("mat1", ArrayType(REAL_TYPE, [3, 3]))
+    mat1 = Reference(mat1_sym)
+    mat2_sym = DataSymbol("mat2", ArrayType(REAL_TYPE, [3, 3]))
+    mat2 = Reference(mat2_sym)
+
+    dot_product = IntrinsicCall.create(IntrinsicCall.Intrinsic.DOT_PRODUCT,
+                                       [vec1.copy(), vec2.copy()])
+    matmul_mat_vec = IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                          [mat1.copy(), vec1.copy()])
+    matmul_mat_mat = IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                          [mat1.copy(), mat2.copy()])
+
+    # TODO: implement and test MATMUL
+    ops = (dot_product, )
+    expected = (
+        ("vec2", "vec1"),
+    )
+
+    for operation, exp in zip(ops, expected):
+        partials = ad_operation_trans.differentiate_intrinsic(operation)
+        assert len(partials) == 2
+        compare(partials, exp, fortran_writer)
+
+    eq = IntrinsicCall.create(IntrinsicCall.Intrinsic.DPROD, [ref1, ref2])
+    with pytest.raises(NotImplementedError) as info:
+        ad_operation_trans.differentiate_intrinsic(eq)
+    assert (
+        "Differentiating binary IntrinsicCall with "
+        "intrinsic 'DPROD' is not implemented yet." in str(info.value)
+    )
 
 def test_ad_operation_trans_apply(fortran_writer):
     def initialize():

@@ -40,7 +40,8 @@ automatic differentiation "taping" (storing and recovering) of different values.
 from abc import ABCMeta
 
 from psyclone.psyir.nodes import (ArrayReference, Literal, Node, Range,
-                                  BinaryOperation, Reference, DataNode)
+                                  BinaryOperation, Reference, DataNode, 
+                                  IntrinsicCall)
 from psyclone.psyir.symbols import (DataSymbol, INTEGER_TYPE, ScalarType,
                                     ArrayType)
 
@@ -495,10 +496,10 @@ class ADTape(object, metaclass=ABCMeta):
                 dimensions.append(self._substract_datanodes(plus, minus))
             else:
                 # For others, compute SIZE(array, dim)
-                size_operation = BinaryOperation.create(
-                                    BinaryOperation.Operator.SIZE,
-                                    array.copy(),
-                                    Literal(str(dim), INTEGER_TYPE))
+                size_operation = IntrinsicCall.create(
+                                    IntrinsicCall.Intrinsic.SIZE,
+                                    [array.copy(),
+                                     Literal(str(dim), INTEGER_TYPE)])
                 dimensions.append(size_operation)
 
         # from psyclone.psyir.backend.fortran import FortranWriter
@@ -564,8 +565,8 @@ class ADTape(object, metaclass=ABCMeta):
         else:
             self.recorded_nodes.append(node)
             self.reshape()
-            tape_range = Range.create(self.first_index_of_last_element,
-                                      self.length)
+            tape_range = Range.create(self.first_index_of_last_element.copy(),
+                                      self.length.copy())
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref

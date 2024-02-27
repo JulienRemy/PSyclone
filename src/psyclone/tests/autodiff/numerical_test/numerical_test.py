@@ -38,6 +38,7 @@ transformations by comparing to results obtained using Tapenade.
 NOTE: this is a work in progress."""
 
 from itertools import product
+import sys
 import numpy as np
 import pytest
 
@@ -77,13 +78,16 @@ def _file_dir():
     file_path = __file__
     return file_path[:file_path.rfind("/")]
 
-def _intrinsic_or_operation(op, *args):
+def _intrinsic_or_operation(op, arg0, arg1=None):
     if op in IntrinsicCall.Intrinsic:
-        return IntrinsicCall.create(op, args)
+        if arg1 is None:
+            return IntrinsicCall.create(op, [arg0])
+        else:
+            return IntrinsicCall.create(op, [arg0, arg1])
     if op in UnaryOperation.Operator:
-        return UnaryOperation.create(op, *args)
+        return UnaryOperation.create(op, arg0)
     if op in BinaryOperation.Operator:
-        return BinaryOperation.create(op, *args)
+        return BinaryOperation.create(op, arg0, arg1)
 
 @pytest.mark.parametrize("mode, iterative, vector, op",
                          product(MODES,

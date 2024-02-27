@@ -25,3 +25,6 @@ src/*.egg-info
 .idea
 .rtx.toml
 .venv
+build
+.gitignore
+src/psyclone/tests/autodiff/numerical_test/outputs

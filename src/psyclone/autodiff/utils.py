@@ -34,7 +34,7 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This file contains various utility functions used to create common
-Operation and Assignment nodes.
+Operation, IntrinsicCall and Assignment nodes.
 """
 
 
@@ -46,8 +46,8 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Routine,
+    IntrinsicCall
 )
-from psyclone.psyir.nodes.intrinsic_call import IntrinsicCall
 from psyclone.psyir.symbols import (
     DataSymbol,
     ScalarType,
@@ -322,7 +322,7 @@ def minus(operand):
 
     val = datanode(operand)
 
-    return IntrinsicCall.create(IntrinsicCall.Intrinsic.MINUS, [val])
+    return UnaryOperation.create(UnaryOperation.Operator.MINUS, val)
 
 
 def div(lhs, rhs):
@@ -558,7 +558,7 @@ def add(lhs, rhs):
 
 
 def log(operand):
-    """This function creates a UnaryOperation Node with operator LOG \
+    """This function creates an IntrinsicCall Node with operator LOG \
         corresponding to the natural logarithm of operand.
 
     :param operand: operand to be used in the operation.
@@ -568,8 +568,8 @@ def log(operand):
     :raises TypeError: if the the variable argument is not a DataNode or \
                        DataSymbol instance.
 
-    :return: a UnaryOperation Node `log(operand)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+    :return: an IntrinsicCall Node `log(operand)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
         raise TypeError(
@@ -583,7 +583,7 @@ def log(operand):
 
 
 def exp(operand):
-    """This function creates a UnaryOperation Node with operator EXP \
+    """This function creates an IntrinsicCall Node with operator EXP \
         corresponding to the exponential of operand.
 
     :param operand: operand to be used in the operation.
@@ -593,8 +593,8 @@ def exp(operand):
     :raises TypeError: if the the variable argument is not a DataNode or \
                        DataSymbol instance.
 
-    :return: a UnaryOperation Node `exp(operand)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+    :return: an IntrinsicCall Node `exp(operand)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
         raise TypeError(
@@ -608,7 +608,7 @@ def exp(operand):
 
 
 def cos(operand):
-    """This function creates a UnaryOperation Node with operator COS \
+    """This function creates an IntrinsicCall Node with operator COS \
         corresponding to the cosine of operand.
 
     :param operand: operand to be used in the operation.
@@ -618,8 +618,8 @@ def cos(operand):
     :raises TypeError: if the the variable argument is not a DataNode or \
                        DataSymbol instance.
 
-    :return: a UnaryOperation Node `cos(operand)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+    :return: an IntrinsicCall Node `cos(operand)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
         raise TypeError(
@@ -633,7 +633,7 @@ def cos(operand):
 
 
 def sin(operand):
-    """This function creates a UnaryOperation Node with operator SIN \
+    """This function creates an IntrinsicCall Node with operator SIN \
         corresponding to the sine of operand.
 
     :param operand: operand to be used in the operation.
@@ -643,8 +643,8 @@ def sin(operand):
     :raises TypeError: if the the variable argument is not a DataNode or \
                        DataSymbol instance.
 
-    :return: a UnaryOperation Node `sin(operand)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+    :return: an IntrinsicCall Node `sin(operand)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
         raise TypeError(
@@ -658,7 +658,7 @@ def sin(operand):
 
 
 def sqrt(operand):
-    """This function creates a UnaryOperation Node with operator SQRT \
+    """This function creates an IntrinsicCall Node with operator SQRT \
         corresponding to the square root of operand.
 
     :param operand: operand to be used in the operation.
@@ -668,8 +668,8 @@ def sqrt(operand):
     :raises TypeError: if the the variable argument is not a DataNode or \
                        DataSymbol instance.
 
-    :return: a UnaryOperation Node `sqrt(operand)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+    :return: an IntrinsicCall Node `sqrt(operand)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(operand, (DataNode, DataSymbol)):
         raise TypeError(
@@ -683,7 +683,7 @@ def sqrt(operand):
 
 
 def sign(lhs, rhs):
-    """This function creates a BinaryOperation Node with operator SIGN \
+    """This function creates an IntrinsicCall Node with operator SIGN \
         corresponding to `|lhs| * sign(rhs)`.
 
     :param lhs: variable giving the absolute value of the result.
@@ -698,8 +698,8 @@ def sign(lhs, rhs):
     :raises TypeError: if rhs argument is not an instance of 'DataNode' \
                        nor 'DataSymbol'.
 
-    :return: addition BinaryOperation `SIGN(lhs, rhs)`.
-    :rtype: :py:class:`psyclone.psyir.nodes.BinaryOperation`
+    :return: an IntrinsicCall `SIGN(lhs, rhs)`.
+    :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
     """
     if not isinstance(lhs, (DataNode, DataSymbol)):
         raise TypeError(

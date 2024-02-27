@@ -630,7 +630,7 @@ class IntrinsicCall(Call):
             ArgDesc(2, 2, Reference), {})
         RESHAPE = IAttr(
             'RESHAPE', True, False, False,
-            ArgDesc(2, 2, Reference), {"pad": DataNode, "order": DataNode})
+            ArgDesc(2, 2, DataNode), {"pad": DataNode, "order": DataNode})
         RRSPACING = IAttr(
             'RRSPACING', True, True, False,
             ArgDesc(1, 1, Reference), {})
@@ -844,7 +844,7 @@ class IntrinsicCall(Call):
             scalar_type = INTEGER_TYPE
 
         # {INTEGER, REAL} => default REAL
-        elif self.operator is IntrinsicCall.Intrinsic.REAL:
+        elif self.intrinsic is IntrinsicCall.Intrinsic.REAL:
             scalar_type = REAL_TYPE
 
         else:
@@ -857,7 +857,7 @@ class IntrinsicCall(Call):
         # TRANSPOSE : type_kind_ixj => type_kind_jxi
         shape = self.children[0].datatype.shape.copy()
 
-        if self.operator is IntrinsicCall.Intrinsic.TRANSPOSE:
+        if self.intrinsic is IntrinsicCall.Intrinsic.TRANSPOSE:
             if len(shape) != 2:
                 raise TypeError(f"Only matrices can be transposed but found "
                                 f"an array with shape attribute of length "

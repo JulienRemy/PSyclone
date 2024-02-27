@@ -65,8 +65,8 @@ from psyclone.autodiff import (
 
 
 class ADForwardOperationTrans(ADOperationTrans):
-    """A class for automatic differentation transformations of Operation nodes \
-    using forward-mode.
+    """A class for automatic differentation transformations of Operation or \
+    IntrinsicCall nodes using forward-mode.
     Requires an ADForwardRoutineTrans instance as context, where the \
     derivative symbols can be found.
     This applies the chain rule to all operands and returns the derivative.
@@ -78,7 +78,8 @@ class ADForwardOperationTrans(ADOperationTrans):
         Operation nodes, `apply` is used recursively.
 
         :param operation: operation Node to be transformed.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -97,10 +98,10 @@ class ADForwardOperationTrans(ADOperationTrans):
         """Compute the derivative of the operation argument.
 
         :param operation: operation Node to be differentiated.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: :Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
 
         :raises TypeError: if operation is of the wrong type.
-        :raises NotImplementedError: if operation is an NaryOperation instance.
 
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
@@ -116,6 +117,9 @@ class ADForwardOperationTrans(ADOperationTrans):
         if isinstance(operation, BinaryOperation):
             return self.differentiate_binary(operation)
 
+        if isinstance(operation, IntrinsicCall):
+            return self.differentiate_intrinsic(operation)
+
     def differentiate_unary(self, operation):
         """Compute the derivative of unary operation.
 
@@ -129,7 +133,8 @@ class ADForwardOperationTrans(ADOperationTrans):
         :return: derivative.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
                       :py:class:`psyclone.psyir.nodes.Reference`,
-                      :py:class:`psyclone.psyir.nodes.Operation`]
+                      :py:class:`psyclone.psyir.nodes.Operation`,
+                      :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
         super().differentiate_unary(operation)
 
@@ -146,52 +151,15 @@ class ADForwardOperationTrans(ADOperationTrans):
             # operand_d = Reference(operand_d_sym)
             operand_d = self.routine_trans.reference_to_differential_of(operand)
 
-        if isinstance(operand, Operation):
+        if isinstance(operand, (Operation, IntrinsicCall)):
             operand_d = self.apply(operand)
 
         if operator == UnaryOperation.Operator.PLUS:
             return operand_d
         if operator == UnaryOperation.Operator.MINUS:
             return minus(operand_d)
-        if operator == IntrinsicCall.Intrinsic.SQRT:
-            # TODO: x=0 should print something, raise an exception or something?
-            return div(operand_d, mul(Literal("2", INTEGER_TYPE), operation))
-        if operator == IntrinsicCall.Intrinsic.EXP:
-            return mul(operation, operand_d)
-        if operator == IntrinsicCall.Intrinsic.LOG:
-            return div(operand_d, operand)
-        if operator == IntrinsicCall.Intrinsic.LOG10:
-            return div(
-                operand_d, mul(operand, log(Literal("10.0", REAL_TYPE)))
-            )
-        if operator == IntrinsicCall.Intrinsic.COS:
-            return mul(minus(sin(operand)), operand_d)
-        if operator == IntrinsicCall.Intrinsic.SIN:
-            return mul(cos(operand), operand_d)
-        if operator == IntrinsicCall.Intrinsic.TAN:
-            return mul(add(one(REAL_TYPE), square(operation)), operand_d)
-            # return div(operand_d, square(cos(operand)))
-        if operator == IntrinsicCall.Intrinsic.ACOS:
-            return minus(
-                div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
-            )
-        if operator == IntrinsicCall.Intrinsic.ASIN:
-            return div(operand_d, sqrt(sub(one(REAL_TYPE), square(operand))))
-        if operator == IntrinsicCall.Intrinsic.ATAN:
-            return div(operand_d, add(one(REAL_TYPE), square(operand)))
-        if operator == IntrinsicCall.Intrinsic.ABS:
-            # This could also be implemented using an if block
-            return mul(div(operand, operation.copy()), operand_d)
-            # NOTE: version belowed caused large errors compared to Tapenade
-            # as operand * ... / abs(operand) != operand / abs(operand) * ...
-            # return div(mul(operand, operand_d), operation.copy())
 
-        # if operator == IntrinsicCall.Intrinsic.CEILING:
-        #    # 0             if sin(pi * operand) == 0
-        #    # undefined     otherwise...
-        #    could return 0 but that's error prone
-
-        _not_implemented = ["NOT"]#, "CEIL", "REAL", "INT", "NINT"]
+        _not_implemented = ["NOT"]
         raise NotImplementedError(
             f"Differentiating UnaryOperation with "
             f"operator '{operator}' is not implemented yet. "
@@ -229,7 +197,7 @@ class ADForwardOperationTrans(ADOperationTrans):
                 operand_d \
                     = self.routine_trans.reference_to_differential_of(operand)
                 operands_d.append(operand_d)
-            else:  # Operation
+            else:  # Operation or IntrinsicCall
                 operands_d.append(self.apply(operand))
 
         lhs, rhs = operands
@@ -254,72 +222,12 @@ class ADForwardOperationTrans(ADOperationTrans):
                 mul(lhs_d, mul(rhs, power(lhs, exponent))),
                 mul(rhs_d, mul(operation, log(lhs))),
             )
-        if operator == IntrinsicCall.Intrinsic.DOT_PRODUCT:
-            return IntrinsicCall.create(IntrinsicCall.Intrinsic.SUM,
-                                        [add(mul(rhs, lhs_d), mul(lhs, rhs_d))])
-        if operator == IntrinsicCall.Intrinsic.MATMUL:
-            return add(IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
-                                            [lhs_d, rhs]),
-                       IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
-                                            [lhs, rhs_d]))
-
-            # TODO: should POW, SQRT, etc. take into account non-derivability ?
-            # like Tapenade does?
-
-            # IF (lhs .LE. 0.0)
-            #    IF (rhs .EQ. 0.0 .OR. rhs .NE. INT(rhs))) THEN
-            #        assigned_var_d = 0.D0
-            #    ELSE
-            #        assigned_var_d = rhs*lhs**(rhs-1)*lhs_d
-            #    ENDIF
-            # ELSE
-            #    assigned_var_d = rhs*lhs**(rhs-1)*lhs_d + lhs**rhs*LOG(lhs)*rhs_d
-            # END IF
-            #
-            # lhs_le_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.LE,
-            #                                  [lhs.copy(),
-            #                                  zero(REAL_TYPE)])
-            # rhs_eq_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.EQ,
-            #                                  [rhs.copy(),
-            #                                  zero(REAL_TYPE)])
-            # int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.INT,
-            #                                [rhs.copy()])
-            # rhs_ne_int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.NE,
-            #                                        [rhs.copy(),
-            #                                        int_rhs])
-            # condition = IntrinsicCall.create(IntrinsicCall.Intrinsic.OR,
-            #                                   [rhs_eq_0,
-            #                                   rhs_ne_int_rhs])
-            #
-            # dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
-            # dummy_d_zero = assign_zero(dummy_sym)
-            # dummy_d_1_rhs = mul(mul(rhs, power(lhs, exponent)), lhs_d)
-            # dummy_d_1 = assign(dummy_sym, dummy_d_1_rhs)
-            # if_block_1 = IfBlock.create(condition,
-            #                            [dummy_d_zero],
-            #                            [dummy_d_1])
-            #
-            # log_lhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG,
-            #                                lhs.copy())
-            # dummy_d_2 = assign(dummy_sym,
-            #                   add(dummy_d_1_rhs,
-            #                       mul(mul(operation,
-            #                               log_lhs),
-            #                           rhs_d)))
-            # if_block_2 = IfBlock.create(lhs_le_0,
-            #                            [if_block_1],
-            #                            [dummy_d_2])
-            # return if_block_2
 
         # TODO:
         # REM? undefined for some values of lhs/rhs
-        # MIN if block
-        # MAX if block
 
         _not_implemented = [
             "REM",
-            "MIN",
-            "MAX",
             "EQ",
             "NE",
             "GT",
@@ -328,13 +236,8 @@ class ADForwardOperationTrans(ADOperationTrans):
             "LE",
             "AND",
             "OR",
-            "SIGN",
-            "REAL",
-            "INT",
-            "CAST",
-            "SIZE",
-            "LBOUND",
-            "UBOUND",
+            "EQV", 
+            "NEQV"
         ]
         raise NotImplementedError(
             f"Differentiating BinaryOperation with "
@@ -343,8 +246,187 @@ class ADForwardOperationTrans(ADOperationTrans):
             f"{_not_implemented}."
         )
 
-    # TODO: implement these
-    # @abstractmethod
-    # def differentiate_nary_operation(self, operation):
-    # MAX
-    # MIN
+
+    def differentiate_intrinsic(self, intrinsic_call):
+        """Compute the derivative of an intrinsic call.
+
+        :param intrinsic_call: intrinsic call Node to be differentiated.
+        :type intrinsic_call: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+
+        :raises TypeError: if intrinsic is of the wrong type.
+        :raises NotImplementedError: if the intrinsic derivative hasn't been \
+                                     implemented yet.
+
+        :return: derivative.
+        :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
+                      :py:class:`psyclone.psyir.nodes.Reference`,
+                      :py:class:`psyclone.psyir.nodes.Operation`,
+                      :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
+        """
+        # pylint: disable=unbalanced-tuple-unpacking
+        # pylint: disable=too-many-return-statements, too-many-branches
+        super().differentiate_intrinsic(intrinsic_call)
+
+        intrinsic = intrinsic_call.intrinsic
+        arguments = [child.copy() for child in intrinsic_call.children]
+
+        # Unary intrinsics
+        if len(arguments) == 1:
+            argument = arguments[0]
+
+            if isinstance(argument, Literal):
+                return [zero()]
+
+            if isinstance(argument, Reference):
+                # argument_d_sym = self.routine_trans.\
+                #                        data_symbol_differential_map[
+                #     argument.symbol
+                # ]
+                # argument_d = Reference(argument_d_sym)
+                argument_d = self.routine_trans.\
+                                reference_to_differential_of(argument)
+
+            if isinstance(argument, (Operation, IntrinsicCall)):
+                argument_d = self.apply(argument)
+
+            if intrinsic == IntrinsicCall.Intrinsic.SQRT:
+                # TODO: x=0 should print something,
+                # raise an exception or something?
+                return div(argument_d,
+                           mul(Literal("2", INTEGER_TYPE), intrinsic_call))
+            if intrinsic == IntrinsicCall.Intrinsic.EXP:
+                return mul(intrinsic_call, argument_d)
+            if intrinsic == IntrinsicCall.Intrinsic.LOG:
+                return div(argument_d, argument)
+            if intrinsic == IntrinsicCall.Intrinsic.LOG10:
+                return div(
+                    argument_d, mul(argument, log(Literal("10.0", REAL_TYPE)))
+                )
+            if intrinsic == IntrinsicCall.Intrinsic.COS:
+                return mul(minus(sin(argument)), argument_d)
+            if intrinsic == IntrinsicCall.Intrinsic.SIN:
+                return mul(cos(argument), argument_d)
+            if intrinsic == IntrinsicCall.Intrinsic.TAN:
+                return mul(add(one(REAL_TYPE),
+                               square(intrinsic_call)),
+                               argument_d)
+                # return div(argument_d, square(cos(argument)))
+            if intrinsic == IntrinsicCall.Intrinsic.ACOS:
+                return minus(
+                    div(argument_d, sqrt(sub(one(REAL_TYPE),
+                                             square(argument))))
+                )
+            if intrinsic == IntrinsicCall.Intrinsic.ASIN:
+                return div(argument_d, sqrt(sub(one(REAL_TYPE),
+                                                square(argument))))
+            if intrinsic == IntrinsicCall.Intrinsic.ATAN:
+                return div(argument_d, add(one(REAL_TYPE), square(argument)))
+            if intrinsic == IntrinsicCall.Intrinsic.ABS:
+                # This could also be implemented using an if block
+                return mul(div(argument, intrinsic_call.copy()), argument_d)
+                # NOTE: version belowed caused large errors compared to Tapenade
+                # as argument * ... / abs(argument)
+                # != argument / abs(argument) * ...
+                # return div(mul(argument, argument_d), intrinsic_call.copy())
+
+            # if intrinsic == IntrinsicCall.Intrinsic.CEILING:
+            #    # 0             if sin(pi * argument) == 0
+            #    # undefined     otherwise...
+            #    could return 0 but that's error prone
+
+            raise NotImplementedError(
+            f"Differentiating unary IntrinsicCall with "
+            f"intrinsic '{intrinsic.name}' is not implemented yet."
+        )
+
+        # Binary intrinsics
+        if len(arguments) == 2:
+
+            super().differentiate_intrinsic(intrinsic_call)
+
+            arguments_d = []
+            for argument in arguments:
+                if isinstance(argument, Literal):
+                    arguments_d.append(zero())
+                elif isinstance(argument, Reference):
+                    argument_d = self.routine_trans.\
+                                    reference_to_differential_of(argument)
+                    arguments_d.append(argument_d)
+                else:  # Operation or IntrinsicCall
+                    arguments_d.append(self.apply(argument))
+
+            lhs, rhs = arguments
+            lhs_d, rhs_d = arguments_d
+
+            if intrinsic == IntrinsicCall.Intrinsic.DOT_PRODUCT:
+                return IntrinsicCall.create(IntrinsicCall.Intrinsic.SUM,
+                                            [add(mul(rhs, lhs_d),
+                                                 mul(lhs, rhs_d))])
+            if intrinsic == IntrinsicCall.Intrinsic.MATMUL:
+                return add(IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                                [lhs_d, rhs]),
+                        IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
+                                                [lhs, rhs_d]))
+
+                # TODO: should POW, SQRT, etc. take into account non-derivability ?
+                # like Tapenade does?
+
+                # IF (lhs .LE. 0.0)
+                #    IF (rhs .EQ. 0.0 .OR. rhs .NE. INT(rhs))) THEN
+                #        assigned_var_d = 0.D0
+                #    ELSE
+                #        assigned_var_d = rhs*lhs**(rhs-1)*lhs_d
+                #    ENDIF
+                # ELSE
+                #    assigned_var_d = rhs*lhs**(rhs-1)*lhs_d + lhs**rhs*LOG(lhs)*rhs_d
+                # END IF
+                #
+                # lhs_le_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.LE,
+                #                                  [lhs.copy(),
+                #                                  zero(REAL_TYPE)])
+                # rhs_eq_0 = IntrinsicCall.create(IntrinsicCall.Intrinsic.EQ,
+                #                                  [rhs.copy(),
+                #                                  zero(REAL_TYPE)])
+                # int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.INT,
+                #                                [rhs.copy()])
+                # rhs_ne_int_rhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.NE,
+                #                                        [rhs.copy(),
+                #                                        int_rhs])
+                # condition = IntrinsicCall.create(IntrinsicCall.Intrinsic.OR,
+                #                                   [rhs_eq_0,
+                #                                   rhs_ne_int_rhs])
+                #
+                # dummy_sym = DataSymbol("DUMMY___", REAL_TYPE)
+                # dummy_d_zero = assign_zero(dummy_sym)
+                # dummy_d_1_rhs = mul(mul(rhs, power(lhs, exponent)), lhs_d)
+                # dummy_d_1 = assign(dummy_sym, dummy_d_1_rhs)
+                # if_block_1 = IfBlock.create(condition,
+                #                            [dummy_d_zero],
+                #                            [dummy_d_1])
+                #
+                # log_lhs = IntrinsicCall.create(IntrinsicCall.Intrinsic.LOG,
+                #                                lhs.copy())
+                # dummy_d_2 = assign(dummy_sym,
+                #                   add(dummy_d_1_rhs,
+                #                       mul(mul(operation,
+                #                               log_lhs),
+                #                           rhs_d)))
+                # if_block_2 = IfBlock.create(lhs_le_0,
+                #                            [if_block_1],
+                #                            [dummy_d_2])
+                # return if_block_2
+
+            # TODO:
+            # MIN if block
+            # MAX if block
+
+            raise NotImplementedError(
+            f"Differentiating binary IntrinsicCall with "
+            f"intrinsic '{intrinsic.name}' is not implemented yet."
+            )
+
+        raise NotImplementedError(
+        f"Differentiating IntrinsicCall with "
+        f"intrinsic '{intrinsic.name}' is not implemented yet. "
+        f"No intrinsics or arity larger than 2 have been implemented."
+        )

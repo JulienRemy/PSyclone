@@ -34,7 +34,7 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This module provides an abstract Transformation for automatic differentiation
-of PSyIR Operation nodes.
+of PSyIR Operation and IntrinsicCall nodes.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -43,6 +43,7 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Operation,
+    IntrinsicCall
 )
 from psyclone.psyir.transformations import TransformationError
 
@@ -51,14 +52,15 @@ from psyclone.autodiff.transformations import ADElementTrans
 
 class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
     """An abstract class for automatic differentation transformations of \
-    Operation nodes.
+    Operation and IntrinsicCall nodes.
     """
 
     def validate(self, operation, options=None):
         """Validates the arguments of the `apply` method.
 
-        :param operation: operation Node to be transformed.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :param operation: operation or intrinsic Node to be transformed.
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -69,10 +71,11 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
 
         super().validate(operation, options)
 
-        if not isinstance(operation, Operation):
+        if not isinstance(operation, (Operation, IntrinsicCall)):
             raise TransformationError(
                 f"'operation' argument should be a "
-                f"PSyIR 'Operation' but found '{type(operation).__name__}'."
+                f"PSyIR 'Operation' or 'IntrinsicCall' but found "
+                f"'{type(operation).__name__}'."
             )
 
     @abstractmethod
@@ -80,7 +83,8 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
         """Applies the transformation.
 
         :param operation: operation Node to be transformed.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -90,17 +94,19 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
 
     @abstractmethod
     def differentiate(self, operation):
-        """Compute the derivative(s) of the operation argument.
+        """Compute the derivative(s) of the 'operation' argument.
 
         :param operation: operation Node to be differentiated.
-        :type operation: :py:class:`psyclone.psyir.nodes.Operation`
+        :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
+                               :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
 
         :raises TypeError: if operation is of the wrong type.
         """
-        if not isinstance(operation, Operation):
+        if not isinstance(operation, (Operation, IntrinsicCall)):
             raise TypeError(
                 f"Argument in differentiate should be a "
-                f"PSyIR 'Operation' but found '{type(operation).__name__}'."
+                f"PSyIR 'Operation' or 'IntrinsicCall' but found "
+                f"'{type(operation).__name__}'."
             )
 
     @abstractmethod
@@ -133,7 +139,17 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
                 f"PSyIR BinaryOperation but found '{type(operation).__name__}'."
             )
 
-    # TODO: implement these
-    # @abstractmethod
-    # def differentiate_nary_operation(self, operation):
-    #    pass
+    @abstractmethod
+    def differentiate_intrinsic(self, intrinsic_call):
+        """Compute the derivative(s) of the operation argument.
+
+        :param intrinsic_call: intrinsic call Node to be differentiated.
+        :type intrinsic_call: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+
+        :raises TypeError: if intrinsic_call is of the wrong type.
+        """
+        if not isinstance(intrinsic_call, IntrinsicCall):
+            raise TypeError(
+                f"Argument in differentiate_intrinsic should be a "
+                f"PSyIR IntrinsicCall but found '{type(intrinsic_call).__name__}'."
+            )

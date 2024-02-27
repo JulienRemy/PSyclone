@@ -57,7 +57,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
     def apply(self, assignment, options=None):
         """Applies the transformation, generating the recording and returning \
         motions associated to this Assignment.
-        If the RHS is an Operation node, `apply` applies an \
+        If the RHS is an Operation or IntrinsicCall node, `apply` applies an \
         `ADReverseOperationTrans` to it.
 
         The `recording` motion is a copy of the Assignment.
@@ -68,7 +68,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         - if it is also the LHS, it does nothing.
         - otherwise it increments the RHS adjoint by the LHS one, \
             then sets the LHS adjoint to 0.
-        If the RHS is an Operation node, this applies an \
+        If the RHS is an Operation or IntrinsicCall node, this applies an \
             `ADReverseOperationTrans` to it, then using its results:
         - it increments the adjoints of all Reference nodes on the RHS, \
             *except for the LHS one if the assignment is iterative*,
@@ -123,8 +123,8 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
 
             returning.append(lhs_adj_zero)
 
-        elif isinstance(rhs, (Reference, Operation)):
-            # RHS is a Reference/Operation:
+        elif isinstance(rhs, (Reference, Operation, IntrinsicCall)):
+            # RHS is a Reference, Operation or IntrinsicCall:
             #   - not iterative:
             #       - LHS is restored from value_tape if needed
             #           (in the ADReverseScheduleTrans)
@@ -168,7 +168,7 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                     if verbose:
                         verbose_comment += ", this is self-assignment"
 
-            else:  # isinstance(rhs, Operation)
+            else:  # isinstance(rhs, (Operation, IntrinsicCall))
                 # Apply the ADElementTransOperation to all children of the
                 # operation with parent_adj being the LHS adjoint
 

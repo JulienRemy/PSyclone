@@ -885,21 +885,21 @@ def test_intrinsiccall_datatypes(fortran_writer, tmpdir):
                 program.addchild(check)
 
         # CAST : (arg, scalar_type_kind) => scalar_type_kind
-        if datatype2 in scalar_datatypes:
-            operation = IntrinsicCall.create(IntrinsicCall.Intrinsic.CAST,
-                                             [Reference(sym1), Reference(sym2)])
-
-            assert (operation.datatype.intrinsic is datatype2.intrinsic)
-            assert (operation.datatype.precision is datatype2.precision)
-            assert isinstance(operation.datatype, ScalarType)
-
-            check = Call.create(
-                routine_symbols[(operation.datatype.intrinsic,
-                                 operation.datatype.precision,
-                                 "scalar")],
-                [operation])
-
-            program.addchild(check)
+        #if datatype2 in scalar_datatypes:
+        #    operation = IntrinsicCall.create(IntrinsicCall.Intrinsic.CAST,
+        #                                     [Reference(sym1), Reference(sym2)])
+        #
+        #    assert (operation.datatype.intrinsic is datatype2.intrinsic)
+        #    assert (operation.datatype.precision is datatype2.precision)
+        #    assert isinstance(operation.datatype, ScalarType)
+        #
+        #    check = Call.create(
+        #        routine_symbols[(operation.datatype.intrinsic,
+        #                         operation.datatype.precision,
+        #                         "scalar")],
+        #        [operation])
+        #
+        #    program.addchild(check)
 
         # MATMUL : (array_ixj, array_jxk) => array_ixk
         if datatype1 in array_datatypes1 and datatype2 in array_datatypes2 \

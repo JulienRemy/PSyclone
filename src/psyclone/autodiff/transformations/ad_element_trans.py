@@ -33,7 +33,7 @@
 # -----------------------------------------------------------------------------
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
-"""This module provides an abstract Transformation for reverse-mode automatic 
+"""This module provides an abstract Transformation for automatic 
 differentiation of some PSyIR nodes. 
 This is the parent class of `ADOperationTrans`, `ADAssignmentTrans` and 
 `ADCallTrans`.
@@ -42,7 +42,6 @@ This is the parent class of `ADOperationTrans`, `ADAssignmentTrans` and
 from abc import ABCMeta
 
 from psyclone.autodiff.transformations import ADTrans
-
 
 class ADElementTrans(ADTrans, metaclass=ABCMeta):
     """An abstract class for automatic differentation transformations.
