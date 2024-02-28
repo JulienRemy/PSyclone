@@ -48,7 +48,10 @@ from psyclone.psyir.nodes.literal import Literal
 from psyclone.psyir.nodes.reference import Reference
 from psyclone.psyir.symbols import IntrinsicSymbol
 
-from psyclone.psyir.symbols.datatypes import INTEGER_TYPE, ScalarType, ArrayType, REAL_TYPE
+from psyclone.psyir.symbols.datatypes import (INTEGER_TYPE, INTEGER4_TYPE,
+                                              INTEGER8_TYPE, ScalarType,
+                                              ArrayType, REAL_TYPE,
+                                              REAL4_TYPE, REAL8_TYPE)
 
 
 # pylint: disable=too-many-branches
@@ -243,7 +246,7 @@ class IntrinsicCall(Call):
             ArgDesc(2, 2, DataNode), {})
         CEILING = IAttr(
             'CEILING', True, True, False,
-            ArgDesc(1, 1, DataNode), {"kind": DataNode})
+            ArgDesc(1, 2, DataNode), {"kind": DataNode})
         CHAR = IAttr(
             'CHAR', True, True, False,
             ArgDesc(1, 1, DataNode), {"kind": DataNode})
@@ -363,7 +366,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, DataNode), {})
         FLOOR = IAttr(
             'FLOOR', True, True, False,
-            ArgDesc(1, 1, DataNode), {"kind": DataNode})
+            ArgDesc(1, 2, DataNode), {"kind": DataNode})
         FRACTION = IAttr(
             'FRACTION', True, True, False,
             ArgDesc(1, 1, DataNode), {})
@@ -432,7 +435,7 @@ class IntrinsicCall(Call):
             ArgDesc(2, 2, (DataNode)), {"back": DataNode, "kind": DataNode})
         INT = IAttr(
             'INT', True, True, False,
-            ArgDesc(1, 1, (DataNode)), {"kind": DataNode})
+            ArgDesc(1, 2, (DataNode)), {"kind": DataNode})
         IOR = IAttr(
             'IOR', True, True, False,
             ArgDesc(2, 2, (DataNode)), {})
@@ -459,7 +462,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, (DataNode)), {})
         LBOUND = IAttr(
             'LBOUND', True, False, True,
-            ArgDesc(1, 1, (DataNode)), {"dim": DataNode, "kind": DataNode})
+            ArgDesc(1, 3, (DataNode)), {"dim": DataNode, "kind": DataNode})
         LCOBOUND = IAttr(
             'LCOBOUND', True, False, True,
             ArgDesc(1, 1, (DataNode)), {"dim": DataNode, "kind": DataNode})
@@ -561,7 +564,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, DataNode), {})
         NINT = IAttr(
             'NINT', True, True, False,
-            ArgDesc(1, 1, DataNode), {"kind": DataNode})
+            ArgDesc(1, 2, DataNode), {"kind": DataNode})
         NORM2 = IAttr(
             'NORM2', True, False, False,
             ArgDesc(1, 2, DataNode), {})
@@ -620,7 +623,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, Reference), {})
         REAL = IAttr(
             'REAL', True, True, False,
-            ArgDesc(1, 1, Reference), {"kind": DataNode})
+            ArgDesc(1, 2, DataNode), {"kind": DataNode})
         REDUCE = IAttr(
             'REDUCE', True, False, False,
             ArgDesc(2, 3, Reference),
@@ -679,7 +682,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, DataNode), {})
         SIZE = IAttr(
             'SIZE', True, False, True,
-            ArgDesc(1, 1, DataNode), {"dim": DataNode, "kind": DataNode})
+            ArgDesc(1, 3, DataNode), {"dim": DataNode, "kind": DataNode})
         SPACING = IAttr(
             'SPACING', True, True, False,
             ArgDesc(1, 1, DataNode), {})
@@ -732,7 +735,7 @@ class IntrinsicCall(Call):
             ArgDesc(1, 1, DataNode), {})
         UBOUND = IAttr(
             'UBOUND', True, False, True,
-            ArgDesc(1, 1, DataNode), {"dim": DataNode, "kind": DataNode})
+            ArgDesc(1, 3, DataNode), {"dim": DataNode, "kind": DataNode})
         UCOBOUND = IAttr(
             'UCOBOUND', True, False, True,
             ArgDesc(1, 1, DataNode), {"dim": DataNode, "kind": DataNode})
@@ -781,7 +784,8 @@ class IntrinsicCall(Call):
         # NOTE: this should be the type and kind of the first argument according
         # to https://gcc.gnu.org/onlinedocs/gfortran/MIN.html
         # but it's not.
-        if self.intrinsic in (IntrinsicCall.Intrinsic.MAX, IntrinsicCall.Intrinsic.MIN):
+        if self.intrinsic in (IntrinsicCall.Intrinsic.MAX,
+                              IntrinsicCall.Intrinsic.MIN):
             if (self.children[0].datatype.precision == 8) \
                 or (isinstance(self.children[0].datatype.precision, Literal) \
                     and (self.children[0].datatype.precision.value == "8")) \
@@ -841,11 +845,41 @@ class IntrinsicCall(Call):
                               IntrinsicCall.Intrinsic.FLOOR,
                               IntrinsicCall.Intrinsic.NINT,
                               IntrinsicCall.Intrinsic.INT):
-            scalar_type = INTEGER_TYPE
+            if (len(self.children) == 2
+                and isinstance(self.children[1], Literal)):
+                if self.children[1].value == "4":
+                    scalar_type = INTEGER4_TYPE
+                else:
+                    scalar_type = INTEGER8_TYPE
+            else:
+                scalar_type = INTEGER_TYPE
 
         # {INTEGER, REAL} => default REAL
         elif self.intrinsic is IntrinsicCall.Intrinsic.REAL:
-            scalar_type = REAL_TYPE
+            if (len(self.children) == 2
+                and isinstance(self.children[1], Literal)):
+                if self.children[1].value == "4":
+                    scalar_type = REAL4_TYPE
+                else:
+                    scalar_type = REAL8_TYPE
+            else:
+                scalar_type = REAL_TYPE
+
+        # SIZE, UBOUND, LBOUND => INT
+        elif self.intrinsic in (IntrinsicCall.Intrinsic.SIZE,
+                                IntrinsicCall.Intrinsic.UBOUND,
+                                IntrinsicCall.Intrinsic.LBOUND):
+            if (len(self.children) == 3
+                and isinstance(self.children[1], Literal)):
+                if self.children[1].value == "4":
+                    return INTEGER4_TYPE
+
+                return INTEGER8_TYPE
+
+            return INTEGER_TYPE
+
+        elif self.intrinsic is IntrinsicCall.Intrinsic.DOT_PRODUCT:
+            return REAL_TYPE
 
         else:
             scalar_type = ScalarType(self.children[0].datatype.intrinsic,
