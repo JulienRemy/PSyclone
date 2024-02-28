@@ -72,6 +72,15 @@ class ADReverseCallTrans(ADCallTrans):
         :rtype: :py:class:`psyclone.autodiff.tapes.ADValueTape`
         """
         return self.called_routine_trans.value_tape
+    
+    @property
+    def control_tape(self):
+        """Control tape used by the transformation of the called routine.
+
+        :return: control tape.
+        :rtype: :py:class:`psyclone.autodiff.tapes.ADControlTape`
+        """
+        return self.called_routine_trans.control_tape
 
     @property
     def reversal_schedule(self):
@@ -207,7 +216,7 @@ class ADReverseCallTrans(ADCallTrans):
             self.transform_called_routine(routine, options)
 
         # Generate the arguments to use in the calls to the reversing routine
-        # as well as the assignments to insert before/after the calls 
+        # as well as the assignments to insert before/after the calls
         # in the returning motion.
         # NOTE: tape is not included, as it it not used in reversing
         # the returning arguments are the same, plus the tape at the end
@@ -220,13 +229,13 @@ class ADReverseCallTrans(ADCallTrans):
         # Returning arguments, copy
         returning_args = reversing_args.copy()
 
-        # In any case the temp assignements go before the call in the 
+        # In any case the temp assignements go before the call in the
         # returning motion
         returning.extend(temp_assignments)
 
         # If this is SPLIT REVERSAL, call the recording routine when
         # recording the parent routine.
-        # This passes a slice of the parent value_tape as value_tape argument 
+        # This passes a slice of the parent value_tape as value_tape argument
         # of the called routine.
         if split:
             # Recording arguments are the same as in the original
@@ -239,7 +248,7 @@ class ADReverseCallTrans(ADCallTrans):
 
             # If the value_tape has null length, it's unused
             if len(self.value_tape.recorded_nodes) != 0:
-                # Extend the calling routine value tape by the called routine 
+                # Extend the calling routine value tape by the called routine
                 # one and get the corresponding slice of the first
                 value_tape_slice = (
                     self.routine_trans.value_tape.extend_and_slice(
@@ -247,10 +256,25 @@ class ADReverseCallTrans(ADCallTrans):
                     )
                 )
 
-                # Will be used as last argument of the recording and 
+                # Will be used as last argument of the recording and
                 # returning calls
                 recording_args.append(value_tape_slice)
                 returning_args.append(value_tape_slice.copy())
+
+            # If the control tape is None, it's unused
+            if self.control_tape is not None:
+                # Extend the calling routine control tape by the called routine
+                # one and get the corresponding slice of the first
+                control_tape_slice = (
+                    self.routine_trans.control_tape.extend_and_slice(
+                        self.control_tape
+                    )
+                )
+
+                # Will be used as last argument of the recording and
+                # returning calls
+                recording_args.append(control_tape_slice)
+                returning_args.append(control_tape_slice.copy())
 
             # Call to the recording routine
             recording_call = Call.create(self.recording_symbol, recording_args)
@@ -264,8 +288,8 @@ class ADReverseCallTrans(ADCallTrans):
         # so call the advancing routine (original call) while recording
         # and the reversing routine while returning
         else:
-            # NOTE : this is a Call using the actual RoutineSymbol of the 
-            # Routine rather than the original RoutineSymbol of the Call node 
+            # NOTE : this is a Call using the actual RoutineSymbol of the
+            # Routine rather than the original RoutineSymbol of the Call node
             # (not the same)
             advancing_call = Call.create(
                 self.routine_symbol,
@@ -276,7 +300,7 @@ class ADReverseCallTrans(ADCallTrans):
             reversing_call = Call.create(self.reversing_symbol, reversing_args)
             returning.append(reversing_call)
 
-        # In any case the adjoints assignments go after the call in the 
+        # In any case the adjoints assignments go after the call in the
         # returning motion
         returning.extend(adjoint_assignments)
 
@@ -530,7 +554,7 @@ class ADReverseCallTrans(ADCallTrans):
     # TODO: this should depend on activity analysis
     def transform_called_routine(self, routine, options=None):
         """Transforms the routine found in a Call, returning its recording, \
-        returning and reversing routines as well as its value_tape.
+        returning and reversing routines as well as its tapes.
         **Important**: for now it treats all arguments with intent other than \
         intent(out) as independent variables and all arguments with intent \
         other than intent(in) as dependent variables, with possible overlaps. \
@@ -543,11 +567,13 @@ class ADReverseCallTrans(ADCallTrans):
 
         :raises TypeError: if routine is of the wrong type.
 
-        :return: the three transformed routines symbols and the value_tape
-        :rtype: tuple[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
-                      :py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
-                      :py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
-                      :py:class:`psyclone.autodiff.ADValueTape`]
+        :return: the three transformed routines symbols, the value tape and \
+                 the control tape
+        :rtype: :py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+                :py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+                :py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+                :py:class:`psyclone.autodiff.ADValueTape`, \
+                :py:class:`psyclone.autodiff.ADControlTape`
         """
         super().transform_called_routine(routine, options)
 
@@ -584,15 +610,15 @@ class ADReverseCallTrans(ADCallTrans):
             dependent_args_names,
             independent_args_names,
             value_tape=None,
+            control_tape=None,
             options=options,
         )
 
-        # Get the value_tape
+        # Get the value and control tapes
         value_tape = self.called_routine_trans.value_tape
-        ## Add it to the container_trans map
-        # self.routine_trans.container_trans.add_value_tape(routine_symbol, value_tape)
+        control_tape = self.called_routine_trans.control_tape
 
         # Get the routines symbols
         transformed_symbols = self.called_routine_trans.transformed_symbols
 
-        return *transformed_symbols, value_tape
+        return *transformed_symbols, value_tape, control_tape

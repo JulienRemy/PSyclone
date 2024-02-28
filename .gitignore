@@ -28,3 +28,4 @@ src/*.egg-info
 build
 .gitignore
 src/psyclone/tests/autodiff/numerical_test/outputs
+src/psyclone/autodiff/tutorials/TESTING FORWARD IF BLOCK.ipynb

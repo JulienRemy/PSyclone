@@ -37,11 +37,12 @@
 differentiation of PSyIR Container nodes."""
 
 
+from types import NoneType
 from psyclone.psyir.nodes import Routine
 from psyclone.psyir.symbols import RoutineSymbol
 
 from psyclone.autodiff import ADReversalSchedule
-from psyclone.autodiff.tapes import ADValueTape
+from psyclone.autodiff.tapes import ADValueTape, ADControlTape
 from psyclone.autodiff.transformations import ADContainerTrans
 
 
@@ -56,9 +57,10 @@ class ADReverseContainerTrans(ADContainerTrans):
         # pylint: disable=use-dict-literal
         super().__init__()
 
-        # This stores {RoutineSymbol: ADValueTape}
-        # TODO: control flow and loop value_tapes
+        # These store {RoutineSymbol: ADTape}
+        # TODO: loop tape
         self._value_tape_map = dict()
+        self._control_tape_map = dict()
 
     def add_routine_trans(self, routine_trans):
         """Add a new routine transformations to the list.
@@ -161,6 +163,33 @@ class ADReverseContainerTrans(ADContainerTrans):
                 f"'{type(value_tape).__name__}'."
             )
         self._value_tape_map[routine_symbol] = value_tape
+
+    def add_control_tape(self, routine_symbol, control_tape):
+        """Add a new control tape to the map.
+
+        :param routine_symbol: routine symbol of the original.
+        :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
+        :param control_tape: control tape used by the transformed routines, or \
+                             None if none is used.
+        :type control_tape: Union[:py:class:`psyclone.autodiff.ADControlTape`,
+                                  NoneType]
+
+        :raises TypeError: if routine_symbol is of the wrong type.
+        :raises TypeError: if control_tape is of the wrong type.
+        """
+        if not isinstance(routine_symbol, RoutineSymbol):
+            raise TypeError(
+                f"'routine_symbol' argument should be of "
+                f"type 'RoutineSymbol' but found "
+                f"'{type(routine_symbol).__name__}'."
+            )
+        if not isinstance(control_tape, (ADControlTape, NoneType)):
+            raise TypeError(
+                f"'control_tape' argument should be of "
+                f"type 'ADValueTape' or 'NoneType' but found"
+                f"'{type(control_tape).__name__}'."
+            )
+        self._control_tape_map[routine_symbol] = control_tape
 
     @property
     def reversal_schedule(self):
@@ -325,6 +354,7 @@ class ADReverseContainerTrans(ADContainerTrans):
             dependent_vars,
             independent_vars,
             value_tape=None,
+            control_tape=None,
             options=options,
         )
         # This adds all necessary entries to self.container and to the maps

@@ -62,9 +62,9 @@ class ADTape(object, metaclass=ABCMeta):
     """
     # pylint: disable=useless-object-inheritance
 
+    # NOTE: these should be redefined by subclasses
     _node_types = (Node,)
-
-    _tape_prefix = "tape_"
+    _tape_prefix = ""
 
     def __init__(self, name, datatype):
         if not isinstance(name, str):
@@ -599,7 +599,7 @@ class ADTape(object, metaclass=ABCMeta):
 
         # Nodes of ArrayType correspond to a range
         else:
-            tape_range = Range.create(self.first_index_of_last_element, 
+            tape_range = Range.create(self.first_index_of_last_element,
                                       self.length)
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 

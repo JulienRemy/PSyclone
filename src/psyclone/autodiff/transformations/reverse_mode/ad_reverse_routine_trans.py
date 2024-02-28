@@ -36,6 +36,7 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Routine nodes."""
 
+from types import NoneType
 from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import (
     Call,
@@ -43,18 +44,20 @@ from psyclone.psyir.nodes import (
     Assignment,
     Literal,
     Operation,
-    IntrinsicCall
+    IntrinsicCall,
+    IfBlock
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
+    BOOLEAN_TYPE,
     DataSymbol,
     ScalarType,
     ArrayType,
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff import assign_zero, own_routine_symbol
-from psyclone.autodiff.tapes import ADValueTape
+from psyclone.autodiff import own_routine_symbol
+from psyclone.autodiff.tapes import ADTape, ADValueTape, ADControlTape
 from psyclone.autodiff.transformations import ADRoutineTrans
 
 
@@ -105,6 +108,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
     # TODO: correct datatype
     _default_value_tape_datatype = REAL_TYPE
+    _default_control_tape_datatype = BOOLEAN_TYPE
 
     def __init__(self, container_trans):
         super().__init__()
@@ -127,12 +131,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             ADReverseOperationTrans,
             ADReverseAssignmentTrans,
             ADReverseCallTrans,
+            ADReverseIfBlockTrans
         )
 
         # Initialize the sub transformations
         self.assignment_trans = ADReverseAssignmentTrans(self)
         self.operation_trans = ADReverseOperationTrans(self)
         self.call_trans = ADReverseCallTrans(self)
+        self.if_block_trans = ADReverseIfBlockTrans(self)
 
     @property
     def container_trans(self):
@@ -228,6 +234,30 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             )
 
         self._call_trans = call_trans
+
+    @property
+    def if_block_trans(self):
+        """Returns the ADReverseIfBlockTrans this instance uses.
+
+        :return: if block transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.\
+                           ADReverseIfBlockTrans`
+        """
+        return self._if_block_trans
+
+    @if_block_trans.setter
+    def if_block_trans(self, if_block_trans):
+        # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
+        from psyclone.autodiff.transformations import ADReverseIfBlockTrans
+
+        if not isinstance(if_block_trans, ADReverseIfBlockTrans):
+            raise TypeError(
+                f"Argument should be an 'ADReverseIfBlockTrans' "
+                f"but found '{type(if_block_trans)}.__name__'."
+            )
+
+        self._if_block_trans = if_block_trans
 
     @property
     def recording(self):
@@ -330,6 +360,26 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self._value_tape = value_tape
 
     @property
+    def control_tape(self):
+        """Returns the control tape used by the transformation, or None if \
+        it doesn't use one.
+
+        :return: control tape or None.
+        :rtype: Union[:py:class:`psyclone.autodiff.ADControlTape`, NoneType]
+        """
+        return self._control_tape
+
+    @control_tape.setter
+    def control_tape(self, control_tape):
+        if not isinstance(control_tape, (ADControlTape, NoneType)):
+            raise TypeError(
+                f"'control_tape' argument should be of "
+                f"type 'ADControlTape' or 'NoneType' but found "
+                f"'{type(control_tape).__name__}'."
+            )
+        self._control_tape = control_tape
+
+    @property
     def adjoint_symbols(self):
         """Returns all the adjoint symbols used in transforming the Routine,
             ie. adjoints of data symbols, operations and all temporary symbols.
@@ -349,6 +399,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         dependent_vars,
         independent_vars,
         value_tape=None,
+        control_tape=None,
         options=None,
     ):
         """Validates the arguments of the `apply` method.
@@ -363,11 +414,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :type independent_vars: `List[Str]`
         :param value_tape: value tape to use to transform the routine.
         :type value_tape: Optional[Union[NoneType, ADValueTape]]
+        :param control_tape: control tape to use to transform the routine.
+        :type control_tape: Optional[Union[NoneType, ADControlTape]]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if value_tape is of the wrong type.
+        :raises TypeError: if control_tape is of the wrong type.
         """
         # pylint: disable=arguments-renamed, too-many-arguments
 
@@ -376,8 +430,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if not isinstance(value_tape, (ADValueTape, type(None))):
             raise TypeError(
                 f"'value_tape' argument should be of "
-                f"type 'ADValueTape' or 'NoneType' but found an element of type"
-                f"'{type(value_tape).__name__}'."
+                f"type 'ADValueTape' or 'NoneType' but found an element of "
+                f"type '{type(value_tape).__name__}'."
+            )
+        if not isinstance(control_tape, (ADControlTape, type(None))):
+            raise TypeError(
+                f"'control_tape' argument should be of "
+                f"type 'ADControlTape' or 'NoneType' but found an element of "
+                f"type '{type(control_tape).__name__}'."
             )
 
     def apply(
@@ -386,6 +446,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         dependent_vars,
         independent_vars,
         value_tape=None,
+        control_tape=None,
         options=None,
     ):
         """Applies the transformation, generating the recording and returning \
@@ -417,6 +478,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                             Union[NoneType, 
                                   :py:class:`psyclone.autodiff.ADValueTape`]\
                           ]
+        :param control_tape: control tape to use to transform the routine.
+        :type control_tape: Optional[Union[NoneType, ADControlTape]]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -433,7 +496,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # pylint: disable=arguments-renamed, too-many-arguments
 
         self.validate(
-            routine, dependent_vars, independent_vars, value_tape, options
+            routine, dependent_vars, independent_vars, value_tape, control_tape,
+            options
         )
 
         # Transformation can only be applied once
@@ -447,7 +511,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # and taping)
         self.variables_info = VariablesAccessInfo(routine)
 
-        # Tape for the transformation
+        # Value tape for the transformation
         # - none provided, create one
         if value_tape is None:
             name = routine.name
@@ -457,6 +521,17 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # - use the provided one
         else:
             self.value_tape = value_tape
+
+        # Control tape for the transformation
+        # - none provided, create one iff there are if blocks in the routine
+        if (control_tape is None) and routine.walk(IfBlock) != []:
+            name = routine.name
+            self.control_tape = ADControlTape(
+                name, self._default_control_tape_datatype
+            )
+        # - use the provided one
+        else:
+            self.control_tape = control_tape
 
         # Add this transformation to the container_trans map
         # Do it before apply below or ordering is not from outer to
@@ -485,9 +560,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # routine/scope
         self.value_tape_non_written_values(options)
 
-        # add The value tape to the container_trans map
+        # Add the value tape to the container_trans map
         self.container_trans.add_value_tape(
             self.routine_symbol, self.value_tape
+        )
+
+        # Add the control tape to the container_trans map
+        self.container_trans.add_control_tape(
+            self.routine_symbol, self.control_tape
         )
 
         # All dependent and independent variables names
@@ -503,10 +583,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # so it breaks the adjoint map...
         self.set_argument_accesses(options)
 
-        # Add the value_tape as argument of both routines
-        # iff it's actually used
+        # Add the value_tape as argument of both routines iff it's actually used
         if len(self.value_tape.recorded_nodes) != 0:
-            self.add_value_tape_argument(options)
+            self.add_tape_argument(self.value_tape, options)
+
+        # Add the control_tape as argument of both routines iff it's actually
+        # used
+        if self.control_tape is not None:
+            self.add_tape_argument(self.control_tape, options)
 
         # Add the assignments of 0 to non-argument adjoints at the beginning of
         # the returning routine
@@ -664,6 +748,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         :raises TypeError: if assignment is of the wrong type.
 
+        :return: couple composed of the recording and returning motions \
+                 that correspond to the transformation of this Assignment.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Assignment`], \
+                List[:py:class:`psyclone.psyir.nodes.Assignment`]
         """
         if not isinstance(assignment, Assignment):
             raise TypeError(
@@ -674,12 +762,13 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         overwriting = self.is_overwrite(assignment.lhs)
 
+        recording = []
         returning = []
 
         # Tape record and restore first
         if overwriting:
             value_tape_record = self.value_tape.record(assignment.lhs)
-            self.recording.addchild(value_tape_record)
+            recording.append(value_tape_record)
 
             value_tape_restore = self.value_tape.restore(assignment.lhs)
             returning.append(value_tape_restore)
@@ -687,14 +776,17 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             # verbose_comment += ", overwrite"
 
         # Apply the transformation
-        recording, ret = self.assignment_trans.apply(assignment, options)
+        rec, ret = self.assignment_trans.apply(assignment, options)
+        recording.extend(rec)
         returning.extend(ret)
 
-        # Insert in the recording routine
-        self.add_children(self.recording, recording)
+        return recording, returning
 
-        # Insert in the returning routine
-        self.add_children(self.returning, returning, reverse=True)
+        ## Insert in the recording routine
+        #self.add_children(self.recording, recording)
+
+        ## Insert in the returning routine
+        #self.add_children(self.returning, returning, reverse=True)
 
     def transform_call(self, call, options=None):
         """Transforms a Call child of the routine and adds the \
@@ -707,6 +799,11 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
+
+        :return: couple composed of the recording and returning motions \
+                 that correspond to the transformation of this Call.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`], \
+                List[:py:class:`psyclone.psyir.nodes.DataNode`]
         """
         if not isinstance(call, Call):
             raise TypeError(
@@ -749,15 +846,94 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Apply an ADReverseCallTrans
         recording, returning = self.call_trans.apply(call, options)
 
+        # Add value tapes restores before returning statements
+        returning = value_tape_restores + returning
+
+        return recording, returning
+
         # Add the statements to the recording routine
-        self.add_children(self.recording, recording)
+        #self.add_children(self.recording, recording)
 
         # Add the statements to the returning routine
         # Reverse to insert always at index 0
-        self.add_children(self.returning, returning, reverse=True)
+        #self.add_children(self.returning, returning, reverse=True)
 
         # Add the value_tape restores before the call
-        self.add_children(self.returning, value_tape_restores, reverse=True)
+        #self.add_children(self.returning, value_tape_restores, reverse=True)
+
+    def transform_if_block(self, if_block, options=None):
+        """Transforms an IfBlock child of the routine and adds the \
+        statements to the recording and returning routines.
+
+        :param if_block: if block to transform.
+        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+        :param options: a dictionary with options for transformations, \
+            defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :raises TypeError: if if_block is of the wrong type.
+
+        :return: couple composed of the recording and returning motions \
+                 that correspond to the transformation of this IfBlock.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`], \
+                List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        if not isinstance(if_block, IfBlock):
+            raise TypeError(
+                f"'call' argument should be of "
+                f"type 'IfBlock' but found"
+                f"'{type(if_block).__name__}'."
+            )
+
+        # Tape record the condition value first
+        control_tape_record = self.control_tape.record(if_block.condition)
+        self.recording.addchild(control_tape_record)
+
+        # Get the ArrayReference of the control tape element
+        control_tape_ref = self.control_tape.restore(if_block.condition)
+
+        # Apply the transformation
+        recording, returning = self.if_block_trans.apply(if_block,
+                                                         control_tape_ref,
+                                                         options)
+
+        return [recording], [returning]
+
+    def transform_children(self, options=None):
+        """Transforms all the children of the routine being transformed \
+        and adds the statements to the transformed routines.
+
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :raises NotImplementedError: if the child transformation is not \
+                                     implemented yet. For now only those for \
+                                     Assignment, IfBlock and Call instances are.
+        """
+        # Go line by line through the Routine
+        for child in self.routine.children:
+            if isinstance(child, Assignment):
+                (recording,
+                 returning) = self.transform_assignment(child, options)
+            elif isinstance(child, Call):
+                (recording,
+                 returning) = self.transform_call(child, options)
+            elif isinstance(child, IfBlock):
+                (recording,
+                 returning) = self.transform_if_block(child, options)
+            else:
+                raise NotImplementedError(
+                    f"Transforming a Routine child of "
+                    f"type '{type(child).__name__}' is "
+                    f"not implemented yet."
+                )
+
+            # Insert in the recording routine
+            self.add_children(self.recording, recording)
+
+            # Insert in the returning routine
+            self.add_children(self.returning, returning, reverse=True)
 
     def new_operation_adjoint(self, operation):
         """Creates a new adjoint symbol for an Operation or IntrinsicCall node \
@@ -1013,20 +1189,28 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 self.reversing_table, adjoint_symbol, after=symbol
             )
 
-    def add_value_tape_argument(self, options=None):
-        """Add the value_tape as argument of both the transformed routines.
+    def add_tape_argument(self, tape, options=None):
+        """Add a tape as argument of both the transformed routines.
 
+        :param tape: tape to be added.
+        :type tape: :py:class:`psyclone.autodiff.ADTape`]
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[Str, Any]]
+
+        :raises TypeError: if tape is of the wrong type.
         """
         # pylint: disable=protected-access
 
-        # Reshape the value_tape array to its correct number of elements
-        # self.value_tape.reshape()
+        if not isinstance(tape, ADTape):
+            raise TypeError(
+                f"'tape' argument should be of "
+                f"type 'ADTape' but found "
+                f"'{type(tape).__name__}'."
+            )
 
         # Get three symbols for the value_tape, one per routine
-        symbols = [self.value_tape.symbol.copy() for i in range(3)]
+        symbols = [tape.symbol.copy() for i in range(3)]
 
         # Use the correct intents
         # intent(out) for the recording routine
@@ -1038,7 +1222,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # The reversing routine declares the value_tape,
         # so the default AutomaticInterface is correct
 
-        # Add the value_tape to all tables
+        # Add the tape to all tables
         for table, symbol in zip(self.transformed_tables, symbols):
             table.add(symbol)
 
@@ -1046,7 +1230,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # routines only
         for table, symbol in zip(self.transformed_tables[:-1], symbols[:-1]):
             table._argument_list.append(symbol)
-        # The value_tape is not an argument of the reversing routine
+        # The tape is not an argument of the reversing routine
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \

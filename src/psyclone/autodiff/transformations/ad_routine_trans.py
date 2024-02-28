@@ -49,6 +49,7 @@ from psyclone.psyir.nodes import (
     ArrayReference,
     Literal,
     Assignment,
+    IfBlock
 )
 from psyclone.psyir.symbols import (
     INTEGER_TYPE,
@@ -157,6 +158,11 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
     @abstractmethod
     def call_trans(self):
         """Used call transformation."""
+
+    @property
+    @abstractmethod
+    def if_block_trans(self):
+        """Used if block transformation."""
 
     @property
     def routine(self):
@@ -738,6 +744,18 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :type options: Optional[Dict[Str, Any]]
         """
 
+    @abstractmethod
+    def transform_if_block(self, if_block, options=None):
+        """Transforms an IfBlock child of the routine.
+
+        :param if_block: if block to transform.
+        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
+
+    @abstractmethod
     def transform_children(self, options=None):
         """Transforms all the children of the routine being transformed \
         and adds the statements to the transformed routines.
@@ -745,25 +763,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
-
-        :raises NotImplementedError: if a child is a recursive Call to the \
-                                     Routine being transformed.
-        :raises NotImplementedError: if the child transformation is not \
-                                     implemented yet. For now only those for \
-                                     Assignment and Call instances are.
         """
-        # Go line by line through the Routine
-        for child in self.routine.children:
-            if isinstance(child, Assignment):
-                self.transform_assignment(child, options)
-            elif isinstance(child, Call):
-                self.transform_call(child, options)
-            else:
-                raise NotImplementedError(
-                    f"Transforming a Routine child of "
-                    f"type '{type(child).__name__}' is "
-                    f"not implemented yet."
-                )
 
     def simplify(self, routine, options=None):
         """Apply simplifications to the BinaryOperation and Assignment nodes

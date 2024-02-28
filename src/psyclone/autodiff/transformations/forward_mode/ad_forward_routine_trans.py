@@ -40,6 +40,7 @@ from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import (
     Call,
     Assignment,
+    IfBlock,
 )
 
 from psyclone.autodiff.transformations import ADRoutineTrans
@@ -85,18 +86,20 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             ADForwardOperationTrans,
             ADForwardAssignmentTrans,
             ADForwardCallTrans,
+            ADForwardIfBlockTrans
         )
 
         # Initialize the sub transformations
         self.assignment_trans = ADForwardAssignmentTrans(self)
         self.operation_trans = ADForwardOperationTrans(self)
         self.call_trans = ADForwardCallTrans(self)
+        self.if_block_trans = ADForwardIfBlockTrans(self)
 
     @property
     def container_trans(self):
         """Returns the ADForwardContainerTrans this instance uses.
 
-        :return: container transformation, reverse-mode.
+        :return: container transformation, forward-mode.
         :rtype: \
           :py:class:`psyclone.autodiff.transformations.ADForwardContainerTrans`
         """
@@ -120,7 +123,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
     def assignment_trans(self):
         """Returns the ADForwardAssignmentTrans this instance uses.
 
-        :return: assignment transformation, reverse-mode.
+        :return: assignment transformation, forward-mode.
         :rtype: \
           :py:class:`psyclone.autodiff.transformations.ADForwardAssignmentTrans`
         """
@@ -144,7 +147,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
     def operation_trans(self):
         """Returns the ADForwardOperationTrans this instance uses.
 
-        :return: operation transformation, reverse-mode.
+        :return: operation transformation, forward-mode.
         :rtype: \
           :py:class:`psyclone.autodiff.transformations.ADForwardOperationTrans`
         """
@@ -168,7 +171,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
     def call_trans(self):
         """Returns the ADForwardCallTrans this instance uses.
 
-        :return: call transformation, reverse-mode.
+        :return: call transformation, forward-mode.
         :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardCallTrans`
         """
         return self._call_trans
@@ -186,6 +189,30 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             )
 
         self._call_trans = call_trans
+
+    @property
+    def if_block_trans(self):
+        """Returns the ADForwardIfBlockTrans this instance uses.
+
+        :return: if block transformation, forward-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.\
+                           ADForwardIfBlockTrans`
+        """
+        return self._if_block_trans
+
+    @if_block_trans.setter
+    def if_block_trans(self, if_block_trans):
+        # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
+        from psyclone.autodiff.transformations import ADForwardIfBlockTrans
+
+        if not isinstance(if_block_trans, ADForwardIfBlockTrans):
+            raise TypeError(
+                f"Argument should be an 'ADForwardIfBlockTrans' "
+                f"but found '{type(if_block_trans)}.__name__'."
+            )
+
+        self._if_block_trans = if_block_trans
 
     def apply(self, routine, dependent_vars, independent_vars, options=None):
         """Applies the transformation, generating the transformed routine \
@@ -290,6 +317,9 @@ class ADForwardRoutineTrans(ADRoutineTrans):
 
         :raises TypeError: if assignment is of the wrong type.
 
+        :return: list of nodes that correspond to the transformation of this \
+                 Assignment.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Assignment`]
         """
         if not isinstance(assignment, Assignment):
             raise TypeError(
@@ -298,14 +328,11 @@ class ADForwardRoutineTrans(ADRoutineTrans):
                 f"'{type(assignment).__name__}'."
             )
 
-        transformed = []
-
         # Apply the transformation
-        result = self.assignment_trans.apply(assignment, options)
-        transformed.extend(result)
+        return self.assignment_trans.apply(assignment, options)
 
-        # Insert in the transformed routine
-        self.add_children(self.transformed[0], transformed)
+        ## Insert in the transformed routine
+        # self.add_children(self.transformed[0], result)
 
     def transform_call(self, call, options=None):
         """Transforms a Call child of the routine and adds the \
@@ -318,6 +345,10 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if call is of the wrong type.
+
+        :return: single element list of nodes that correspond to the \
+                 transformation of this Call.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]
         """
         if not isinstance(call, Call):
             raise TypeError(
@@ -327,10 +358,68 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             )
 
         # Apply an ADForwardCallTrans
-        result = self.call_trans.apply(call, options)
+        return [self.call_trans.apply(call, options)]
 
-        # Add the statements to the transformed routine
-        self.add_children(self.transformed[0], [result])
+        ## Add the statements to the transformed routine
+        # self.add_children(self.transformed[0], [result])
+
+    def transform_if_block(self, if_block, options=None):
+        """Transforms an IfBlock child of the routine and adds the \
+        statements to the transformed routine.
+
+        :param if_block: if_block to transform.
+        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :raises TypeError: if if_block is of the wrong type.
+
+        :return: single element list of nodes that correspond to the \
+                 transformation of this IfBlock.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.IfBlock`]
+        """
+        if not isinstance(if_block, IfBlock):
+            raise TypeError(
+                f"'if_block' argument should be of "
+                f"type 'IfBlock' but found"
+                f"'{type(if_block).__name__}'."
+            )
+
+        # Apply an ADForwardCallTrans
+        return [self.if_block_trans.apply(if_block, options)]
+
+        ## Add the statements to the transformed routine
+        #self.add_children(self.transformed[0], [result])
+
+    def transform_children(self, options=None):
+        """Transforms all the children of the routine being transformed \
+        and adds the statements to the transformed routine.
+
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :raises NotImplementedError: if the child transformation is not \
+                                     implemented yet. For now only those for \
+                                     Assignment, IfBlock and Call instances are.
+        """
+        # Go line by line through the Routine
+        for child in self.routine.children:
+            if isinstance(child, Assignment):
+                result = self.transform_assignment(child, options)
+            elif isinstance(child, Call):
+                result = self.transform_call(child, options)
+            elif isinstance(child, IfBlock):
+                result = self.transform_if_block(child, options)
+            else:
+                raise NotImplementedError(
+                    f"Transforming a Routine child of "
+                    f"type '{type(child).__name__}' is "
+                    f"not implemented yet."
+                )
+
+            self.add_children(self.transformed[0], result)
 
     @property
     def derivative_symbols(self):

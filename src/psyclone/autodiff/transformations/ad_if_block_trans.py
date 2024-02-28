@@ -33,53 +33,54 @@
 # -----------------------------------------------------------------------------
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
-"""This module provides an abstract Transformation for automatic 
-differentiation of some PSyIR nodes. 
-This is the parent class of `ADOperationTrans`, `ADAssignmentTrans`, 
-`ADIfBlockTrans` and `ADCallTrans`.
+"""This module provides an abstract Transformation for automatic differentiation
+of PSyIR IfBlock nodes in both modes.
 """
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 
-from psyclone.autodiff.transformations import ADTrans
+from psyclone.psyir.nodes import IfBlock
+from psyclone.psyir.transformations import TransformationError
 
-class ADElementTrans(ADTrans, metaclass=ABCMeta):
-    """An abstract class for automatic differentation transformations.
-    Requires an ADRoutineTrans instance as context, where the symbols of
-    adjoints, temporaries, etc. are stored.
-    This is the parent class of 'ADOperationTrans', 'ADAssignmentTrans' 
-    and 'ADCallTrans'.
+from psyclone.autodiff.transformations import ADElementTrans
 
-    :param routine_trans: ADRoutineTrans context instance
-    :type routine_trans: :py:class:`psyclone.autodiff.transformations.\
-                                    ADRoutineTrans`
 
-    :raises TypeError: if the routine_trans argument is of the wrong type
+class ADIfBlockTrans(ADElementTrans, metaclass=ABCMeta):
+    """An abstract class for automatic differentation transformations of \
+    IfBlock nodes.
     """
 
-    @property
-    def routine_trans(self):
-        """Contextual ADRoutineTrans \
-        from which this ADElementTrans subclass instance was created.
+    def validate(self, if_block, options=None):
+        """Validates the arguments of the `apply` method.
 
-        :return: contextual ADRoutineTrans
-        :rtype: :py:class:`psyclone.autodiff.transformations.ADRoutineTrans`
+        :param if_block: node to be transformed.
+        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :raises TransformationError: if if_block is of the wrong type.
         """
-        return self._routine_trans
+        # pylint: disable=arguments-renamed
 
-    @routine_trans.setter
-    def routine_trans(self, routine_trans):
-        # Avoid circular dependency
-        # pylint: disable=import-outside-toplevel
-        from psyclone.autodiff.transformations import ADRoutineTrans
+        super().validate(if_block, options)
 
-        if not isinstance(routine_trans, ADRoutineTrans):
-            raise TypeError(
-                f"Argument should be of type 'ADRoutineTrans' "
-                f"but found '{type(routine_trans).__name__}'."
+        if not isinstance(if_block, IfBlock):
+            raise TransformationError(
+                f"'if_block' argument should be a "
+                f"PSyIR 'IfBlock' but found '{type(if_block).__name__}'."
             )
-        self._routine_trans = routine_trans
 
-    def __init__(self, routine_trans):
-        # Setter is typechecked
-        self.routine_trans = routine_trans
+    @abstractmethod
+    def apply(self, if_block, options=None):
+        """Applies the transformation, generating the recording and returning \
+        motions associated to this IfBlock.
+
+        :param if_block: node to be transformed.
+        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        """
+        # pylint: disable=arguments-renamed, unnecessary-pass
+        pass

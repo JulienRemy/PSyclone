@@ -40,6 +40,7 @@
 from psyclone.psyir.nodes import (
     Assignment,
     Reference,
+    Literal,
     Operation,
     UnaryOperation,
     BinaryOperation,
@@ -58,8 +59,7 @@ from psyclone.autodiff.tapes import ADTape
 class ADControlTape(ADTape):
     """A class for recording and recovering values of control flow conditions \
     in reverse-mode automatic differentiation. \
-    The recorded nodes are either boolean Reference nodes \
-    or boolean Operation ones.
+    The recorded nodes can be boolean Literal, Reference or Operation nodes.
     Based on static arrays storing a single type of data rather than a LIFO \
     stack. \
     Provides methods to create the PSyIR assignments for recording and \
@@ -67,7 +67,7 @@ class ADControlTape(ADTape):
 
     :param name: name of the tape (after a prefix).
     :type object: str
-    :param datatype: datatype of the elements of the value_tape.
+    :param datatype: datatype of the elements of the control tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
 
     :raises TypeError: if name is of the wrong type.
@@ -75,7 +75,7 @@ class ADControlTape(ADTape):
     :raises TypeError: if datatype's intrinsic is not BOOLEAN.
     """
 
-    _node_types = (Reference, Operation)
+    _node_types = (Reference, Operation, Literal)
     _tape_prefix = "ctrl_tape_"
 
     def __init__(self, name, datatype):
@@ -95,38 +95,38 @@ class ADControlTape(ADTape):
                 f"'{datatype}' instead."
             )
 
-        control_tape_name = self._tape_prefix + name
-
-        super().__init__(control_tape_name, datatype)
+        super().__init__(name, datatype)
 
     def record(self, node):
         """Add the boolean reference or operation result as last element of \
         the tape and return the Assignment node to record it to the tape.
 
-        :param node: node whose prevalue should be recorded.
-        :type reference: :py:class:`psyclone.psyir.nodes.Reference`
+        :param node: node whose boolean value should be recorded.
+        :type reference: Union[:py:class:`psyclone.psyir.nodes.Reference`,
+                               :py:class:`psyclone.psyir.nodes.Operation`,
+                               :py:class:`psyclone.psyir.nodes.Literal`]
 
         :raises TypeError: if node is of the wrong type.
         :raises TypeError: if the intrinsic of node's datatype is not the \
-                           same as the intrinsic of the value_tape's \
+                           same as the intrinsic of the control tape's \
                            elements datatype.
         :raises NotImplementedError: if the reference's datatype is ArrayType.
 
         :return: an Assignment node for recording.
         :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
         """
-        if not isinstance(node, (Reference, Operation)):
+        if not isinstance(node, self._node_types):
             raise TypeError(
                 f"'node' argument should be of type "
-                f"'Reference' or 'Operation' but found "
+                f"'Reference', 'Operation' or 'Literal' but found "
                 f"'{type(node).__name__}'."
             )
 
-        if isinstance(node, Reference):
-            if not isinstance(node.datatype, (ScalarType)):
+        if isinstance(node, (Reference, Literal)):
+            if not isinstance(node.datatype, ScalarType):
                 raise TypeError(
                     f"'node' argument should have datatype "
-                    f"'ScalarType' if it is of type Reference but found "
+                    f"'ScalarType' but found "
                     f"'{type(node.datatype).__name__}'."
                 )
 
@@ -134,8 +134,7 @@ class ADControlTape(ADTape):
                 raise TypeError(
                     f"'node' argument should have datatype "
                     f"'ScalarType' with intrinsic BOOLEAN "
-                    f"if it is of type Reference but found "
-                    f"'{node.datatype.intrinsic}'."
+                    f" but found '{node.datatype.intrinsic}'."
                 )
 
         if isinstance(node, Operation):
@@ -149,6 +148,8 @@ class ADControlTape(ADTape):
                 BinaryOperation.Operator.LE,
                 BinaryOperation.Operator.LT,
                 BinaryOperation.Operator.NE,
+                BinaryOperation.Operator.EQV,
+                BinaryOperation.Operator.NEQV,
             ):
                 raise TypeError(
                     f"'node' argument should have a logical operator "
@@ -156,30 +157,26 @@ class ADControlTape(ADTape):
                     f"'{node.operator}'."
                 )
 
-        value_tape_ref = super().record(node)
+        control_tape_ref = super().record(node)
 
-        return Assignment.create(value_tape_ref, node.copy())
+        return Assignment.create(control_tape_ref, node.copy())
 
     def restore(self, node):
-        """Restore the boolean reference or operation result \
-         and return the Assignment node to restore it from the tape.
+        """Restore the boolean reference or operation result  from the tape.
 
-        :param node: node whose prevalue should be restored from the value_tape.
+        :param node: node whose value should be restored from the control tape.
         :type node: :py:class:`psyclone.psyir.symbols.DataSymbol`
 
         :raises TypeError: if node is of the wrong type.
 
-        :return: an Assignment node for restoring the prevalue of the node \
-                    from the last element of the value_tape.
-        :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
+        :return: a reference to the element of the control tape.
+        :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
         """
-        if not isinstance(node, (Reference, Operation)):
+        if not isinstance(node, self._node_types):
             raise TypeError(
                 f"'node' argument should be of type "
-                f"'Reference' or 'Operation' but found "
+                f"'Reference', 'Operation' or 'Literal' but found "
                 f"'{type(node).__name__}'."
             )
 
-        value_tape_ref = super().restore(node)
-
-        return Assignment.create(node.copy(), value_tape_ref)
+        return super().restore(node)
