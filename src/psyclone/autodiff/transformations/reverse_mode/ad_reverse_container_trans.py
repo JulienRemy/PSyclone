@@ -130,7 +130,7 @@ class ADReverseContainerTrans(ADContainerTrans):
 
     @property
     def value_tape_map(self):
-        """Returns the map between original routine symbols and value_tapes.
+        """Returns the map between original routine symbols and value tapes.
 
         :return: dictionnary with the original routine symbols as keys \
                  and the value_tape as value.
@@ -138,6 +138,17 @@ class ADReverseContainerTrans(ADContainerTrans):
                      :py:class:`psyclone.autodiff.ADValueTape`]
         """
         return self._value_tape_map
+
+    @property
+    def control_tape_map(self):
+        """Returns the map between original routine symbols and control tapes.
+
+        :return: dictionnary with the original routine symbols as keys \
+                 and the control tape or None as value.
+        :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+                     Union[:py:class:`psyclone.autodiff.ADValueTape`, NoneType]]
+        """
+        return self._control_tape_map
 
     def add_value_tape(self, routine_symbol, value_tape):
         """Add a new value_tape to the map.

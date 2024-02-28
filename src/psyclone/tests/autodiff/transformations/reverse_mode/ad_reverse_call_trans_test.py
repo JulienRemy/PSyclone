@@ -59,7 +59,7 @@ from psyclone.autodiff.transformations import (
     ADReverseContainerTrans,
     ADReverseCallTrans,
 )
-from psyclone.autodiff.tapes import ADValueTape
+from psyclone.autodiff.tapes import ADValueTape, ADControlTape
 from psyclone.autodiff import (
     own_routine_symbol,
     add,
@@ -72,7 +72,8 @@ from psyclone.autodiff import (
 AP = ADReverseRoutineTrans._differential_prefix
 AS = ADReverseRoutineTrans._differential_postfix
 OA = ADReverseRoutineTrans._operation_adjoint_name
-TaP = ADValueTape._tape_prefix
+VTaP = ADValueTape._tape_prefix
+CTaP = ADControlTape._tape_prefix
 
 RECP = ADReverseRoutineTrans._recording_prefix
 RECS = ADReverseRoutineTrans._recording_postfix
@@ -84,6 +85,8 @@ REVS = ADReverseRoutineTrans._reversing_postfix
 SRC = """subroutine foo()
 end subroutine foo
 subroutine bar()
+    IF (.TRUE.) THEN
+    END IF
 end subroutine bar"""
 
 
@@ -287,22 +290,24 @@ def test_ad_call_trans_transform_called_routine():
         "but found 'NoneType'." in str(info.value)
     )
 
-    routine = ad_container_trans.container.walk(Routine)[1]
-    assert routine.name == "bar"
+    routine = ad_container_trans.container.walk(Routine)[0]
+    assert routine.name == "foo"
     routine_sym = own_routine_symbol(routine)
-    rec_sym, ret_sym, rev_sym, tape = ad_call_trans.transform_called_routine(routine)
+    rec_sym, ret_sym, rev_sym, value_tape, control_tape = ad_call_trans.transform_called_routine(routine)
 
     assert isinstance(rec_sym, RoutineSymbol)
     assert isinstance(ret_sym, RoutineSymbol)
     assert isinstance(rev_sym, RoutineSymbol)
-    assert isinstance(tape, ADValueTape)
+    assert isinstance(value_tape, ADValueTape)
+    assert control_tape is None
 
-    assert rec_sym.name == f"{RECP}bar{RECS}"
-    assert ret_sym.name == f"{RETP}bar{RETS}"
-    assert rev_sym.name == f"{REVP}bar{REVS}"
+    assert rec_sym.name == f"{RECP}foo{RECS}"
+    assert ret_sym.name == f"{RETP}foo{RETS}"
+    assert rev_sym.name == f"{REVP}foo{REVS}"
 
-    assert tape.name == f"{TaP}bar"
-    assert ad_container_trans.value_tape_map[routine_sym] == tape
+    assert value_tape.name == f"{VTaP}foo"
+    assert ad_container_trans.value_tape_map[routine_sym] == value_tape
+    assert ad_container_trans.control_tape_map[routine_sym] == control_tape
 
     assert len(ad_container_trans.routine_transformations) == 2
     assert isinstance(ad_container_trans.routine_transformations[1], ADReverseRoutineTrans)
@@ -314,13 +319,16 @@ def test_ad_call_trans_transform_called_routine():
     assert ad_call_trans.called_routine_trans != ad_routine_trans
 
     #
-    rec_sym2, ret_sym2, rev_sym2, tape2 = ad_call_trans.transform_called_routine(
-        routine
+    routine2 = ad_container_trans.container.walk(Routine)[1]
+    rec_sym2, ret_sym2, rev_sym2, value_tape2, control_tape2 = ad_call_trans.transform_called_routine(
+        routine2
     )
     assert rec_sym != rec_sym2
     assert ret_sym != ret_sym2
     assert rev_sym != rev_sym2
-    assert tape != tape2
+    assert value_tape != value_tape2
+    assert isinstance(control_tape2, ADControlTape)
+    assert control_tape2.name == f"{CTaP}bar"
 
 
 def test_ad_call_trans_apply():
@@ -526,15 +534,15 @@ def _test_arguments(applied_ad_call_trans):
         # joint reversal : no tape
         if applied_ad_call_trans.reversal_schedule is ADJointReversalSchedule():
             for arg in recording_args:
-                assert TaP not in arg.name
+                assert VTaP not in arg.name
             for arg in returning_args:
-                assert TaP not in arg.name
+                assert VTaP not in arg.name
         # split reversal : tape in rec and ret, not in rev
         elif applied_ad_call_trans.reversal_schedule is ADSplitReversalSchedule():
-            if TaP in recording_args[-1].name:
+            if VTaP in recording_args[-1].name:
                 assert recording_args[-1].name == returning_args[-1].name
             for arg in reversing_args:
-                assert TaP not in arg.name
+                assert VTaP not in arg.name
 
 
 #################"
