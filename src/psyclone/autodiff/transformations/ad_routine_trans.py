@@ -722,38 +722,38 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
         return routines
 
-    @abstractmethod
-    def transform_assignment(self, assignment, options=None):
-        """Transforms an Assignment child of the routine.
-
-        :param assignment: assignment to transform.
-        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
-        :param options: a dictionary with options for transformations, \
-                        defaults to None.
-        :type options: Optional[Dict[Str, Any]]
-        """
-
-    @abstractmethod
-    def transform_call(self, call, options=None):
-        """Transforms a Call child of the routine.
-
-        :param call: call to transform.
-        :type call: :py:class:`psyclone.psyir.nodes.Call`
-        :param options: a dictionary with options for transformations, \
-                        defaults to None.
-        :type options: Optional[Dict[Str, Any]]
-        """
-
-    @abstractmethod
-    def transform_if_block(self, if_block, options=None):
-        """Transforms an IfBlock child of the routine.
-
-        :param if_block: if block to transform.
-        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
-        :param options: a dictionary with options for transformations, \
-                        defaults to None.
-        :type options: Optional[Dict[Str, Any]]
-        """
+#    @abstractmethod
+#    def transform_assignment(self, assignment, options=None):
+#        """Transforms an Assignment child of the routine.
+#
+#        :param assignment: assignment to transform.
+#        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
+#        :param options: a dictionary with options for transformations, \
+#                        defaults to None.
+#        :type options: Optional[Dict[Str, Any]]
+#        """
+#
+#    @abstractmethod
+#    def transform_call(self, call, options=None):
+#        """Transforms a Call child of the routine.
+#
+#        :param call: call to transform.
+#        :type call: :py:class:`psyclone.psyir.nodes.Call`
+#        :param options: a dictionary with options for transformations, \
+#                        defaults to None.
+#        :type options: Optional[Dict[Str, Any]]
+#        """
+#
+#    @abstractmethod
+#    def transform_if_block(self, if_block, options=None):
+#        """Transforms an IfBlock child of the routine.
+#
+#        :param if_block: if block to transform.
+#        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+#        :param options: a dictionary with options for transformations, \
+#                        defaults to None.
+#        :type options: Optional[Dict[Str, Any]]
+#        """
 
     @abstractmethod
     def transform_children(self, options=None):

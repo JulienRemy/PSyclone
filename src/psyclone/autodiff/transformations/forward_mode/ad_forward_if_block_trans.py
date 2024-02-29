@@ -36,7 +36,7 @@
 """This module provides a Transformation for forward-mode automatic 
 differentiation of PSyIR IfBlock nodes."""
 
-from psyclone.psyir.nodes import IfBlock, Assignment, Call
+from psyclone.psyir.nodes import IfBlock, Assignment, Call, Loop
 
 from psyclone.autodiff.transformations import ADIfBlockTrans
 
@@ -105,6 +105,10 @@ class ADForwardIfBlockTrans(ADIfBlockTrans):
                     )
             elif isinstance(node, IfBlock):
                 transformed_body.append(self.apply(node, options))
+            elif isinstance(node, Loop):
+                transformed_body.append(
+                    self.routine_trans.loop_trans.apply(node, options)
+                    )
             else:
                 raise NotImplementedError(f"Transformations for "
                                           f"'{type(node).__name__}' found in "
