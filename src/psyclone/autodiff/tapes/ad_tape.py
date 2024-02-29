@@ -38,9 +38,10 @@ automatic differentiation "taping" (storing and recovering) of different values.
 """
 
 from abc import ABCMeta
+from types import NoneType
 
 from psyclone.psyir.nodes import (ArrayReference, Literal, Node, Range,
-                                  BinaryOperation, Reference, DataNode, 
+                                  BinaryOperation, Reference, DataNode,
                                   IntrinsicCall)
 from psyclone.psyir.symbols import (DataSymbol, INTEGER_TYPE, ScalarType,
                                     ArrayType)
@@ -83,7 +84,7 @@ class ADTape(object, metaclass=ABCMeta):
         self.datatype = datatype
 
         # Type of the value_tape, shape will be modified as needed
-        tape_type = ArrayType(datatype, [0])
+        tape_type = ArrayType(datatype, [ArrayType.Extent.DEFERRED])#[0])
 
         # Symbol of the value_tape
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
@@ -164,6 +165,76 @@ class ADTape(object, metaclass=ABCMeta):
         :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
         """
         return self._recorded_nodes
+
+    @property
+    def offset_symbol(self):
+        """Index offset PSyIR DataSymbol or None if it is not needed. 
+        Used for indexing into the tape when loops are present.
+        This is used to offset array indices by a run-time dependent number, \
+        which depends on loops iterations.
+
+        :return: index offset DataSymbol for indexing into the tape.
+        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                      NoneType]
+        """
+        return self._offset_symbol
+
+    @offset_symbol.setter
+    def offset_symbol(self, offset_symbol):
+        if not isinstance(offset_symbol, (DataSymbol, NoneType)):
+            raise TypeError(
+                f"'offset_symbol' argument should be of type "
+                f"'DataSymbol' or 'NoneType' but found "
+                f"'{type(offset_symbol).__name__}'."
+            )
+        self._offset_symbol = offset_symbol
+
+    @property
+    def offset(self):
+        """Index offset PSyIR Reference or None if it is not needed. 
+        Used for indexing into the tape when loops are present.
+        This is used to offset array indices by a run-time dependent number, \
+        which depends on loops iterations.
+
+        :return: fresh index offset Reference for indexing into the tape.
+        :rtype: Union[:py:class:`psyclone.psyir.nodes.Reference`,
+                      NoneType]
+        """
+        return Reference(self.offset_symbol)
+    
+    @property
+    def do_offset_symbol(self):
+        """Loop index offset PSyIR DataSymbol or None if it is not needed. 
+        Used for indexing in the tape array **inside** a do loop, \
+        depending on the value of the loop variable itself.
+
+        :return: index offset DataSymbol for indexing within a loop.
+        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                      NoneType]
+        """
+        return self._do_offset_symbol
+
+    @do_offset_symbol.setter
+    def do_offset_symbol(self, do_offset_symbol):
+        if not isinstance(do_offset_symbol, (DataSymbol, NoneType)):
+            raise TypeError(
+                f"'do_offset_symbol' argument should be of type "
+                f"'DataSymbol' or 'NoneType' but found "
+                f"'{type(do_offset_symbol).__name__}'."
+            )
+        self._do_offset_symbol = do_offset_symbol
+
+    @property
+    def do_offset(self):
+        """Loop index offset PSyIR DataSymbol or None if it is not needed. 
+        Used for indexing in the tape array **inside** a do loop, \
+        depending on the value of the loop variable itself.
+
+        :return: index offset DataSymbol for indexing within a loop.
+        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                      NoneType]
+        """
+        return Reference(self.do_offset_symbol)
 
     def _typecheck_list_of_int_literals(self, int_literals):
         """Check that the argument is a list of scalar integer literals.
@@ -557,14 +628,14 @@ class ADTape(object, metaclass=ABCMeta):
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
             self.recorded_nodes.append(node)
-            self.reshape()
+            # self.reshape()
             # This is the Fortran index, starting at 1
             tape_ref = ArrayReference.create(self.symbol, [self.length])
 
         # Nodes of ArrayType correspond to a range
         else:
             self.recorded_nodes.append(node)
-            self.reshape()
+            # self.reshape()
             tape_range = Range.create(self.first_index_of_last_element.copy(),
                                       self.length.copy())
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
@@ -605,11 +676,53 @@ class ADTape(object, metaclass=ABCMeta):
 
         return tape_ref
 
-    def reshape(self):
-        """Change the static length of the tape array in its datatype.
+    # def reshape(self):
+    #     """Change the static length of the tape array in its datatype.
+    #     """
+    #     value_tape_type = ArrayType(self.datatype, [self.length])
+    #     self.symbol.datatype = value_tape_type
+
+    def allocate(self, length):
+        """Generates a PSyIR IntrinsicCall ALLOCATE node for the tape, with \
+        the given length.
+
+        :param length: length to allocate.
+        :type length: Union[int, :py:class:`psyclone.psyir.nodes.Literal`]
+
+        :raises TypeError: if length is of the wrong type.
+        :raises ValueError: if length is a Literal but not of ScalarType \
+                            or not an integer.
+
+        :return: the ALLOCATE statement as a PSyIR IntrinsicCall node.
+        :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
         """
-        value_tape_type = ArrayType(self.datatype, [self.length])
-        self.symbol.datatype = value_tape_type
+        if not isinstance(length, (int, Literal)):
+            raise TypeError(
+                f"'length' argument should be of type "
+                f"'int' or 'Literal' but found "
+                f"'{type(length).__name__}'."
+            )
+        if isinstance(length, int):
+            length = Literal(str(length), INTEGER_TYPE)
+        elif (isinstance(length, Literal) and 
+              (not isinstance(length.datatype, ScalarType) 
+               or length.datatype.intrinsic is not INTEGER_TYPE.intrinsic)):
+            raise ValueError(f"'length' argument is a 'Literal' but either its "
+                             f"datatype is not 'ScalarType' or it is not an "
+                             f"integer. Found {length}.")
+
+        return IntrinsicCall.create(IntrinsicCall.Intrinsic.ALLOCATE,
+                                    [ArrayReference.create(self.symbol,
+                                                          [length])])
+
+    def deallocate(self):
+        """Generates a PSyIR IntrinsicCall ALLOCATE node for the tape.
+
+        :return: the DEALLOCATE statement as a PSyIR IntrinsicCall node.
+        :rtype: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+        """
+        return IntrinsicCall.create(IntrinsicCall.Intrinsic.DEALLOCATE,
+                                    [Reference(self.symbol)])
 
     def extend(self, tape):
         """Extends the tape with the recorded nodes of the 'tape' argument, \
@@ -636,7 +749,7 @@ class ADTape(object, metaclass=ABCMeta):
 
         self.recorded_nodes.extend(tape.recorded_nodes)
 
-        self.reshape()
+        # self.reshape()
 
     def extend_and_slice(self, tape):
         """Extends the tape by the 'tape' argument and return \

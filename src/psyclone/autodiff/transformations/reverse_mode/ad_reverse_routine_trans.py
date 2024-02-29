@@ -583,21 +583,22 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # so it breaks the adjoint map...
         self.set_argument_accesses(options)
 
-        # Add the value_tape as argument of both routines iff it's actually used
-        if len(self.value_tape.recorded_nodes) != 0:
-            self.add_tape_argument(self.value_tape, options)
-
-        # Add the control_tape as argument of both routines iff it's actually
-        # used
-        if self.control_tape is not None:
-            self.add_tape_argument(self.control_tape, options)
-
         # Add the assignments of 0 to non-argument adjoints at the beginning of
         # the returning routine
         self.add_differentials_zero_assignments(self. returning, options)
 
         # Combine the calls to recording and returning in reversing
         self.add_calls_to_reversing(options)
+
+        # Add the value_tape as argument of both routines iff it's actually used
+        # and also ALLOCATE and DEALLOCATE it in the reversing routine
+        if len(self.value_tape.recorded_nodes) != 0:
+            self.add_tape_argument(self.value_tape, options)
+
+        # Add the control_tape as argument of both routines iff it's actually
+        # used and also ALLOCATE and DEALLOCATEit in the reversing routine
+        if self.control_tape is not None:
+            self.add_tape_argument(self.control_tape, options)
 
         # Add the three routines to the container
         for transformed in self.transformed:
@@ -1231,6 +1232,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         for table, symbol in zip(self.transformed_tables[:-1], symbols[:-1]):
             table._argument_list.append(symbol)
         # The tape is not an argument of the reversing routine
+
+        # Also add ALLOCATE statements using the tape length at the beginning
+        # of the reversing routine
+        allocate = tape.allocate(tape.length)
+        self.reversing.addchild(allocate, 0)
+        deallocate = tape.deallocate()
+        self.reversing.addchild(deallocate, len(self.reversing.children))
+
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \
