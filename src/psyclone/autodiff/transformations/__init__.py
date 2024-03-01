@@ -70,9 +70,9 @@ from psyclone.autodiff.transformations.reverse_mode.ad_reverse_call_trans import
 from psyclone.autodiff.transformations.reverse_mode.ad_reverse_if_block_trans import (
     ADReverseIfBlockTrans,
 )
-#from psyclone.autodiff.transformations.reverse_mode.ad_reverse_loop_trans import (
-#    ADReverseLoopTrans,
-#)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_loop_trans import (
+    ADReverseLoopTrans,
+)
 
 from psyclone.autodiff.transformations.forward_mode.ad_forward_container_trans import (
     ADForwardContainerTrans,
@@ -117,7 +117,7 @@ __all__ = [
     "ADReverseOperationTrans",
     "ADReverseCallTrans",
     "ADReverseIfBlockTrans",
-    #"ADReverseLoopTrans",
+    "ADReverseLoopTrans",
 
     # Forward-mode transformations
     "ADForwardContainerTrans",

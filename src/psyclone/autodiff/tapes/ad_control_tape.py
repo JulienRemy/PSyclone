@@ -101,7 +101,7 @@ class ADControlTape(ADTape):
 
         super().__init__(name, datatype, is_dynamic_array)
 
-    def record(self, node):
+    def record(self, node, do_loop = False):
         """Add the boolean reference or operation result as last element of \
         the tape and return the Assignment node to record it to the tape.
 
@@ -109,11 +109,15 @@ class ADControlTape(ADTape):
         :type reference: Union[:py:class:`psyclone.psyir.nodes.Reference`,
                                :py:class:`psyclone.psyir.nodes.Operation`,
                                :py:class:`psyclone.psyir.nodes.Literal`]
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if node is of the wrong type.
         :raises TypeError: if the intrinsic of node's datatype is not the \
                            same as the intrinsic of the control tape's \
                            elements datatype.
+        :raises TypeError: if do_loop is of the wrong type.
         :raises NotImplementedError: if the reference's datatype is ArrayType.
 
         :return: an Assignment node for recording.
@@ -160,18 +164,28 @@ class ADControlTape(ADTape):
                     f"if it is of type Operation but found "
                     f"'{node.operator}'."
                 )
+        
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
 
-        control_tape_ref = super().record(node)
+        control_tape_ref = super().record(node, do_loop)
 
         return Assignment.create(control_tape_ref, node.copy())
 
-    def restore(self, node):
+    def restore(self, node, do_loop = False):
         """Restore the boolean reference or operation result  from the tape.
 
         :param node: node whose value should be restored from the control tape.
         :type node: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if node is of the wrong type.
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: a reference to the element of the control tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
@@ -182,5 +196,11 @@ class ADControlTape(ADTape):
                 f"'Reference', 'Operation' or 'Literal' but found "
                 f"'{type(node).__name__}'."
             )
+        
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
 
-        return super().restore(node)
+        return super().restore(node, do_loop)

@@ -188,15 +188,15 @@ class ADTape(object, metaclass=ABCMeta):
         """
         return self.symbol.name
 
-    @name.setter
-    def name(self, name):
-        if not isinstance(name, str):
-            raise TypeError(
-                f"'name' argument should be of type "
-                f"'str' but found '{type(name).__name__}'."
-            )
-        tape_type = ArrayType(self.datatype, [self.length()])
-        self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
+    #@name.setter
+    #def name(self, name):
+    #    if not isinstance(name, str):
+    #        raise TypeError(
+    #            f"'name' argument should be of type "
+    #            f"'str' but found '{type(name).__name__}'."
+    #        )
+    #    tape_type = ArrayType(self.datatype, [self.length(do_loop)])
+    #    self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
 
     @property
     def recorded_nodes(self):
@@ -681,17 +681,21 @@ class ADTape(object, metaclass=ABCMeta):
                 f"stored as last element of the value_tape."
             )
 
-    def record(self, node):
+    def record(self, node, do_loop = False):
         """Add the node as last element of the tape and return the \
         ArrayReference node of the tape.
 
         :param node: node whose prevalue should be recorded.
         :type node: :py:class:`psyclone.psyir.nodes.Reference`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if node is of the wrong type.
         :raises TypeError: if the intrinsic of node's datatype is not the \
                            same as the intrinsic of the value_tape's \
                            elements datatype.
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: the array node to the last element of the tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
@@ -703,6 +707,12 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(node).__name__}'."
             )
 
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
+
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
             self.recorded_nodes.append([node, one()])
@@ -710,7 +720,8 @@ class ADTape(object, metaclass=ABCMeta):
             if not self.is_dynamic_array:
                 self.reshape()
             # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(self.symbol, [self.length()])
+            tape_ref = ArrayReference.create(self.symbol, 
+                                             [self.length(do_loop)])
 
         # Nodes of ArrayType correspond to a range
         else:
@@ -718,20 +729,24 @@ class ADTape(object, metaclass=ABCMeta):
             # If static array, reshape to take the new length into account
             if not self.is_dynamic_array:
                 self.reshape()
-            tape_range = Range.create(self.first_index_of_last_element(),
-                                      self.length())
+            tape_range = Range.create(self.first_index_of_last_element(do_loop),
+                                      self.length(do_loop))
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
 
-    def restore(self, node):
+    def restore(self, node, do_loop = False):
         """Check that node is the last element of the tape and return an \
         ArrayReference to it in the tape.
 
         :param node: node restore.
         :type node: :py:class:`psyclone.psyir.nodes.Node`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if node is of the wrong type.
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: an ArrayReference node to the last element of the tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
@@ -742,26 +757,45 @@ class ADTape(object, metaclass=ABCMeta):
                 f"{self.node_type_names} but found "
                 f"'{type(node).__name__}'."
             )
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
 
         self._has_last(node)
 
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
             # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(self.symbol, [self.length()])
+            tape_ref = ArrayReference.create(self.symbol, 
+                                             [self.length(do_loop)])
 
         # Nodes of ArrayType correspond to a range
         else:
-            tape_range = Range.create(self.first_index_of_last_element(),
-                                      self.length())
+            tape_range = Range.create(self.first_index_of_last_element(do_loop),
+                                      self.length(do_loop))
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
 
-    def reshape(self):
+    def reshape(self, do_loop = False):
         """Change the static length of the tape array in its datatype.
+
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
+
+        :raises TypeError: if do_loop is of the wrong type.
         """
-        value_tape_type = ArrayType(self.datatype, [self.length()])
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
+
+        value_tape_type = ArrayType(self.datatype,
+                                    [self.length(do_loop)])
         self.symbol.datatype = value_tape_type
 
     def allocate(self, length):
@@ -835,16 +869,20 @@ class ADTape(object, metaclass=ABCMeta):
         if not self.is_dynamic_array:
             self.reshape()
 
-    def extend_and_slice(self, tape):
+    def extend_and_slice(self, tape, do_loop = False):
         """Extends the tape by the 'tape' argument and return \
         the ArrayReference corresponding to the correct slice.
 
         :param tape: tape to extend with.
         :type tape: :py:class:`psyclone.autodiff.tapes.ADTape`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if tape is not of the same type as self.
         :raises ValueError: if the datatype of tape is not the same as \
             the datatype of self. 
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: slice of the tape array that corresponds \
             to the tape it was extended with.
@@ -863,13 +901,18 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{self.datatype}' but found "
                 f"'{tape.datatype}'."
             )
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
         # First index of the slice corresponding to the "new" tape
-        first_index = self._add_datanodes([self.length(),
+        first_index = self._add_datanodes([self.length(do_loop),
                                            one()])
         # Extend the parent value_tape with the new value_tape
         self.extend(tape)
         # Last index of the slice
-        last_index = self.length()
+        last_index = self.length(do_loop)
         # Slice of the parent value_tape
         value_tape_range = Range.create(first_index, last_index)
 

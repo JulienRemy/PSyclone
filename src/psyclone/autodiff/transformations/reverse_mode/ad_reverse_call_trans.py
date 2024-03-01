@@ -42,6 +42,7 @@ from psyclone.psyir.nodes import (
     Operation,
     IntrinsicCall,
     Literal,
+    Loop
 )
 from psyclone.psyir.symbols import DataSymbol
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
@@ -246,13 +247,20 @@ class ADReverseCallTrans(ADCallTrans):
             # recording_args = [arg for arg in zip(child.argument_names,
             #                                     child.children)]
 
+            # Check whether we're currently in a do loop
+            # (if so tape indexing uses offsets)
+            if call.ancestor(Loop) is not None:
+                do_loop = True
+            else:
+                do_loop = False
+
             # If the value_tape has null length, it's unused
             if len(self.value_tape.recorded_nodes) != 0:
                 # Extend the calling routine value tape by the called routine
                 # one and get the corresponding slice of the first
                 value_tape_slice = (
                     self.routine_trans.value_tape.extend_and_slice(
-                        self.value_tape
+                        self.value_tape, do_loop
                     )
                 )
 
@@ -267,7 +275,7 @@ class ADReverseCallTrans(ADCallTrans):
                 # one and get the corresponding slice of the first
                 control_tape_slice = (
                     self.routine_trans.control_tape.extend_and_slice(
-                        self.control_tape
+                        self.control_tape, do_loop
                     )
                 )
 

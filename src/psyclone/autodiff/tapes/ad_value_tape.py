@@ -81,14 +81,18 @@ class ADValueTape(ADTape):
 
         super().__init__(name, datatype, is_dynamic_array)
 
-    def record(self, reference):
+    def record(self, reference, do_loop = False):
         """Add the reference as last element of the value_tape and return the \
         Assignment node to record the prevalue to the tape.
 
         :param reference: reference whose prevalue should be recorded.
         :type reference: :py:class:`psyclone.psyir.nodes.Reference`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if reference is of the wrong type.
+        :raises TypeError: if do_loop is of the wrong type.
         :raises TypeError: if the intrinsic of reference's datatype is not the \
                            same as the intrinsic of the value_tape's elements \
                            datatype.
@@ -116,7 +120,13 @@ class ADValueTape(ADTape):
                 f"{scalar_type.intrinsic}."
             )
 
-        value_tape_ref = super().record(reference)
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
+
+        value_tape_ref = super().record(reference, do_loop)
 
         if (isinstance(reference, ArrayReference)
             or isinstance(reference.datatype, ScalarType)):
@@ -142,7 +152,7 @@ class ADValueTape(ADTape):
 
         return assignment
 
-    def restore(self, reference):
+    def restore(self, reference, do_loop = False):
         """Restore the last element of the value_tape if it is the symbol \
         argument and return the Assignment node to restore the prevalue to the \
         variable.
@@ -150,8 +160,12 @@ class ADValueTape(ADTape):
         :param reference: reference whose prevalue should be restored from the \
                           value_tape.
         :type reference: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
 
         :raises TypeError: if reference is of the wrong type.
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: an Assignment node for restoring the prevalue of the reference\
                  from the last element of the value_tape.
@@ -166,7 +180,13 @@ class ADValueTape(ADTape):
                 f"'{type(reference).__name__}'."
             )
 
-        value_tape_ref = super().restore(reference)
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
+
+        value_tape_ref = super().restore(reference, do_loop)
 
         if (isinstance(reference, ArrayReference)
             or isinstance(reference.datatype, ScalarType)):
