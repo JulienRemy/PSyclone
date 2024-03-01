@@ -58,16 +58,12 @@ class ADTape(object, metaclass=ABCMeta):
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
-    :param use_offsets: whether to use offsets or not. Depends whether loops \
-                        are used or not. Optional, defaults to False.
-    :type use_offsets: Optional[bool]
     :param is_dynamic_array: whether to make the Fortran array dynamic \
                              (allocatable) or not. Optional, defaults to False.
     :type is_dynamic_array: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
-    :raises TypeError: if use_offsets is of the wrong type.
     :raises TypeError: if is_dynamic_array is of the wrong type.
     """
     # pylint: disable=useless-object-inheritance
@@ -76,8 +72,7 @@ class ADTape(object, metaclass=ABCMeta):
     _node_types = (Node,)
     _tape_prefix = ""
 
-    def __init__(self, name, datatype, use_offsets = False,
-                 is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array = False):
         if not isinstance(name, str):
             raise TypeError(
                 f"'name' argument should be of type "
@@ -88,11 +83,6 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'datatype' argument should be of type "
                 f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
-            )
-        if not isinstance(use_offsets, bool):
-            raise TypeError(
-                f"'use_offsets' argument should be of type "
-                f"'bool' but found '{type(use_offsets).__name__}'."
             )
         if not isinstance(is_dynamic_array, bool):
             raise TypeError(
@@ -116,15 +106,11 @@ class ADTape(object, metaclass=ABCMeta):
         # Symbols of the tape
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
 
-        # If offsets are to be used (ie loops are present), define the symbols, 
-        # else use None
-        if use_offsets:
-            self.do_offset_symbol = DataSymbol(self._tape_prefix
-                                                    + name
-                                                    + "_offset",
-                                               datatype=INTEGER_TYPE)
-        else:
-            self.do_offset_symbol = None
+        # Symbol of the do loop offset
+        self.do_offset_symbol = DataSymbol(self._tape_prefix
+                                                + name
+                                                + "_offset",
+                                            datatype=INTEGER_TYPE)
 
         # Internal list of recorded nodes
         self._recorded_nodes = []
@@ -263,35 +249,33 @@ class ADTape(object, metaclass=ABCMeta):
 
     @property
     def do_offset_symbol(self):
-        """Loop index offset PSyIR DataSymbol or None if it is not needed. 
+        """Loop index offset PSyIR DataSymbol. 
         Used for indexing in the tape array **inside** a do loop, \
         depending on the value of the loop variable itself.
 
         :return: index offset DataSymbol for indexing within a loop.
-        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
-                      NoneType]
+        :rtype: :py:class:`psyclone.psyir.symbols.DataSymbol`
         """
         return self._do_offset_symbol
 
     @do_offset_symbol.setter
     def do_offset_symbol(self, do_offset_symbol):
-        if not isinstance(do_offset_symbol, (DataSymbol, NoneType)):
+        if not isinstance(do_offset_symbol, DataSymbol):
             raise TypeError(
                 f"'do_offset_symbol' argument should be of type "
-                f"'DataSymbol' or 'NoneType' but found "
+                f"'DataSymbol' but found "
                 f"'{type(do_offset_symbol).__name__}'."
             )
         self._do_offset_symbol = do_offset_symbol
 
     @property
     def do_offset(self):
-        """Loop index offset PSyIR DataSymbol or None if it is not needed. 
+        """Loop index offset PSyIR Reference. 
         Used for indexing in the tape array **inside** a do loop, \
         depending on the value of the loop variable itself.
 
         :return: index offset DataSymbol for indexing within a loop.
-        :rtype: Union[:py:class:`psyclone.psyir.symbols.Reference`,
-                      NoneType]
+        :rtype: :py:class:`psyclone.psyir.symbols.Reference`
         """
         return Reference(self.do_offset_symbol)
 

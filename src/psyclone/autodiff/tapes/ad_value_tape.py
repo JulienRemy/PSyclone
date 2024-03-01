@@ -58,9 +58,6 @@ class ADValueTape(ADTape):
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`.
-    :param use_offsets: whether to use offsets or not. Depends whether loops \
-                        are used or not. Optional, defaults to False.
-    :type use_offsets: Optional[bool]
     :param is_dynamic_array: whether to make the Fortran array dynamic \
                              (allocatable) or not. Optional, defaults to False.
     :type is_dynamic_array: Optional[bool]
@@ -74,8 +71,7 @@ class ADValueTape(ADTape):
     _node_types = (Reference,)
     _tape_prefix = "value_tape_"
 
-    def __init__(self, name, datatype, use_offsets = False,
-                 is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array = False):
         if not isinstance(datatype, (ScalarType)):
             raise TypeError(
                 f"'datatype' argument should be of type "
@@ -83,7 +79,7 @@ class ADValueTape(ADTape):
                 f"'{type(datatype).__name__}'."
             )
 
-        super().__init__(name, datatype, use_offsets, is_dynamic_array)
+        super().__init__(name, datatype, is_dynamic_array)
 
     def record(self, reference):
         """Add the reference as last element of the value_tape and return the \
