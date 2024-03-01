@@ -69,16 +69,20 @@ class ADControlTape(ADTape):
     :type object: str
     :param datatype: datatype of the elements of the control tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
+    :param is_dynamic_array: whether to make the Fortran array dynamic \
+                             (allocatable) or not. Optional, defaults to False.
+    :type is_dynamic_array: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
     :raises TypeError: if datatype's intrinsic is not BOOLEAN.
+    :raises TypeError: if is_boolean_array is of the wrong type.
     """
 
     _node_types = (Reference, Operation, Literal)
     _tape_prefix = "ctrl_tape_"
 
-    def __init__(self, name, datatype):
+    def __init__(self, name, datatype, is_dynamic_array = False):
         # if not isinstance(name, str):
         #    raise TypeError(f"'name' argument should be of type "
         #                    f"'str' but found '{type(name).__name__}'.")
@@ -95,7 +99,7 @@ class ADControlTape(ADTape):
                 f"'{datatype}' instead."
             )
 
-        super().__init__(name, datatype)
+        super().__init__(name, datatype, is_dynamic_array)
 
     def record(self, node):
         """Add the boolean reference or operation result as last element of \

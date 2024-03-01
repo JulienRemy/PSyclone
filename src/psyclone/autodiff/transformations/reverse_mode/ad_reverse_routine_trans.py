@@ -591,12 +591,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.add_calls_to_reversing(options)
 
         # Add the value_tape as argument of both routines iff it's actually used
-        # and also ALLOCATE and DEALLOCATE it in the reversing routine
+        # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
+        # a dynamic array
         if len(self.value_tape.recorded_nodes) != 0:
             self.add_tape_argument(self.value_tape, options)
 
         # Add the control_tape as argument of both routines iff it's actually
-        # used and also ALLOCATE and DEALLOCATEit in the reversing routine
+        # used
+        # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
+        # a dynamic array
         if self.control_tape is not None:
             self.add_tape_argument(self.control_tape, options)
 
@@ -1234,11 +1237,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # The tape is not an argument of the reversing routine
 
         # Also add ALLOCATE statements using the tape length at the beginning
-        # of the reversing routine
-        allocate = tape.allocate(tape.length)
-        self.reversing.addchild(allocate, 0)
-        deallocate = tape.deallocate()
-        self.reversing.addchild(deallocate, len(self.reversing.children))
+        # of the reversing routine if it's a dynamic array
+        if tape.is_dynamic_array:
+            allocate = tape.allocate(tape.length)
+            self.reversing.addchild(allocate, 0)
+            deallocate = tape.deallocate()
+            self.reversing.addchild(deallocate, len(self.reversing.children))
 
 
     def add_calls_to_reversing(self, options=None):

@@ -57,9 +57,13 @@ class ADTape(object, metaclass=ABCMeta):
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
+    :param is_dynamic_array: whether to make the Fortran array dynamic \
+                             (allocatable) or not. Optional, defaults to False.
+    :type is_dynamic_array: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
+    :raises TypeError: if is_boolean_array is of the wrong type.
     """
     # pylint: disable=useless-object-inheritance
 
@@ -67,7 +71,7 @@ class ADTape(object, metaclass=ABCMeta):
     _node_types = (Node,)
     _tape_prefix = ""
 
-    def __init__(self, name, datatype):
+    def __init__(self, name, datatype, is_dynamic_array = False):
         if not isinstance(name, str):
             raise TypeError(
                 f"'name' argument should be of type "
@@ -79,12 +83,24 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
             )
+        if not isinstance(is_dynamic_array, bool):
+            raise TypeError(
+                f"'is_dynamic_array' argument should be of type "
+                f"'bool' but found '{type(is_dynamic_array).__name__}'."
+            )
 
         # PSyIR datatype of the elements in this tape
         self.datatype = datatype
 
-        # Type of the value_tape, shape will be modified as needed
-        tape_type = ArrayType(datatype, [ArrayType.Extent.DEFERRED])#[0])
+        # Whether to make this tape a dynamic (allocatable) array or not
+        self.is_dynamic_array = is_dynamic_array
+
+        # Type of the value_tape
+        if is_dynamic_array:
+            tape_type = ArrayType(datatype, [ArrayType.Extent.DEFERRED])
+        else:
+            # is a static array, shape will me modified on the go as needed
+            tape_type = ArrayType(datatype, [0])
 
         # Symbol of the value_tape
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
@@ -119,6 +135,24 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(datatype).__name__}'."
             )
         self._datatype = datatype
+
+    @property
+    def is_dynamic_array(self):
+        """Whether this array is dynamic (ArrayType.Extent.DEFERRED) or static.
+
+        :return: boolean specifying whether the array is dynamic or not.
+        :rtype: bool
+        """
+        return self._is_dynamic_array
+
+    @is_dynamic_array.setter
+    def is_dynamic_array(self, is_dynamic_array):
+        if not isinstance(is_dynamic_array, bool):
+            raise TypeError(
+                f"'is_dynamic_array' argument should be of type "
+                f"'bool' but found '{type(is_dynamic_array).__name__}'."
+            )
+        self._is_dynamic_array = is_dynamic_array
 
     @property
     def symbol(self):
@@ -201,7 +235,7 @@ class ADTape(object, metaclass=ABCMeta):
                       NoneType]
         """
         return Reference(self.offset_symbol)
-    
+
     @property
     def do_offset_symbol(self):
         """Loop index offset PSyIR DataSymbol or None if it is not needed. 
@@ -628,14 +662,18 @@ class ADTape(object, metaclass=ABCMeta):
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
             self.recorded_nodes.append(node)
-            # self.reshape()
+            # If static array, reshape to take the new length into account
+            if not self.is_dynamic_array:
+                self.reshape()
             # This is the Fortran index, starting at 1
             tape_ref = ArrayReference.create(self.symbol, [self.length])
 
         # Nodes of ArrayType correspond to a range
         else:
             self.recorded_nodes.append(node)
-            # self.reshape()
+            # If static array, reshape to take the new length into account
+            if not self.is_dynamic_array:
+                self.reshape()
             tape_range = Range.create(self.first_index_of_last_element.copy(),
                                       self.length.copy())
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
@@ -676,11 +714,11 @@ class ADTape(object, metaclass=ABCMeta):
 
         return tape_ref
 
-    # def reshape(self):
-    #     """Change the static length of the tape array in its datatype.
-    #     """
-    #     value_tape_type = ArrayType(self.datatype, [self.length])
-    #     self.symbol.datatype = value_tape_type
+    def reshape(self):
+        """Change the static length of the tape array in its datatype.
+        """
+        value_tape_type = ArrayType(self.datatype, [self.length])
+        self.symbol.datatype = value_tape_type
 
     def allocate(self, length):
         """Generates a PSyIR IntrinsicCall ALLOCATE node for the tape, with \
@@ -749,7 +787,9 @@ class ADTape(object, metaclass=ABCMeta):
 
         self.recorded_nodes.extend(tape.recorded_nodes)
 
-        # self.reshape()
+        # If static array, reshape to take the new length into account
+        if not self.is_dynamic_array:
+            self.reshape()
 
     def extend_and_slice(self, tape):
         """Extends the tape by the 'tape' argument and return \
