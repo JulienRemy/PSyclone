@@ -34,7 +34,7 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This module provides a Transformation for reverse-mode automatic 
-differentiation of PSyIR IfBlock nodes."""
+differentiation of PSyIR Assignment nodes."""
 
 from psyclone.psyir.nodes import Assignment, Call, ArrayReference, IfBlock
 from psyclone.psyir.transformations import TransformationError

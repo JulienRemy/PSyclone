@@ -587,9 +587,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # the returning routine
         self.add_differentials_zero_assignments(self. returning, options)
 
-        # Combine the calls to recording and returning in reversing
-        self.add_calls_to_reversing(options)
-
         # Add the value_tape as argument of both routines iff it's actually used
         # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
         # a dynamic array
@@ -602,6 +599,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # a dynamic array
         if self.control_tape is not None:
             self.add_tape_argument(self.control_tape, options)
+
+        # Combine the calls to recording and returning in reversing
+        self.add_calls_to_reversing(options)
 
         # Add the three routines to the container
         for transformed in self.transformed:

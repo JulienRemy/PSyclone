@@ -45,6 +45,7 @@ from psyclone.psyir.nodes import (ArrayReference, Literal, Node, Range,
                                   IntrinsicCall)
 from psyclone.psyir.symbols import (DataSymbol, INTEGER_TYPE, ScalarType,
                                     ArrayType)
+from psyclone.autodiff import one, zero
 
 
 class ADTape(object, metaclass=ABCMeta):
@@ -57,13 +58,17 @@ class ADTape(object, metaclass=ABCMeta):
     :type object: str
     :param datatype: datatype of the elements of the value_tape.
     :type datatype: :py:class:`psyclone.psyir.symbols.ScalarType`
+    :param use_offsets: whether to use offsets or not. Depends whether loops \
+                        are used or not. Optional, defaults to False.
+    :type use_offsets: Optional[bool]
     :param is_dynamic_array: whether to make the Fortran array dynamic \
                              (allocatable) or not. Optional, defaults to False.
     :type is_dynamic_array: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
-    :raises TypeError: if is_boolean_array is of the wrong type.
+    :raises TypeError: if use_offsets is of the wrong type.
+    :raises TypeError: if is_dynamic_array is of the wrong type.
     """
     # pylint: disable=useless-object-inheritance
 
@@ -71,7 +76,8 @@ class ADTape(object, metaclass=ABCMeta):
     _node_types = (Node,)
     _tape_prefix = ""
 
-    def __init__(self, name, datatype, is_dynamic_array = False):
+    def __init__(self, name, datatype, use_offsets = False,
+                 is_dynamic_array = False):
         if not isinstance(name, str):
             raise TypeError(
                 f"'name' argument should be of type "
@@ -82,6 +88,11 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'datatype' argument should be of type "
                 f"'ScalarType' but found "
                 f"'{type(datatype).__name__}'."
+            )
+        if not isinstance(use_offsets, bool):
+            raise TypeError(
+                f"'use_offsets' argument should be of type "
+                f"'bool' but found '{type(use_offsets).__name__}'."
             )
         if not isinstance(is_dynamic_array, bool):
             raise TypeError(
@@ -102,8 +113,18 @@ class ADTape(object, metaclass=ABCMeta):
             # is a static array, shape will me modified on the go as needed
             tape_type = ArrayType(datatype, [0])
 
-        # Symbol of the value_tape
+        # Symbols of the tape
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
+
+        # If offsets are to be used (ie loops are present), define the symbols, 
+        # else use None
+        if use_offsets:
+            self.do_offset_symbol = DataSymbol(self._tape_prefix
+                                                    + name
+                                                    + "_offset",
+                                               datatype=INTEGER_TYPE)
+        else:
+            self.do_offset_symbol = None
 
         # Internal list of recorded nodes
         self._recorded_nodes = []
@@ -188,53 +209,57 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'name' argument should be of type "
                 f"'str' but found '{type(name).__name__}'."
             )
-        tape_type = ArrayType(self.datatype, [self.length])
+        tape_type = ArrayType(self.datatype, [self.length()])
         self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
 
     @property
     def recorded_nodes(self):
-        """List of recorded PSyIR nodes.
+        """List of recorded PSyIR nodes with their multiplicities (to take \
+        loop iterations into accounts).
 
-        :return: list of nodes.
-        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        :return: list of 2 elements lists of nodes and multiplicities.
+        :rtype: List[List[:py:class:`psyclone.psyir.nodes.Node`], \
+                         Union[:py:class:`psyclone.psyir.nodes.Literal`, \
+                               :py:class:`psyclone.psyir.nodes.Reference`, \
+                               :py:class:`psyclone.psyir.nodes.BinaryOperation`]
         """
         return self._recorded_nodes
 
-    @property
-    def offset_symbol(self):
-        """Index offset PSyIR DataSymbol or None if it is not needed. 
-        Used for indexing into the tape when loops are present.
-        This is used to offset array indices by a run-time dependent number, \
-        which depends on loops iterations.
-
-        :return: index offset DataSymbol for indexing into the tape.
-        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
-                      NoneType]
-        """
-        return self._offset_symbol
-
-    @offset_symbol.setter
-    def offset_symbol(self, offset_symbol):
-        if not isinstance(offset_symbol, (DataSymbol, NoneType)):
-            raise TypeError(
-                f"'offset_symbol' argument should be of type "
-                f"'DataSymbol' or 'NoneType' but found "
-                f"'{type(offset_symbol).__name__}'."
-            )
-        self._offset_symbol = offset_symbol
-
-    @property
-    def offset(self):
-        """Index offset PSyIR Reference or None if it is not needed. 
-        Used for indexing into the tape when loops are present.
-        This is used to offset array indices by a run-time dependent number, \
-        which depends on loops iterations.
-
-        :return: fresh index offset Reference for indexing into the tape.
-        :rtype: Union[:py:class:`psyclone.psyir.nodes.Reference`,
-                      NoneType]
-        """
-        return Reference(self.offset_symbol)
+#    @property
+#    def offset_symbol(self):
+#        """Index offset PSyIR DataSymbol or None if it is not needed. 
+#        Used for indexing into the tape when loops are present.
+#        This is used to offset array indices by a run-time dependent number, \
+#        which depends on loops iterations.
+#
+#        :return: index offset DataSymbol for indexing into the tape.
+#        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+#                      NoneType]
+#        """
+#        return self._offset_symbol
+#
+#    @offset_symbol.setter
+#    def offset_symbol(self, offset_symbol):
+#        if not isinstance(offset_symbol, (DataSymbol, NoneType)):
+#            raise TypeError(
+#                f"'offset_symbol' argument should be of type "
+#                f"'DataSymbol' or 'NoneType' but found "
+#                f"'{type(offset_symbol).__name__}'."
+#            )
+#        self._offset_symbol = offset_symbol
+#
+#    @property
+#    def offset(self):
+#        """Index offset PSyIR Reference or None if it is not needed. 
+#        Used for indexing into the tape when loops are present.
+#        This is used to offset array indices by a run-time dependent number, \
+#        which depends on loops iterations.
+#
+#        :return: fresh index offset Reference for indexing into the tape.
+#        :rtype: Union[:py:class:`psyclone.psyir.nodes.Reference`,
+#                      NoneType]
+#        """
+#        return Reference(self.offset_symbol)
 
     @property
     def do_offset_symbol(self):
@@ -265,7 +290,7 @@ class ADTape(object, metaclass=ABCMeta):
         depending on the value of the loop variable itself.
 
         :return: index offset DataSymbol for indexing within a loop.
-        :rtype: Union[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+        :rtype: Union[:py:class:`psyclone.psyir.symbols.Reference`,
                       NoneType]
         """
         return Reference(self.do_offset_symbol)
@@ -383,7 +408,7 @@ class ADTape(object, metaclass=ABCMeta):
         if int_sum.value != "0":
             other_datanodes.append(int_sum)
 
-        result = Literal("0", INTEGER_TYPE)
+        result = zero()
         if len(other_datanodes) != 0:
             result = other_datanodes[0]
             if len(other_datanodes) > 1:
@@ -417,14 +442,14 @@ class ADTape(object, metaclass=ABCMeta):
         lhs_int_sum = self._add_int_literals(lhs_int_literals)
         rhs_int_sum = self._add_int_literals(rhs_int_literals)
 
-        int_literal = Literal(str(int(lhs_int_sum.value) 
+        int_literal = Literal(str(int(lhs_int_sum.value)
                                   - int(rhs_int_sum.value)),
                               INTEGER_TYPE)
 
         if int_literal.value != "0":
             lhs_others.append(int_literal)
 
-        result = Literal("0", INTEGER_TYPE)
+        result = zero()
         if len(lhs_others) != 0:
             result = lhs_others[0]
             if len(lhs_others) > 1:
@@ -485,7 +510,7 @@ class ADTape(object, metaclass=ABCMeta):
         if int_mul.value != "1":
             other_datanodes.append(int_mul)
 
-        result = Literal("1", INTEGER_TYPE)
+        result = one()
         if len(other_datanodes) != 0:
             result = other_datanodes[0]
             if len(other_datanodes) > 1:
@@ -497,41 +522,76 @@ class ADTape(object, metaclass=ABCMeta):
 
         return result
 
-    @property
-    def length(self):
+    def length(self, do_loop = False):
         """Length of the tape (Fortran) array, which is the sum of the sizes \
-        of its elements.
+        of its elements times their respective multiplicities.
+        If currently in a do loop, adds the do loop offset based on the loop \
+        variable.
+
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
+
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: length of the tape, as a Literal or sum (BinaryOperation).
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`, \
                       :py:class:`psyclone.psyir.nodes.BinaryOperation`]
         """
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
 
         lengths = []
-        for node in self.recorded_nodes:
+        for node, multiplicity in self.recorded_nodes:
             if isinstance(node.datatype, ScalarType):
-                lengths.append(Literal("1", INTEGER_TYPE))
+                lengths.append(multiplicity)
             else:
-                lengths.append(self._array_size(node))
+                lengths.append(self._multiply_datanodes([self._array_size(node),
+                                                         multiplicity]))
+
+        # Within a do loop, indexing in the tape array uses the do offset
+        # variable, which depends on the loop index. Add it if necessary.
+        if do_loop:
+            lengths.append(self.do_offset)
 
         return self._add_datanodes(lengths)
 
-    @property
-    def first_index_of_last_element(self):
+    def first_index_of_last_element(self, do_loop = False):
         """Gives the first index of the last element that was recorded.
+
+        :param do_loop: whether currently transforming a do loop. \
+                        Optional, defaults to False.
+        :type do_loop: Optional[bool]
+
+        :raises TypeError: if do_loop is of the wrong type.
 
         :return: Literal or BinaryOperation giving the index.
         :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`,
                       :py:class:`psyclone.psyir.nodes.BinaryOperation`]
         """
-        lengths = []
-        for node in self.recorded_nodes[:-1]:
-            if isinstance(node.datatype, ScalarType):
-                lengths.append(Literal("1", INTEGER_TYPE))
-            else:
-                lengths.append(self._array_size(node))
+        if not isinstance(do_loop, bool):
+            raise TypeError(
+                f"'bool' argument should be of type "
+                f"'bool' but found '{type(do_loop).__name__}'."
+            )
 
-        lengths.append(Literal("1", INTEGER_TYPE))
+        lengths = []
+        for node, multiplicity in self.recorded_nodes[:-1]:
+            if isinstance(node.datatype, ScalarType):
+                lengths.append(multiplicity)
+            else:
+                lengths.append(self._multiply_datanodes([self._array_size(node),
+                                                         multiplicity]))
+
+        # Within a do loop, indexing in the tape array uses the do offset
+        # variable, which depends on the loop index. Add it if necessary.
+        if do_loop:
+            lengths.append(self.do_offset)
+
+        lengths.append(one())
 
         return self._add_datanodes(lengths)
 
@@ -596,7 +656,7 @@ class ADTape(object, metaclass=ABCMeta):
         for dim, shape in enumerate(array.datatype.shape):
             # For array bounds, compute upper + 1 - lower
             if isinstance(shape, ArrayType.ArrayBounds):
-                plus = [shape.upper, Literal("1", INTEGER_TYPE)]
+                plus = [shape.upper, one()]
                 minus = [shape.lower]
                 dimensions.append(self._substract_datanodes(plus, minus))
             else:
@@ -631,7 +691,7 @@ class ADTape(object, metaclass=ABCMeta):
                 f"{self.node_type_names} but found "
                 f"'{type(node).__name__}'."
             )
-        if self.recorded_nodes[-1] != node:
+        if self.recorded_nodes[-1][0] != node:
             raise ValueError(
                 f"node argument named {node.name} was not "
                 f"stored as last element of the value_tape."
@@ -661,21 +721,21 @@ class ADTape(object, metaclass=ABCMeta):
 
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
-            self.recorded_nodes.append(node)
+            self.recorded_nodes.append([node, one()])
             # If static array, reshape to take the new length into account
             if not self.is_dynamic_array:
                 self.reshape()
             # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(self.symbol, [self.length])
+            tape_ref = ArrayReference.create(self.symbol, [self.length()])
 
         # Nodes of ArrayType correspond to a range
         else:
-            self.recorded_nodes.append(node)
+            self.recorded_nodes.append([node, one()])
             # If static array, reshape to take the new length into account
             if not self.is_dynamic_array:
                 self.reshape()
-            tape_range = Range.create(self.first_index_of_last_element.copy(),
-                                      self.length.copy())
+            tape_range = Range.create(self.first_index_of_last_element(),
+                                      self.length())
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
@@ -704,12 +764,12 @@ class ADTape(object, metaclass=ABCMeta):
         # Nodes of ScalarType correspond to one index of the tape
         if isinstance(node.datatype, ScalarType):
             # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(self.symbol, [self.length])
+            tape_ref = ArrayReference.create(self.symbol, [self.length()])
 
         # Nodes of ArrayType correspond to a range
         else:
-            tape_range = Range.create(self.first_index_of_last_element,
-                                      self.length)
+            tape_range = Range.create(self.first_index_of_last_element(),
+                                      self.length())
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
         return tape_ref
@@ -717,7 +777,7 @@ class ADTape(object, metaclass=ABCMeta):
     def reshape(self):
         """Change the static length of the tape array in its datatype.
         """
-        value_tape_type = ArrayType(self.datatype, [self.length])
+        value_tape_type = ArrayType(self.datatype, [self.length()])
         self.symbol.datatype = value_tape_type
 
     def allocate(self, length):
@@ -742,8 +802,8 @@ class ADTape(object, metaclass=ABCMeta):
             )
         if isinstance(length, int):
             length = Literal(str(length), INTEGER_TYPE)
-        elif (isinstance(length, Literal) and 
-              (not isinstance(length.datatype, ScalarType) 
+        elif (isinstance(length, Literal) and
+              (not isinstance(length.datatype, ScalarType)
                or length.datatype.intrinsic is not INTEGER_TYPE.intrinsic)):
             raise ValueError(f"'length' argument is a 'Literal' but either its "
                              f"datatype is not 'ScalarType' or it is not an "
@@ -820,13 +880,72 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{tape.datatype}'."
             )
         # First index of the slice corresponding to the "new" tape
-        first_index = self._add_datanodes([self.length,
-                                           Literal("1", INTEGER_TYPE)])
+        first_index = self._add_datanodes([self.length(),
+                                           one()])
         # Extend the parent value_tape with the new value_tape
         self.extend(tape)
         # Last index of the slice
-        last_index = self.length
+        last_index = self.length()
         # Slice of the parent value_tape
         value_tape_range = Range.create(first_index, last_index)
 
         return ArrayReference.create(self.symbol, [value_tape_range])
+
+    def change_last_nodes_multiplicity(self, nodes, multiplicity):
+        """Change the multiplicity of the last recorded nodes, which should \
+        match the ones in 'nodes'.
+        Used after transforming a loop so that the tape offset is correct \
+        based on the number of iterations that were performed.
+
+        :param nodes: list of nodes whose multiplicities should be changed.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.Node`]
+        :param multiplicity: new multiplicity to be used, as a PSyIR node.
+        :type multiplicity: Union[:py:class:`psyclone.psyir.nodes.Literal`,\
+                               :py:class:`psyclone.psyir.nodes.Reference`,\
+                               :py:class:`psyclone.psyir.nodes.BinaryOperation`]
+
+        :raises TypeError: if nodes is of the wrong type.
+        :raises TypeError: if an element of nodes is of the wrong type.
+        :raises TypeError: if multiplicity is of the wrong type.
+        :raises ValueError: if a recorded node doesn't match the corresponding \
+                            one in 'nodes'.
+        :raises ValueError: if the recorded node already has multiplicity \
+                            different from 1.
+        """
+        if not isinstance(nodes, list):
+            raise TypeError(
+                f"'nodes' argument should be of type "
+                f"'list[Node]' but found '{type(nodes).__name__}'."
+            )
+        for node in nodes:
+            if not isinstance(node, Node):
+                raise TypeError(
+                    f"'nodes' argument should be of type "
+                    f"'list[Node]' but found an element of type "
+                    f"'{type(node).__name__}'."
+                )
+        if not isinstance(multiplicity, (Literal, Reference, BinaryOperation)):
+            raise TypeError(
+                f"'multiplicity' argument should be of type "
+                f"'Literal', 'Reference' or 'Binary Operation' but found "
+                f"'{type(multiplicity).__name__}'."
+            )
+
+        # Go through both the recorded nodes (end of the tape) and the nodes to
+        # edit, check they match, check the recorded nones don't have
+        # multiplicities different than 1 already, then update the multiplicity
+        for index, ((recorded_node, recorded_multiplicity),
+                    (node)) in enumerate(zip(self.recorded_nodes[-len(nodes):],
+                                             nodes)):
+            if recorded_node != node:
+                raise ValueError(
+                    f"'nodes' list contains a different node at index {index} "
+                    f"than the one recorded in the tape."
+                )
+            if recorded_multiplicity != one():
+                raise ValueError(
+                    f"The recorded node in the tape corresponding to the one "
+                    f"at index {index} in the 'nodes' list already has "
+                    f"multiplicity different from one."
+                )
+            self.recorded_nodes[-len(nodes) + index][1] = multiplicity
