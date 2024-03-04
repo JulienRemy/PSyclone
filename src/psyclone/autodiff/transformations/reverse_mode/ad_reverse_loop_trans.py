@@ -41,6 +41,8 @@ from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
 
+from psyclone.autodiff import sub, mul, assign, div, add, minus
+
 
 class ADReverseLoopTrans(ADLoopTrans):
     """A class for automatic differentation transformations of Loop \
@@ -61,10 +63,27 @@ class ADReverseLoopTrans(ADLoopTrans):
         :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if loop is of the wrong type.
+        :raises NotImplementedError: if the loop contains assignments to the
+                                     loop variable, stop or step bound.
         """
         # pylint: disable=arguments-renamed
 
         super().validate(loop, options)
+
+        for assignment in loop.loop_body.walk(Assignment):
+            if assignment.lhs.symbol == loop.variable:
+                raise NotImplementedError("Loops that modify their iteration "
+                                          "variable are not implemented yet.")
+            if (isinstance(loop.stop_expr, Reference)
+                and (assignment.lhs.symbol == loop.stop_expr.symbol)):
+                raise NotImplementedError("Loops that modify their stop "
+                                          "variable are not implemented yet.")
+            if (isinstance(loop.step_expr, Reference)
+                and (assignment.lhs.symbol == loop.step_expr.symbol)):
+                raise NotImplementedError("Loops that modify their step "
+                                          "variable are not implemented yet.")
+            # TODO: this should also consider bounds that are Call or Operation
+            # on modified variables, etc...
 
     def apply(self, loop, options=None):
         """Applies the transformation, generating the recording and returning \
@@ -96,28 +115,24 @@ class ADReverseLoopTrans(ADLoopTrans):
         # pylint: disable=arguments-renamed
         self.validate(loop, options)
 
+        # Get the current length of the tapes
+        # (before transforming the loop body)
+        value_tape_length = self.routine_trans.value_tape.length()
+        control_tape_length = self.routine_trans.control_tape.length()
+
         # Transform the statements found in the for loop body (Schedule)
+        # This creates tape record/restore statements and extends the tapes
         recording_body, returning_body = self.transform_children(loop, options)
 
-        # Get the loop start, stop and step reversed
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        # TODO: this is wrong, simply to check basic transfo features
-        #       reverse the bounds
-        # rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
-        rev_start, rev_stop, rev_step = (loop.start_expr.copy(),
-                                         loop.stop_expr.copy(),
-                                         loop.step_expr.copy())
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        
+        # Get the number of tape records/restores performed in a single loop
+        # iteration (by substraction)
+        value_tape_records = sub(self.routine_trans.value_tape.length(),
+                                 value_tape_length)
+        control_tape_records = sub(self.routine_trans.control_tape.length(),
+                                 control_tape_length)
 
+        # Get the loop start, stop and step reversed
+        rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
 
         # Postprocess (simplify, substitute operation adjoints) the returning
         # routine
@@ -129,32 +144,84 @@ class ADReverseLoopTrans(ADLoopTrans):
                                      loop.step_expr.copy(),
                                      recording_body)
 
-        returning_loop = Loop.create(loop.variable, ########## use a different one !
+        returning_loop = Loop.create(loop.variable, # Use same var or different one ?
                                      rev_start,
                                      rev_stop,
                                      rev_step,
                                      returning_body)
-        
+
         ##################
         # TODO
-        # Need to count n = the records on each tape for one iteration
-        # Need to assign the right value to the tape do_offset using the loop
-        # var and n
         # Should not tape undef values at first iteration
-        
+
         # If the do_offset symbol of a tape was used in the bodies,
         # it needs to be defined at the beginning of each iteration (in both)
-        # for ref in recording_loop.loop_body.walk(Reference):
-        #     if ref.symbol == self.routine_trans.value_tape:
-        #         # do_offset = n * (i - start)/step
-        #         var_minus_start = sub(loop.variable, loop.start_expr)
-        #         value_tape_def = assign()
-        #         recording_loop.loop_body.addchild(value_tape_def, 0)
-        #         ##################################
-        #         # returning_loop 
-        #         ##################################
+        # value/ctrl_do_offset = n_value/ctrl * (i - start)/step
+        # This is common to both tapes:
+        substraction = sub(loop.variable, loop.start_expr)
+        division = div(substraction, loop.step_expr)
+
+        # Value tape offset definition
+        for ref in recording_loop.loop_body.walk(Reference):
+            if ref.symbol == self.routine_trans.value_tape.symbol:
+                product = mul(value_tape_records, division)
+                symbol = self.routine_trans.value_tape.do_offset_symbol
+                value_tape_def = assign(symbol, product)
+                recording_loop.loop_body.addchild(value_tape_def, 0)
+                returning_loop.loop_body.addchild(value_tape_def.copy(), 0)
+                # Only add it once
+                break
+
+        # Control tape offset definition
+        for ref in recording_loop.loop_body.walk(Reference):
+            if ref.symbol == self.routine_trans.control_tape.symbol:
+                product = mul(control_tape_records, division)
+                symbol = self.routine_trans.value_tape.do_offset_symbol
+                control_tape_def = assign(symbol, product)
+                recording_loop.loop_body.addchild(control_tape_def, 0)
+                returning_loop.loop_body.addchild(control_tape_def.copy(), 0)
+                # Only add it once
+                break
+
+        # verbose option adds comments to the returning do loop
+        # specifying the original loop bounds
+        verbose = self.unpack_option("verbose", options)
+
+        if verbose:
+            from psyclone.psyir.backend.fortran import FortranWriter
+
+            fwriter = FortranWriter()
+            start = fwriter(loop.start_expr)
+            stop = fwriter(loop.stop_expr)
+            step = fwriter(loop.step_expr)
+            verbose_comment = f"Reversing do loop 'do {loop.variable.name} " + \
+                              f"= {start}, {stop}, {step}'"
+            returning_loop.preceding_comment = verbose_comment
 
         return recording_loop, returning_loop
+
+    def reverse_bounds(self, loop, options=None):
+        """Reverses the start, stop and step values for the returning loop.
+
+        :param loop: node to be transformed.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :return: start, stop and step PSyIR node expressions, reversed.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        # Last loop iteration is step*((stop - start)/step) + start
+        # (using integer division, could use MOD otherwise)
+        substraction = sub(loop.stop_expr, loop.start_expr)
+        division = div(substraction, loop.step_expr)
+        product = mul(loop.step_expr, division)
+        addition = add(product, loop.start_expr)
+        rev_start = addition
+        rev_stop = loop.start_expr.copy()
+        rev_step = minus(loop.step_expr.copy())
+        return rev_start, rev_stop, rev_step
 
     ############################################################################
     ############################################################################
