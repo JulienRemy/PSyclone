@@ -38,8 +38,10 @@ testing of PSyclone `autodiff`.
 """
 
 from enum import Enum
+from types import NoneType
 
-from psyclone.psyir.nodes import Routine, Literal, Call, Reference, DataNode
+from psyclone.psyir.nodes import (Routine, Literal, Call, Reference, DataNode,
+                                  Node, Loop, IfBlock)
 from psyclone.psyir.symbols import DataSymbol, DataType, REAL_TYPE
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 from psyclone.psyir.backend.fortran import FortranWriter
@@ -492,3 +494,126 @@ class SubroutineGenerator(object):
         self.subroutine.addchild(call)
         return call
 
+    def new_if_block(self, if_condition, if_body, else_body = None):
+        """Create a new IfBlock node in the subroutine being generated.
+
+        :param if_condition: DataNode of the condition.
+        :type if_condition: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param if_body: list of Node for the if body.
+        :type if_body: List[:py:class:`psyclone.psyir.nodes.Node`]
+        :param else: list of Node for the else body. Optional, defaults to None.
+        :type else: Optional[Union[List[:py:class:`psyclone.psyir.nodes.Node`],
+                                   NoneType]]
+
+        :raises TypeError: if if_condition is of the wrong type.
+        :raises TypeError: if if_body is of the wrong type or one of its \
+                           elements is.
+        :raises TypeError: if else_body is of the wrong type or one of its \
+                           elements is.
+
+        :return: the IfBlock node.
+        :rtype: :py:class:`psyclone.psyir.nodes.IfBlock`
+        """
+        if not isinstance(if_condition, DataNode):
+            raise TypeError(
+                f"'if_condition' argument should be of type "
+                f"'DataNode' but found "
+                f"{type(if_condition).__name__}."
+            )
+        if not isinstance(if_body, list):
+            raise TypeError(
+                f"'if_body' argument should be of type "
+                f"'list[Node]' but found "
+                f"{type(if_body).__name__}."
+            )
+        for elem in if_body:
+            if not isinstance(elem, Node):
+                raise TypeError(
+                    f"'if_body' argument should be of type "
+                    f"'list[Node]' but found an element of type "
+                    f"{type(elem).__name__}."
+                )
+        if not isinstance(else_body, (list, NoneType)):
+            raise TypeError(
+                f"'else_body' argument should be of type "
+                f"'list[Node]' or 'NoneType' but found "
+                f"{type(else_body).__name__}."
+            )
+        if isinstance(else_body, list):
+            for elem in else_body:
+                if not isinstance(elem, Node):
+                    raise TypeError(
+                        f"'else_body' argument should be of type "
+                        f"'list[Node]' or 'NoneType' but found a list with "
+                        f"an element of type {type(elem).__name__}."
+                    )
+
+        if_block = IfBlock.create(if_condition, if_body, else_body)
+        self.subroutine.addchild(if_block)
+        return if_block
+
+    def new_loop(self, variable, start, stop, step, body):
+        """Create a new do Loop node in the subroutine being generated.
+
+        :param variable: DataSymbol of the loop variable.
+        :type variable: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param start: DataNode of the start value.
+        :type start: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param stop: DataNode of the stop value.
+        :type stop: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param step: DataNode of the step value.
+        :type step: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param body: list of nodes for the loop body.
+        :type body: List[:py:class:`psyclone.psyir.nodes.Node`]
+
+        :raises TypeError: if variable is of the wrong type.
+        :raises TypeError: if start is of the wrong type.
+        :raises TypeError: if stop is of the wrong type.
+        :raises TypeError: if step is of the wrong type.
+        :raises TypeError: if body is of the wrong type or one of its elements \
+                           is.
+
+        :return: the Loop node.
+        :rtype: :py:class:`psyclone.psyir.nodes.Loop`
+        """
+        if not isinstance(variable, DataSymbol):
+            raise TypeError(
+                f"'variable' argument should be of type "
+                f"'DataSymbol' but found "
+                f"{type(variable).__name__}."
+            )
+        if not isinstance(start, DataNode):
+            raise TypeError(
+                f"'start' argument should be of type "
+                f"'DataNode' but found "
+                f"{type(start).__name__}."
+            )
+        if not isinstance(stop, DataNode):
+            raise TypeError(
+                f"'stop' argument should be of type "
+                f"'DataNode' but found "
+                f"{type(stop).__name__}."
+            )
+        if not isinstance(step, DataNode):
+            raise TypeError(
+                f"'step' argument should be of type "
+                f"'DataNode' but found "
+                f"{type(step).__name__}."
+            )
+        if not isinstance(body, list):
+            raise TypeError(
+                f"'body' argument should be of type "
+                f"'list[Node]' but found "
+                f"{type(body).__name__}."
+            )
+        for elem in body:
+            if not isinstance(elem, Node):
+                raise TypeError(
+                    f"'body' argument should be of type "
+                    f"'list[Node]' but found an element of type "
+                    f"{type(elem).__name__}."
+                )
+
+        loop = Loop.create(variable, start, stop, step, body)
+        self.subroutine.addchild(loop)
+        return loop
