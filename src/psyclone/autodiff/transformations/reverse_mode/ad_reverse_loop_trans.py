@@ -36,7 +36,8 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Assignment nodes."""
 
-from psyclone.psyir.nodes import Assignment, Call, Reference, IfBlock, Loop
+from psyclone.psyir.nodes import (Assignment, Call, Reference, IfBlock, Loop, 
+                                  Operation)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
@@ -55,6 +56,8 @@ class ADReverseLoopTrans(ADLoopTrans):
 
     def validate(self, loop, options=None):
         """Validates the arguments of the `apply` method.
+        Checks that the loop variable, stop or step bounds are not modified
+        (by being LHS of assignments) in the loop body.
 
         :param loop: node to be transformed.
         :type loop: :py:class:`psyclone.psyir.nodes.Loop`
@@ -70,20 +73,36 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         super().validate(loop, options)
 
+        # Get all references in the stop and step bounds to check that they
+        # are not modified in the loop body
+        if (isinstance(loop.stop_expr, (Operation, Call))):
+            stop_refs = loop.stop_expr.walk(Reference)
+        elif isinstance(loop.stop_expr, Reference):
+            stop_refs = [loop.stop_expr]
+        else:
+            stop_refs = []
+        
+        if (isinstance(loop.step_expr, (Operation, Call))):
+            step_refs = loop.step_expr.walk(Reference)
+        elif isinstance(loop.step_expr, Reference):
+            step_refs = [loop.step_expr]
+        else:
+            step_refs = []
+
         for assignment in loop.loop_body.walk(Assignment):
             if assignment.lhs.symbol == loop.variable:
                 raise NotImplementedError("Loops that modify their iteration "
                                           "variable are not implemented yet.")
-            if (isinstance(loop.stop_expr, Reference)
-                and (assignment.lhs.symbol == loop.stop_expr.symbol)):
-                raise NotImplementedError("Loops that modify their stop "
-                                          "variable are not implemented yet.")
-            if (isinstance(loop.step_expr, Reference)
-                and (assignment.lhs.symbol == loop.step_expr.symbol)):
-                raise NotImplementedError("Loops that modify their step "
-                                          "variable are not implemented yet.")
-            # TODO: this should also consider bounds that are Call or Operation
-            # on modified variables, etc...
+            for ref in stop_refs:
+                if assignment.lhs.symbol == ref.symbol:
+                    raise NotImplementedError("Loops that modify their stop "
+                                              "bound are not implemented "
+                                              "yet.")
+            for ref in step_refs:
+                if assignment.lhs.symbol == ref.symbol:
+                    raise NotImplementedError("Loops that modify their step "
+                                              "bound are not implemented yet.")
+
 
     def apply(self, loop, options=None):
         """Applies the transformation, generating the recording and returning \
