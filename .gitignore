@@ -29,3 +29,4 @@ build
 .gitignore
 src/psyclone/tests/autodiff/numerical_test/outputs
 src/psyclone/autodiff/tutorials/TESTING FORWARD IF BLOCK.ipynb
+src/psyclone/autodiff/psyir/test.py
