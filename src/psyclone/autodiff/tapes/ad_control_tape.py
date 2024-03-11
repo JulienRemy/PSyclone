@@ -72,17 +72,22 @@ class ADControlTape(ADTape):
     :param is_dynamic_array: whether to make the Fortran array dynamic \
                              (allocatable) or not. Optional, defaults to False.
     :type is_dynamic_array: Optional[bool]
+    :param uses_offset: whether offset indexing or not. Optional, defaults to \
+                        False.
+    :type uses_offset: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
     :raises TypeError: if datatype's intrinsic is not BOOLEAN.
     :raises TypeError: if is_dynamic_array is of the wrong type.
+    :raises TypeError: if uses_offset is of the wrong type.
     """
 
     _node_types = (Reference, Operation, Literal)
     _tape_prefix = "ctrl_tape_"
 
-    def __init__(self, name, datatype, is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array = False,
+                 uses_offset = False):
         # if not isinstance(name, str):
         #    raise TypeError(f"'name' argument should be of type "
         #                    f"'str' but found '{type(name).__name__}'.")
@@ -99,7 +104,7 @@ class ADControlTape(ADTape):
                 f"'{datatype}' instead."
             )
 
-        super().__init__(name, datatype, is_dynamic_array)
+        super().__init__(name, datatype, is_dynamic_array, uses_offset)
 
     def record(self, node, do_loop = False):
         """Add the boolean reference or operation result as last element of \

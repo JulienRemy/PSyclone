@@ -61,17 +61,22 @@ class ADValueTape(ADTape):
     :param is_dynamic_array: whether to make the Fortran array dynamic \
                              (allocatable) or not. Optional, defaults to False.
     :type is_dynamic_array: Optional[bool]
+    :param uses_offset: whether offset indexing or not. Optional, defaults to \
+                        False.
+    :type uses_offset: Optional[bool]
 
     :raises TypeError: if name is of the wrong type.
     :raises TypeError: if datatype is of the wrong type.
     :raises TypeError: if use_offsets is of the wrong type.
     :raises TypeError: if is_dynamic_array is of the wrong type.
+    :raises TypeError: if uses_offset is of the wrong type.
     """
 
     _node_types = (Reference,)
     _tape_prefix = "value_tape_"
 
-    def __init__(self, name, datatype, is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array = False,
+                 uses_offset = False):
         if not isinstance(datatype, (ScalarType)):
             raise TypeError(
                 f"'datatype' argument should be of type "
@@ -79,7 +84,7 @@ class ADValueTape(ADTape):
                 f"'{type(datatype).__name__}'."
             )
 
-        super().__init__(name, datatype, is_dynamic_array)
+        super().__init__(name, datatype, is_dynamic_array, uses_offset)
 
     def record(self, reference, do_loop = False):
         """Add the reference as last element of the value_tape and return the \

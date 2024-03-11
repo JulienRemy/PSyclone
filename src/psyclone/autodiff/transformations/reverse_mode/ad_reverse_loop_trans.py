@@ -36,13 +36,13 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR Assignment nodes."""
 
-from psyclone.psyir.nodes import (Assignment, Call, Reference, IfBlock, Loop, 
+from psyclone.psyir.nodes import (Assignment, Call, Reference, IfBlock, Loop,
                                   Operation)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
 
-from psyclone.autodiff import sub, mul, assign, div, add, minus
+from psyclone.autodiff import sub, mul, assign, div, add, minus, increment, zero
 
 
 class ADReverseLoopTrans(ADLoopTrans):
@@ -75,14 +75,14 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         # Get all references in the stop and step bounds to check that they
         # are not modified in the loop body
-        if (isinstance(loop.stop_expr, (Operation, Call))):
+        if isinstance(loop.stop_expr, (Operation, Call)):
             stop_refs = loop.stop_expr.walk(Reference)
         elif isinstance(loop.stop_expr, Reference):
             stop_refs = [loop.stop_expr]
         else:
             stop_refs = []
-        
-        if (isinstance(loop.step_expr, (Operation, Call))):
+
+        if isinstance(loop.step_expr, (Operation, Call)):
             step_refs = loop.step_expr.walk(Reference)
         elif isinstance(loop.step_expr, Reference):
             step_refs = [loop.step_expr]
@@ -132,30 +132,33 @@ class ADReverseLoopTrans(ADLoopTrans):
                 :py:class:`psyclone.psyir.nodes.Loop`
         """
         # pylint: disable=arguments-renamed
+
+        ########################################################################
+        ########################################################################
+        # TODO: return was modified
+        ########################################################################
+        ########################################################################
+
         self.validate(loop, options)
 
-        # Get the current length of the tapes
+        # Get the tapes used by the parent routine transformation
+        value_tape = self.routine_trans.value_tape
+        control_tape = self.routine_trans.control_tape
+
+        # Get the current length of the tapes and the count of recorded nodes
         # (before transforming the loop body)
-        value_tape_length = self.routine_trans.value_tape.length()
-        control_tape_length = self.routine_trans.control_tape.length()
+        ###value_tape_length = value_tape.length()
+        value_tape_recorded_nodes_count = len(value_tape.recorded_nodes)
+        if control_tape is not None:
+            ###control_tape_length = control_tape.length()
+            control_tape_recorded_nodes_count = len(control_tape.recorded_nodes)
 
         # Transform the statements found in the for loop body (Schedule)
         # This creates tape record/restore statements and extends the tapes
         recording_body, returning_body = self.transform_children(loop, options)
 
-        # Get the number of tape records/restores performed in a single loop
-        # iteration (by substraction)
-        value_tape_records = sub(self.routine_trans.value_tape.length(),
-                                 value_tape_length)
-        control_tape_records = sub(self.routine_trans.control_tape.length(),
-                                 control_tape_length)
-
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
-
-        # Postprocess (simplify, substitute operation adjoints) the returning
-        # routine
-        #self.postprocess(self.returning, options)
 
         recording_loop = Loop.create(loop.variable,
                                      loop.start_expr.copy(),
@@ -169,6 +172,74 @@ class ADReverseLoopTrans(ADLoopTrans):
                                      rev_step,
                                      returning_body)
 
+        recording = [recording_loop]
+        returning = [returning_loop]
+
+        # Get the number of tape records/restores performed in a single loop
+        # iteration (by substraction)
+        # and the newly recorded nodes
+        ###value_tape_records = sub(value_tape.length(), value_tape_length)
+        value_tape_new_nodes \
+                = value_tape.recorded_nodes[value_tape_recorded_nodes_count:]
+        value_tape_new_nodes = [node for node, _ in value_tape_new_nodes]
+        # TODO: what if the vars in the multiplicity expr are reused afterwards...
+        # this should compute an offset RIGHT AFTER the do loop ends, then use it
+        # ........................................................................
+        number_of_iterations = rev_start.copy()
+        if value_tape.uses_offset:
+            value_tape_added_length \
+                = value_tape\
+                    .length_of_last_recorded_nodes(value_tape_new_nodes,
+                                                   number_of_iterations)
+            # value_tape_offset_increment = increment(value_tape.offset,
+            #                                         value_tape_added_length)
+            value_tape.change_last_nodes_multiplicity(value_tape_new_nodes,
+                                                      zero())
+            recording.append(increment(value_tape.offset,
+                                       value_tape_added_length))
+            returning = [assign(value_tape.offset,
+                                sub(value_tape.offset,
+                                    value_tape_added_length))] + returning
+        else:
+            # value_tape_offset_increment = None
+            value_tape.change_last_nodes_multiplicity(value_tape_new_nodes,
+                                                      number_of_iterations)
+
+        if control_tape is not None:
+            ###control_tape_records = sub(self.routine_trans.control_tape.length(),
+            ###                        control_tape_length)
+            control_tape_new_nodes \
+               = control_tape.recorded_nodes[control_tape_recorded_nodes_count:]
+            control_tape_new_nodes = [node for node,_ in control_tape_new_nodes]
+
+            number_of_iterations = rev_start.copy()
+
+            if control_tape.uses_offset:
+                control_tape_added_length \
+                    = control_tape\
+                        .length_of_last_recorded_nodes(control_tape_new_nodes,
+                                                       number_of_iterations)
+                #control_tape_offset_increment \
+                #    = increment(control_tape.offset,
+                #                control_tape_added_length)
+                control_tape\
+                    .change_last_nodes_multiplicity(control_tape_new_nodes,
+                                                    zero())
+                recording.append(increment(control_tape.offset,
+                                           control_tape_added_length))
+                returning = [assign(control_tape.offset,
+                                    sub(control_tape.offset,
+                                        control_tape_added_length))] + returning
+            else:
+                # control_tape_offset_increment = None
+                control_tape\
+                    .change_last_nodes_multiplicity(control_tape_new_nodes,
+                                                    number_of_iterations)
+
+        # Postprocess (simplify, substitute operation adjoints) the returning
+        # routine
+        #self.postprocess(self.returning, options)
+
         ##################
         # TODO
         # Should not tape undef values at first iteration
@@ -178,29 +249,37 @@ class ADReverseLoopTrans(ADLoopTrans):
         # value/ctrl_do_offset = n_value/ctrl * (i - start)/step
         # This is common to both tapes:
         substraction = sub(loop.variable, loop.start_expr)
-        division = div(substraction, loop.step_expr)
+        iteration = div(substraction, loop.step_expr)
 
         # Value tape offset definition
         for ref in recording_loop.loop_body.walk(Reference):
-            if ref.symbol == self.routine_trans.value_tape.symbol:
-                product = mul(value_tape_records, division)
-                symbol = self.routine_trans.value_tape.do_offset_symbol
-                value_tape_def = assign(symbol, product)
+            if ref.symbol == value_tape.symbol:
+                do_offset \
+                    = value_tape\
+                    .length_of_last_recorded_nodes(value_tape_new_nodes,
+                                                   iteration)
+                symbol = value_tape.do_offset_symbol
+                value_tape_def = assign(symbol, do_offset)
                 recording_loop.loop_body.addchild(value_tape_def, 0)
                 returning_loop.loop_body.addchild(value_tape_def.copy(), 0)
                 # Only add it once
                 break
 
         # Control tape offset definition
-        for ref in recording_loop.loop_body.walk(Reference):
-            if ref.symbol == self.routine_trans.control_tape.symbol:
-                product = mul(control_tape_records, division)
-                symbol = self.routine_trans.value_tape.do_offset_symbol
-                control_tape_def = assign(symbol, product)
-                recording_loop.loop_body.addchild(control_tape_def, 0)
-                returning_loop.loop_body.addchild(control_tape_def.copy(), 0)
-                # Only add it once
-                break
+        if control_tape is not None:
+            for ref in recording_loop.loop_body.walk(Reference):
+                if ref.symbol == control_tape.symbol:
+                    do_offset \
+                        = value_tape\
+                        .length_of_last_recorded_nodes(value_tape_new_nodes,
+                                                    iteration)
+                    symbol = control_tape.do_offset_symbol
+                    control_tape_def = assign(symbol, do_offset)
+                    recording_loop.loop_body.addchild(control_tape_def, 0)
+                    returning_loop.loop_body.addchild(control_tape_def.copy(),
+                                                      0)
+                    # Only add it once
+                    break
 
         # verbose option adds comments to the returning do loop
         # specifying the original loop bounds
@@ -217,7 +296,7 @@ class ADReverseLoopTrans(ADLoopTrans):
                               f"= {start}, {stop}, {step}'"
             returning_loop.preceding_comment = verbose_comment
 
-        return recording_loop, returning_loop
+        return recording, returning
 
     def reverse_bounds(self, loop, options=None):
         """Reverses the start, stop and step values for the returning loop.

@@ -42,11 +42,12 @@ import sys
 import numpy as np
 import pytest
 
-from psyclone.autodiff import NumericalComparator, SubroutineGenerator
+from psyclone.autodiff import (NumericalComparator, SubroutineGenerator,
+                               assign, power, mul)
 
 from psyclone.psyir.nodes import Literal, UnaryOperation, BinaryOperation, Reference
 from psyclone.psyir.nodes.intrinsic_call import IntrinsicCall
-from psyclone.psyir.symbols import REAL_TYPE, ArrayType
+from psyclone.psyir.symbols import REAL_TYPE, ArrayType, INTEGER_TYPE
 
 from psyclone.autodiff.ad_reversal_schedule import (
     ADSplitReversalSchedule,
@@ -88,6 +89,133 @@ def _intrinsic_or_operation(op, arg0, arg1=None):
         return UnaryOperation.create(op, arg0)
     if op in BinaryOperation.Operator:
         return BinaryOperation.create(op, arg0, arg1)
+    
+@pytest.mark.parametrize("mode", ("forward", "reverse"))
+def test_if_block(mode):
+    """Test if blocks transformations, by applying `psyclone.autodiff` \
+    and Tapenade transformations to a subroutine containing an if/else statement \
+    and comparing numerical results for random values of `x`.
+
+    :raises ValueError: if the error is above MAX_ERROR or is NaN.
+    """
+    print(f"Testing if_block in {mode}-mode.")
+
+    routine = SubroutineGenerator("routine_if_block")
+
+    x = routine.new_in_arg("x")
+    f = routine.new_out_arg("f")
+
+    condition = BinaryOperation.create(BinaryOperation.Operator.GE,
+                                       Reference(x),
+                                       Literal('1.0', REAL_TYPE))
+    if_body = [assign(f, power(x, Literal('2.0', REAL_TYPE))),
+               assign(f, mul(x, f))]
+    else_body = [assign(f, power(x, Literal('3.0', REAL_TYPE))),
+                 assign(f, mul(x, f))]
+
+    routine.new_if_block(condition, if_body, else_body)
+
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
+        file.write(routine.write())
+
+    rg = np.random.default_rng(123456)
+    x_val = rg.uniform(0, 2, 10)
+
+    # Whichever schedule will work
+    rev_schedule = ADJointReversalSchedule()
+
+    max_error, associated_values = NumericalComparator.compare(
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
+        "routine_if_block",
+        ["f"],
+        ["x"],
+        {"x": x_val.tolist()},
+        "Linf_error",
+        {"verbose": True},
+        mode,
+        rev_schedule
+    )
+
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        with open(f"{_file_dir()}/outputs/routine_comp.f90", "r") as file:
+            out = file.read()
+            raise ValueError(
+                f"Test failed, Linf_error = {max_error} for argument values {associated_values} \n"
+                f"{out}"
+            )
+    print("passed")
+    print("-----------------------")
+
+    print("===============================\n")
+
+@pytest.mark.parametrize("mode, loop", product(("forward", "reverse"), 
+                                               ("simple", "not-so-simple")))
+def test_loop(mode, loop):
+    """Test loop transformations, by applying `psyclone.autodiff` \
+    and Tapenade transformations to a subroutine containing a do loop \
+    and comparing numerical results for random values of `x`.
+
+    :raises ValueError: if the error is above MAX_ERROR or is NaN.
+    """
+    print(f"Testing loop in {mode}-mode.")
+
+    routine = SubroutineGenerator("routine_loop")
+
+    x = routine.new_in_arg("x")
+    f = routine.new_out_arg("f")
+    i = routine.new_variable("i", INTEGER_TYPE)
+
+    # TODO: also test the case where assigning to undef var in loop body
+    routine.new_assignment(f, x)
+
+    if loop == "simple":
+        routine.new_loop(i,
+                         Literal('1', INTEGER_TYPE),
+                         Literal('10', INTEGER_TYPE),
+                         Literal('1', INTEGER_TYPE),
+                         [assign(f, mul(x, f))])
+    else:
+        routine.new_loop(i,
+                         Literal('3', INTEGER_TYPE),
+                         Literal('10', INTEGER_TYPE),
+                         Literal('2', INTEGER_TYPE),
+                         [assign(f, mul(x, f))])
+
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
+        file.write(routine.write())
+
+    rg = np.random.default_rng(123456)
+    x_val = rg.uniform(0, 2, 10)
+
+    # Whichever schedule will work
+    rev_schedule = ADJointReversalSchedule()
+
+    max_error, associated_values = NumericalComparator.compare(
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
+        "routine_loop",
+        ["f"],
+        ["x"],
+        {"x": x_val.tolist()},
+        "Linf_error",
+        {"verbose": True},
+        mode,
+        rev_schedule
+    )
+
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        with open(f"{_file_dir()}/outputs/routine_comp.f90", "r") as file:
+            out = file.read()
+            raise ValueError(
+                f"Test failed, Linf_error = {max_error} for argument values {associated_values} \n"
+                f"{out}"
+            )
+
+    print("passed")
+    print("-----------------------")
+
+    print("===============================\n")
 
 @pytest.mark.parametrize("mode, iterative, vector, op",
                          product(MODES,

@@ -57,7 +57,7 @@ from psyclone.psyir.symbols import (
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff import own_routine_symbol
+from psyclone.autodiff import own_routine_symbol, assign_zero, assign
 from psyclone.autodiff.tapes import ADTape, ADValueTape, ADControlTape
 from psyclone.autodiff.transformations import ADRoutineTrans
 
@@ -537,13 +537,17 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # and taping)
         self.variables_info = VariablesAccessInfo(routine)
 
+        # Tapes constructors parameters
+        is_dynamic_array = uses_offset = (routine.walk(Loop) != [])
+
         # Value tape for the transformation
         # - none provided, create one
         if value_tape is None:
             name = routine.name
-            self.value_tape = ADValueTape(
-                name, self._default_value_tape_datatype
-            )
+            self.value_tape = ADValueTape(name,
+                                          self._default_value_tape_datatype,
+                                          is_dynamic_array,
+                                          uses_offset)
         # - use the provided one
         else:
             self.value_tape = value_tape
@@ -552,9 +556,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # - none provided, create one iff there are if blocks in the routine
         if (control_tape is None) and routine.walk(IfBlock) != []:
             name = routine.name
-            self.control_tape = ADControlTape(
-                name, self._default_control_tape_datatype
-            )
+            self.control_tape = ADControlTape(name,
+                                            self._default_control_tape_datatype,
+                                            is_dynamic_array,
+                                            uses_offset)
         # - use the provided one
         else:
             self.control_tape = control_tape
@@ -958,7 +963,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Apply the transformation
         recording, returning = self.loop_trans.apply(loop, options)
 
-        return [recording], [returning]
+        return recording, returning
 
     def transform_children(self, options=None):
         """Transforms all the children of the routine being transformed \
@@ -1306,16 +1311,29 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 if ref.symbol == tape.do_offset_symbol:
                     table.add(tape.do_offset_symbol)
                     break # Only add it once
-
         # The tape is not an argument of the reversing routine
+
+        # If the tape uses a global offset
+        if tape.uses_offset:
+            # Add the symbol and assign 0 to it at the beginning of the 
+            # recording routine
+            self.recording_table.add(tape.offset_symbol)
+            self.recording.addchild(assign_zero(tape.offset_symbol), 0)
+            # Add the symbol and assign the last value of the offset to it
+            # at the beginning of the returning routine
+            self.returning_table.add(tape.offset_symbol)
+            ##################################self.returning.addchild(assign(tape.offset_symbol,
+            ##################################                               tape.offset_value),
+            ##################################                        0)
 
         # Also add ALLOCATE statements using the tape length at the beginning
         # of the reversing routine if it's a dynamic array
         if tape.is_dynamic_array:
-            allocate = tape.allocate(tape.length)
+            allocate = tape.allocate()
             self.reversing.addchild(allocate, 0)
-            deallocate = tape.deallocate()
-            self.reversing.addchild(deallocate, len(self.reversing.children))
+            # TODO: add DEALLOCATE statements
+            # deallocate = tape.deallocate()
+            # self.reversing.addchild(deallocate, len(self.reversing.children))
 
 
     def add_calls_to_reversing(self, options=None):
