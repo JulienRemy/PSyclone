@@ -2,12 +2,13 @@ from psyclone.psyir.nodes import Literal
 from psyclone.autodiff.psyir import ADPSyIR
 from psyclone.autodiff.psyir.nodes import ADDataNode
 
+
 class ADLiteral(Literal, ADDataNode):
     _text_name = "ADLiteral"
 
     def __init__(self, value, datatype, parent=None):
         super().__init__(value, datatype, parent)
-        self.__init_ad__(parent = parent)
+        self.__init_ad__(parent=parent)
 
     @classmethod
     def from_psyir(cls, literal):

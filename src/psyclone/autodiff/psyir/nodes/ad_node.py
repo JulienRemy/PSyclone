@@ -19,14 +19,14 @@ class ADNode(Node, ADPSyIR):
         # self.__init_ad__(motion, advancing_node)
         self.__init_ad__(parent, children)
 
-    #def __init_ad__(self, motion=ADMotion.ADVANCING, advancing_node=None):
+    # def __init_ad__(self, motion=ADMotion.ADVANCING, advancing_node=None):
     #    if (not isinstance(motion, Enum)) or (motion not in ADMotion):
     #        raise TypeError("")
     #    if not isinstance(advancing_node, (ADNode, NoneType)):
     #        raise TypeError("")
     #    if (motion is not ADMotion.ADVANCING) and (advancing_node is None):
     #        raise ValueError("")
-    #    
+    #
     #    self._motion = motion
     #
     #    if motion is ADMotion.ADVANCING:
@@ -48,16 +48,20 @@ class ADNode(Node, ADPSyIR):
     #
     #    self._forward_data_flow = []
     #    self._backward_data_flow = []
-        
+
     def __init_ad__(self, children=None, parent=None):
         if parent is not None and not isinstance(parent, ADNode):
-            raise TypeError(f"The parent of an ADNode must also be an ADNode "
-                            f"but got '{type(parent).__name__}'")
+            raise TypeError(
+                f"The parent of an ADNode must also be an ADNode "
+                f"but got '{type(parent).__name__}'"
+            )
         if children is not None:
             for child in children:
                 if not isinstance(child, ADNode):
-                    raise TypeError(f"Every child of an ADNode must also be an "
-                                    f"ADNode but got '{type(child).__name__}'")
+                    raise TypeError(
+                        f"Every child of an ADNode must also be an "
+                        f"ADNode but got '{type(child).__name__}'"
+                    )
         # TODO
         self._activity_analysis = None
 
@@ -68,7 +72,6 @@ class ADNode(Node, ADPSyIR):
     def is_active_for_variables(self, dependent_vars, independent_vars):
         # TODO
         raise NotImplementedError("")
-
 
 
 #    @property

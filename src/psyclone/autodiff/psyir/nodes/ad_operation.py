@@ -1,10 +1,14 @@
 from psyclone.psyir.nodes import Operation, UnaryOperation, BinaryOperation
 from psyclone.autodiff.psyir import ADPSyIR
 from psyclone.autodiff.psyir.nodes import ADDataNode
-from psyclone.autodiff.psyir.symbols import ADDataSymbol, ADOperationAdjointSymbol
+from psyclone.autodiff.psyir.symbols import (
+    ADDataSymbol,
+    ADOperationAdjointSymbol,
+)
+
 
 class ADOperation(Operation, ADDataNode):
-    #def __init__(self, operator, parent=None, motion=ADMotion.ADVANCING,
+    # def __init__(self, operator, parent=None, motion=ADMotion.ADVANCING,
     #    advancing_node=None):
     #    super().__init__(operator, parent)
     #    ADDataNode.__init_ad__(motion, advancing_node)
@@ -13,7 +17,7 @@ class ADOperation(Operation, ADDataNode):
 
     def __init__(self, operator, parent=None):
         super().__init__(operator, parent)
-        self.__init_ad__(parent = parent)
+        self.__init_ad__(parent=parent)
         if parent is not None:
             self.forward_data_flow.append(parent)
             parent.backward_data_flow.append(self)
@@ -40,7 +44,7 @@ class ADOperation(Operation, ADDataNode):
         if isinstance(operation, ADOperation):
             raise TypeError("")
         # NOTE: not parent, this is applied recursively
-        ad_operation = cls(operator = operation.operator)
+        ad_operation = cls(operator=operation.operator)
         for child in operation.children:
             if isinstance(child, ADDataNode):
                 ad_operation.addchild(child)
@@ -48,6 +52,7 @@ class ADOperation(Operation, ADDataNode):
                 ad_operation.addchild(ADPSyIR.from_psyir(child))
 
         return ad_operation
+
 
 class ADUnaryOperation(UnaryOperation, ADOperation):
     _children_valid_format = "ADDataNode"
@@ -59,7 +64,7 @@ class ADUnaryOperation(UnaryOperation, ADOperation):
 
     def __init__(self, operator, parent=None):
         super().__init__(operator, parent)
-        self.__init_ad__(parent = parent)
+        self.__init_ad__(parent=parent)
         if parent is not None:
             self.forward_data_flow.append(parent)
             parent.backward_data_flow.append(self)
@@ -71,7 +76,7 @@ class ADUnaryOperation(UnaryOperation, ADOperation):
 
     @staticmethod
     def _validate_child(position, child):
-        '''
+        """
         :param int position: the position to be validated.
         :param child: a child to be validated.
         :type child: :py:class:`psyclone.psyir.nodes.Node`
@@ -79,18 +84,19 @@ class ADUnaryOperation(UnaryOperation, ADOperation):
         :return: whether the given child and position are valid for this node.
         :rtype: bool
 
-        '''
+        """
         return position == 0 and isinstance(child, ADDataNode)
-    
+
     @staticmethod
     def create(operator, operand):
         unary_operation = UnaryOperation.create(operator, operand)
         ad_op = ADUnaryOperation.from_psyir(unary_operation)
         ad_op._operation_adjoint_symbol = ADOperationAdjointSymbol(ad_op)
         return ad_op
-    
+
     # TODO: is_linear
-    
+
+
 class ADBinaryOperation(BinaryOperation, ADOperation):
     _children_valid_format = "ADDataNode, ADDataNode"
 
@@ -101,7 +107,7 @@ class ADBinaryOperation(BinaryOperation, ADOperation):
 
     def __init__(self, operator, parent=None):
         super().__init__(operator, parent)
-        self.__init_ad__(parent = parent)
+        self.__init_ad__(parent=parent)
         if parent is not None:
             self.forward_data_flow.append(parent)
             parent.backward_data_flow.append(self)
@@ -113,7 +119,7 @@ class ADBinaryOperation(BinaryOperation, ADOperation):
 
     @staticmethod
     def _validate_child(position, child):
-        '''
+        """
         :param int position: the position to be validated.
         :param child: a child to be validated.
         :type child: :py:class:`psyclone.psyir.nodes.Node`
@@ -121,9 +127,9 @@ class ADBinaryOperation(BinaryOperation, ADOperation):
         :return: whether the given child and position are valid for this node.
         :rtype: bool
 
-        '''
+        """
         return position in (0, 1) and isinstance(child, ADDataNode)
-    
+
     @staticmethod
     def create(operator, lhs, rhs):
         binary_operation = BinaryOperation.create(operator, lhs, rhs)

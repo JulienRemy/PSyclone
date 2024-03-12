@@ -3,7 +3,12 @@ from itertools import count
 from types import NoneType
 
 from psyclone.psyir.transformations import TransformationError
-from psyclone.psyir.symbols import DataSymbol, ArgumentInterface, ScalarType, ArrayType
+from psyclone.psyir.symbols import (
+    DataSymbol,
+    ArgumentInterface,
+    ScalarType,
+    ArrayType,
+)
 from psyclone.autodiff.psyir import ADPSyIR
 
 
@@ -30,12 +35,23 @@ class ADVariableSymbol(ADDataSymbol):
 
     _psyir_to_ad = dict()
 
-    def __init__(self, name, datatype, is_loop_variable = False, is_constant=False, initial_value=None, **kwargs):
+    def __init__(
+        self,
+        name,
+        datatype,
+        is_loop_variable=False,
+        is_constant=False,
+        initial_value=None,
+        **kwargs,
+    ):
         super().__init__(name, datatype, is_constant, initial_value, **kwargs)
-        if ((datatype is ScalarType 
-            and datatype.intrinsic is ScalarType.Intrinsic.REAL)
-            or (datatype is ArrayType 
-                and datatype.datatype.intrinsic is ScalarType.Intrinsic.REAL)):
+        if (
+            datatype is ScalarType
+            and datatype.intrinsic is ScalarType.Intrinsic.REAL
+        ) or (
+            datatype is ArrayType
+            and datatype.datatype.intrinsic is ScalarType.Intrinsic.REAL
+        ):
             self._derivative_symbol = self.create_derivative_symbol()
             self._adjoint_symbol = self.create_adjoint_symbol()
         else:
@@ -44,40 +60,52 @@ class ADVariableSymbol(ADDataSymbol):
 
         if not isinstance(is_loop_variable, bool):
             raise TypeError("")
-        
+
         self._version_0_is_loop_variable = is_loop_variable
-        
+
         if self.version_0_is_argument_value or self.version_0_is_loop_variable:
             self._references_per_versions = [[]]
         else:
             self._references_per_versions = []
 
-
     @property
     def version_0_is_argument_value(self):
-        print(self.name, "arg?", self.is_argument)
-        print(self.name, "interface:", self.interface)
         return self.is_argument and (
             self.interface.access
-            in (ArgumentInterface.Access.READ, ArgumentInterface.Access.READWRITE)
+            in (
+                ArgumentInterface.Access.READ,
+                ArgumentInterface.Access.READWRITE,
+            )
         )
-    
+
+    @property
+    def last_version_is_out_value(self):
+        return self.is_argument and (
+            self.interface.access
+            in (
+                ArgumentInterface.Access.WRITE,
+                ArgumentInterface.Access.READWRITE,
+            )
+        )
+
     @property
     def version_0_is_loop_variable(self):
         return self._version_0_is_loop_variable
-    
+
     @property
     def version_0_is_a_symbol(self):
         if self.version_0_is_argument_value:
             print(f"{self.name} is an arg")
         if self.version_0_is_loop_variable:
             print(f"{self.name} is a loop var")
-        return self.version_0_is_argument_value or self.version_0_is_loop_variable
+        return (
+            self.version_0_is_argument_value or self.version_0_is_loop_variable
+        )
 
     @property
     def references_per_versions(self):
         return self._references_per_versions
-    
+
     @property
     def versions(self):
         return len(self.references_per_versions)
@@ -110,6 +138,7 @@ class ADVariableSymbol(ADDataSymbol):
 
     def log_reference(self, reference):
         from psyclone.autodiff.psyir.nodes import ADReference
+
         if not isinstance(reference, ADReference):
             raise TypeError(
                 f"'reference' argument should be of type "
@@ -132,9 +161,9 @@ class ADVariableSymbol(ADDataSymbol):
             )
 
         if version == self.versions:
-            #if not (version == 0 and self.version_0_is_a_symbol) and (
+            # if not (version == 0 and self.version_0_is_a_symbol) and (
             #    reference.access is not ADReference.Access.WRITE
-            #):
+            # ):
             #    raise ValueError(
             #        "First reference of a new version should have "
             #        "WRITE access attribute."
@@ -142,7 +171,7 @@ class ADVariableSymbol(ADDataSymbol):
             #    )
             self.references_per_versions.append([reference])
         else:
-            #if reference.access is not ADReference.Access.READ:
+            # if reference.access is not ADReference.Access.READ:
             #    raise ValueError(
             #        "New reference of an existing version should "
             #        "have READ access attribute."
@@ -162,6 +191,7 @@ class ADVariableSymbol(ADDataSymbol):
 
     def create_last_version_reference(self):
         from psyclone.autodiff.psyir.nodes import ADReference
+
         if self.versions == 0:
             version = 0
         else:
@@ -171,28 +201,28 @@ class ADVariableSymbol(ADDataSymbol):
 
     def create_new_version_reference(self):
         from psyclone.autodiff.psyir.nodes import ADReference
+
         version = self.versions
         return ADReference(self, version, ADReference.Access.WRITE)
         # self.log_reference(reference)
 
-
     # NOTE: this either creates a new ADVariableSymbol or returns the existing one
     @classmethod
-    def from_psyir(cls, datasymbol, is_loop_variable = False):
+    def from_psyir(cls, datasymbol, is_loop_variable=False):
         if not isinstance(datasymbol, DataSymbol):
             raise TypeError("")
         if isinstance(datasymbol, ADVariableSymbol):
             raise TypeError("")
         if not isinstance(is_loop_variable, bool):
             raise TypeError("")
-        
+
         if datasymbol in cls._psyir_to_ad:
             return cls._psyir_to_ad[datasymbol]
         else:
             ad_datasymbol = cls(
                 name=datasymbol.name,
                 datatype=datasymbol.datatype,
-                is_loop_variable = is_loop_variable,
+                is_loop_variable=is_loop_variable,
                 is_constant=datasymbol.is_constant,
                 initial_value=datasymbol.initial_value,
                 visibility=datasymbol.visibility,
@@ -251,7 +281,11 @@ class ADDerivativeSymbol(ADDataSymbol):
     def __init__(self, variable_symbol):
         if not isinstance(variable_symbol, ADVariableSymbol):
             raise TypeError("")
-        name = self._derivative_prefix + variable_symbol.name + self._derivative_postfix
+        name = (
+            self._derivative_prefix
+            + variable_symbol.name
+            + self._derivative_postfix
+        )
         datatype = variable_symbol.datatype
         super().__init__(name, datatype)
         self._variable_symbol = variable_symbol
@@ -285,7 +319,9 @@ class ADAdjointSymbol(ADDataSymbol):
     def __init__(self, variable_symbol):
         if not isinstance(variable_symbol, ADVariableSymbol):
             raise TypeError("")
-        name = self._adjoint_prefix + variable_symbol.name + self._adjoint_postfix
+        name = (
+            self._adjoint_prefix + variable_symbol.name + self._adjoint_postfix
+        )
         datatype = variable_symbol.datatype
         super().__init__(name, datatype)
         self._variable_symbol = variable_symbol
@@ -335,8 +371,13 @@ class ADOperationAdjointSymbol(ADDataSymbol):
     _operation_adjoint_name = "op_adj_"
 
     def __init__(self, operation_or_instrinsic):
-        from psyclone.autodiff.psyir.nodes import ADOperation#, ADIntrinsicCall
-        if not isinstance(operation_or_instrinsic, (ADOperation)):#, ADIntrinsicCall)):
+        from psyclone.autodiff.psyir.nodes import (
+            ADOperation,
+        )  # , ADIntrinsicCall
+
+        if not isinstance(
+            operation_or_instrinsic, (ADOperation)
+        ):  # , ADIntrinsicCall)):
             raise TypeError("")
 
         name = self._operation_adjoint_name + str(next(self._id))

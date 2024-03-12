@@ -4,6 +4,7 @@ from psyclone.autodiff.psyir import ADPSyIR
 from psyclone.autodiff.psyir.nodes import ADDataNode, ADNode
 from psyclone.autodiff.psyir.symbols import ADDataSymbol, ADVariableSymbol
 
+
 class ADLoop(Loop, ADNode):
     _children_valid_format = "ADDataNode, ADDataNode, ADDataNode, ADSchedule"
     _text_name = "ADLoop"
@@ -23,7 +24,7 @@ class ADLoop(Loop, ADNode):
     def compute_number_of_iterations(self):
         # TODO
         raise NotImplementedError("")
-    
+
     def compute_iteration_counter(self):
         # TODO
         raise NotImplementedError("")
@@ -42,7 +43,7 @@ class ADLoop(Loop, ADNode):
 
     @staticmethod
     def _validate_child(position, child):
-        '''
+        """
         :param int position: the position to be validated.
         :param child: a child to be validated.
         :type child: :py:class:`psyclone.psyir.nodes.Node`
@@ -50,26 +51,30 @@ class ADLoop(Loop, ADNode):
         :return: whether the given child and position are valid for this node.
         :rtype: bool
 
-        '''
+        """
         from psyclone.autodiff.psyir.nodes import ADSchedule
+
         return (position in (0, 1, 2) and isinstance(child, ADDataNode)) or (
-            position == 3 and isinstance(child, ADSchedule))
-    
+            position == 3 and isinstance(child, ADSchedule)
+        )
+
     @classmethod
     def from_psyir(cls, loop):
         if not isinstance(loop, Loop):
             raise TypeError("")
         if isinstance(loop, ADLoop):
             raise TypeError("")
-        ad_loop_variable = ADVariableSymbol.from_psyir(loop.variable, is_loop_variable=True)
-        ad_loop = cls(variable = ad_loop_variable, annotations = loop.annotations)
+        ad_loop_variable = ADVariableSymbol.from_psyir(
+            loop.variable, is_loop_variable=True
+        )
+        ad_loop = cls(variable=ad_loop_variable, annotations=loop.annotations)
         for child in loop.children:
             if isinstance(child, ADDataNode):
                 ad_loop.addchild(child)
             else:
                 ad_loop.addchild(ADPSyIR.from_psyir(child))
         return ad_loop
-    
+
     @classmethod
     def create(cls, variable, start, stop, step, children):
         loop = super().create(variable, start, stop, step, children)

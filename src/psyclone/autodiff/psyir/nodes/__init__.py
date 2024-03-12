@@ -39,7 +39,11 @@
 from psyclone.autodiff.psyir.nodes.ad_node import ADNode
 from psyclone.autodiff.psyir.nodes.ad_datanode import ADDataNode
 from psyclone.autodiff.psyir.nodes.ad_reference import ADReference
-from psyclone.autodiff.psyir.nodes.ad_operation import ADOperation, ADUnaryOperation, ADBinaryOperation
+from psyclone.autodiff.psyir.nodes.ad_operation import (
+    ADOperation,
+    ADUnaryOperation,
+    ADBinaryOperation,
+)
 from psyclone.autodiff.psyir.nodes.ad_literal import ADLiteral
 from psyclone.autodiff.psyir.nodes.ad_assignment import ADAssignment
 from psyclone.autodiff.psyir.nodes.ad_call import ADCall

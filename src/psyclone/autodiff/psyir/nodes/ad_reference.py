@@ -3,6 +3,7 @@ from psyclone.psyir.nodes import Reference, Assignment
 from psyclone.autodiff.psyir.nodes import ADDataNode
 from psyclone.autodiff.psyir.symbols import ADDataSymbol, ADVariableSymbol
 
+
 class ADReference(Reference, ADDataNode):
     _text_name = "ADReference"
 
@@ -14,7 +15,7 @@ class ADReference(Reference, ADDataNode):
     #     advancing_node=None, **kwargs):
     #     if not isinstance(symbol, ADDataSymbol):
     #         raise TypeError("")
-        
+
     #     super().__init__(symbol, **kwargs)
     #     self.__init_ad__(version, access, motion, advancing_node)
 
@@ -23,18 +24,18 @@ class ADReference(Reference, ADDataNode):
     #         raise TypeError("")
     #     if not isinstance(access, Enum) or access not in ADReference.Access:
     #         raise TypeError("")
-        
+
     #     self._version = version
     #     self._access = access
 
     #     self.symbol.log_reference(self)
-        
+
     #     super().__init_ad__(motion, advancing_node)
-        
+
     def __init__(self, symbol, version, access, **kwargs):
         if not isinstance(symbol, ADDataSymbol):
             raise TypeError("")
-        
+
         super().__init__(symbol, **kwargs)
         self.__init_ad_reference__(version, access, **kwargs)
 
@@ -43,11 +44,11 @@ class ADReference(Reference, ADDataNode):
             raise TypeError(f"{type(version).__name__}")
         if not isinstance(access, Enum) or access not in ADReference.Access:
             raise TypeError("")
-        
+
         children = kwargs.get("children", None)
         parent = kwargs.get("parent", None)
         super().__init_ad__(children, parent)
-        
+
         self._version = version
         self._access = access
 
@@ -60,10 +61,12 @@ class ADReference(Reference, ADDataNode):
     @property
     def access(self):
         return self._access
-    
+
     def node_str(self, colour=True):
-        return (f"{self.coloured_name(colour)}[name:'{self.name}', "
-                f"version:{self.version}, access:{self.access.name}]")
+        return (
+            f"{self.coloured_name(colour)}[name:'{self.name}', "
+            f"version:{self.version}, access:{self.access.name}]"
+        )
 
     @classmethod
     def from_psyir(cls, reference):
@@ -78,8 +81,10 @@ class ADReference(Reference, ADDataNode):
 
         # TODO: reference appearing in a Call node with an intent (in)out
         # just before should also be a next version, even if it's a read
-        if (isinstance(reference.parent, Assignment)
-            and reference == reference.parent.lhs):
+        if (
+            isinstance(reference.parent, Assignment)
+            and reference == reference.parent.lhs
+        ):
             return ad_symbol.create_new_version_reference()
             # version = ad_symbol.versions
             # access = ADReference.Access.WRITE

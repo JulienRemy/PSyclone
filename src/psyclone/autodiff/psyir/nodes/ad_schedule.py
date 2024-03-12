@@ -2,7 +2,8 @@ from psyclone.psyir.nodes import Schedule
 from psyclone.psyir.symbols import SymbolTable, DataSymbol, RoutineSymbol
 
 from psyclone.autodiff.psyir import ADPSyIR
-from psyclone.autodiff.psyir.nodes import ADNode#, ADCall, ADIntrinsicCall
+from psyclone.autodiff.psyir.nodes import ADNode  # , ADCall, ADIntrinsicCall
+
 
 # NOTE: this could use an ADScopingNode parent
 # iff the symbol table needs more info for AD?
@@ -25,19 +26,37 @@ class ADSchedule(Schedule, ADNode):
 
     @staticmethod
     def _validate_child(position, child):
-        from psyclone.autodiff.psyir.nodes import ADAssignment, ADLoop, ADIfBlock
+        from psyclone.autodiff.psyir.nodes import (
+            ADAssignment,
+            ADLoop,
+            ADIfBlock,
+        )
+
         # TODO: this might benefit from a real parent class?
-        ADStatement = (ADAssignment, ADLoop, ADIfBlock)#,ADCall, ADIntrinsicCall)
+        ADStatement = (
+            ADAssignment,
+            ADLoop,
+            ADIfBlock,
+        )  # ,ADCall, ADIntrinsicCall)
         return isinstance(child, ADStatement)
 
     def addchild(self, child, index=None):
-        from psyclone.autodiff.psyir.nodes import ADAssignment, ADLoop, ADIfBlock
+        from psyclone.autodiff.psyir.nodes import (
+            ADAssignment,
+            ADLoop,
+            ADIfBlock,
+        )
+
         # TODO: this might benefit from a real parent class?
-        ADStatement = (ADAssignment, ADLoop, ADIfBlock)#,ADCall, ADIntrinsicCall)
+        ADStatement = (
+            ADAssignment,
+            ADLoop,
+            ADIfBlock,
+        )  # ,ADCall, ADIntrinsicCall)
         if not isinstance(child, ADStatement):
             raise TypeError("")
         return super().addchild(child, index)
-    
+
     @classmethod
     def from_psyir(cls, schedule):
         if not isinstance(schedule, Schedule):
@@ -46,8 +65,7 @@ class ADSchedule(Schedule, ADNode):
             raise TypeError("")
         # First transform the symbols in the table
         symbol_table = schedule.symbol_table
-        new_symbol_table = SymbolTable(None,
-                                       symbol_table.default_visibility)
+        new_symbol_table = SymbolTable(None, symbol_table.default_visibility)
         syms_to_tags = symbol_table.get_reverse_tags_dict()
         arg_map = dict()
         for symbol in symbol_table.symbols:
@@ -64,19 +82,20 @@ class ADSchedule(Schedule, ADNode):
             # To ensure proper ordering of the argument list
             if symbol in symbol_table.argument_list:
                 arg_map[symbol] = new_symbol
-        
+
         new_argument_list = []
         for symbol in symbol_table.argument_list:
             new_argument_list.append(arg_map[symbol])
-        
+
         new_symbol_table.specify_argument_list(new_argument_list)
 
         # NOTE: not parent, nor children, to recursively raise to AD
         from psyclone.autodiff.psyir.nodes import ADRoutine
+
         if cls is ADRoutine:
-            ad_schedule = cls(name = schedule.name, symbol_table = new_symbol_table)
+            ad_schedule = cls(name=schedule.name, symbol_table=new_symbol_table)
         else:
-            ad_schedule = cls(symbol_table = new_symbol_table)
+            ad_schedule = cls(symbol_table=new_symbol_table)
         for child in schedule.children:
             if isinstance(child, ADNode):
                 ad_schedule.addchild(child)
@@ -87,7 +106,7 @@ class ADSchedule(Schedule, ADNode):
     def recompute_up_to(self, references):
         # TODO
         raise NotImplementedError("")
-    
+
     # NOTE: which tape (type?).
     def tape_records(self):
         # TODO
@@ -97,9 +116,8 @@ class ADSchedule(Schedule, ADNode):
     def tape_restores(self):
         # TODO
         raise NotImplementedError("")
-    
+
     # NOTE: which tape (type?).
     def tape_slice(self):
         # TODO
         raise NotImplementedError("")
-    

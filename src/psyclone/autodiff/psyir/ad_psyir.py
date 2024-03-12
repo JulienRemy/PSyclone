@@ -40,6 +40,7 @@ derived from the PSyIR Symbol and Node ones.
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 
+
 class ADMotion(Enum):
     """Enum describing the 'motion' a PSyIR node belongs to.
     Advancing is the original (non-differentiated) motion.
@@ -51,56 +52,85 @@ class ADMotion(Enum):
     primal values or recomputations where needed.
     Reversing is the combination of both the recording and returning motions.
     """
+
     ADVANCING = 1
     TANGENT = 2
     RECORDING = 3
     RETURNING = 4
     REVERSING = 5
 
+
 class ADPSyIR(object, metaclass=ABCMeta):
     """Abstract class, parent of all ADNode and ADSymbol derived classes,
     simply for convenient typechecking and distinguishing between vanilla PSyIR
     and the AD version.
     """
+
     @abstractmethod
     def __init__(self):
         pass
 
-    @staticmethod
-    def from_psyir(psyir):
+    @classmethod
+    def from_psyir(cls, psyir):
         from psyclone.psyir.symbols import DataSymbol, RoutineSymbol
-        from psyclone.psyir.nodes import (Literal, Reference, UnaryOperation, BinaryOperation, Assignment, 
-                                          Loop, IfBlock, Call, IntrinsicCall, Schedule, Routine)
-        from psyclone.autodiff.psyir.symbols import ADVariableSymbol, ADRoutineSymbol
-        from psyclone.autodiff.psyir.nodes import (ADLiteral, ADReference, 
-                                                    ADUnaryOperation, ADBinaryOperation, ADAssignment, 
-                                                    ADLoop, ADIfBlock, ADCall, ADIntrinsicCall,
-                                                    ADSchedule, ADRoutine)
-        psyir_to_AD = { DataSymbol :        ADVariableSymbol,
-                        RoutineSymbol :      ADRoutineSymbol,
-                        Literal :           ADLiteral,
-                        Reference :         ADReference,
-                        UnaryOperation :    ADUnaryOperation,
-                        BinaryOperation :   ADBinaryOperation,
-                        Assignment :        ADAssignment,
-                        Loop :              ADLoop,
-                        IfBlock :           ADIfBlock,
-                        Call :              ADCall,
-                        IntrinsicCall :     ADIntrinsicCall,
-                        Schedule :          ADSchedule,
-                        Routine :           ADRoutine,
-                        }
+        from psyclone.psyir.nodes import (
+            Literal,
+            Reference,
+            UnaryOperation,
+            BinaryOperation,
+            Assignment,
+            Loop,
+            IfBlock,
+            Call,
+            IntrinsicCall,
+            Schedule,
+            Routine,
+        )
+        from psyclone.autodiff.psyir.symbols import (
+            ADVariableSymbol,
+            ADRoutineSymbol,
+        )
+        from psyclone.autodiff.psyir.nodes import (
+            ADLiteral,
+            ADReference,
+            ADUnaryOperation,
+            ADBinaryOperation,
+            ADAssignment,
+            ADLoop,
+            ADIfBlock,
+            ADCall,
+            ADIntrinsicCall,
+            ADSchedule,
+            ADRoutine,
+        )
+
+        psyir_to_AD = {
+            DataSymbol: ADVariableSymbol,
+            RoutineSymbol: ADRoutineSymbol,
+            Literal: ADLiteral,
+            Reference: ADReference,
+            UnaryOperation: ADUnaryOperation,
+            BinaryOperation: ADBinaryOperation,
+            Assignment: ADAssignment,
+            Loop: ADLoop,
+            IfBlock: ADIfBlock,
+            Call: ADCall,
+            IntrinsicCall: ADIntrinsicCall,
+            Schedule: ADSchedule,
+            Routine: ADRoutine,
+        }
         psyir_type = type(psyir)
+        # Only keep cls subclasses in the hashmap,
+        # so that eg. ADReference.from_psyir(ref) cannot create an ADLoop
+        for psyir_type, ad_psyir_type in psyir_to_AD.items():
+            if not issubclass(cls, ad_psyir_type):
+                psyir_to_AD.pop(psyir_type)
+        # Already an ADPSyIR instance, return it
         if psyir_type in psyir_to_AD.values():
             return psyir
+        # PSyIR not in map
         if psyir_type not in psyir_to_AD:
             raise TypeError(f"{psyir_type.__name__}")
+        # PSyIR -> ADPSyIR
         ad_type = psyir_to_AD[psyir_type]
         return ad_type.from_psyir(psyir)
-
-## class ADLinearity(Enum):
-##     """Enum describing the linearity of an operation, intrinsic call, etc.
-##     """
-##     LINEAR = 1
-##     NON_LINEAR = 2
-

@@ -54,5 +54,5 @@ __all__ = [
     "ADDerivativeSymbol",
     "ADAdjointSymbol",
     "ADOperationAdjointSymbol",
-    "ADRoutineSymbol"
+    "ADRoutineSymbol",
 ]

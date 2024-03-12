@@ -39,22 +39,22 @@ class ADDataNode(DataNode, ADNode):
     def backward_data_flow(self):
         return self._backward_data_flow
 
-    def depends_on(self, my_type, linearity=None): # stop_type=None,):
+    def depends_on(self, my_type, linearity=None):  # stop_type=None,):
         if not issubclass(my_type, ADNode):
             raise TypeError(f"{my_type.__name__}")
         # if stop_type and not issubclass(stop_type, ADNode):
         #     raise TypeError("")
         if linearity and not isinstance(linearity, bool):
             raise TypeError("")
-        
+
         from psyclone.autodiff.psyir.nodes import ADOperation
 
         depends_on = []
         for bwd in self.backward_data_flow:
-            if isinstance(bwd, my_type):# and bwd not in depends_on:
+            if isinstance(bwd, my_type):  # and bwd not in depends_on:
                 depends_on.append(bwd)
 
-            elif isinstance(bwd, (ADOperation)):#, ADCall)):
+            elif isinstance(bwd, (ADOperation)):  # , ADCall)):
                 if (linearity is None) or (bwd.linearity is linearity):
                     recurse = bwd.depends_on(my_type, linearity)
                     depends_on.extend(recurse)
@@ -62,7 +62,7 @@ class ADDataNode(DataNode, ADNode):
                     #     if node not in depends_on:
                     #         depends_on.append(node)
 
-            #if stop_type and not isinstance(bwd, stop_type):
+            # if stop_type and not isinstance(bwd, stop_type):
             #    if isinstance(bwd, (ADOperation)):#, ADCall)):
             #        if (linearity is not None) and (bwd.linearity is linearity):
             #            depends_on.extend(bwd.depends_on(my_type, stop_type, linearity))
@@ -71,29 +71,29 @@ class ADDataNode(DataNode, ADNode):
 
         return depends_on
 
-    def enters_in(self, my_type, linearity=None):#, stop_type=None):
+    def enters_in(self, my_type, linearity=None):  # , stop_type=None):
         if not issubclass(my_type, ADNode):
             raise TypeError(f"{my_type.__name__}")
         # if stop_type and not issubclass(stop_type, ADNode):
         #     raise TypeError("")
         if linearity and not isinstance(linearity, bool):
             raise TypeError("")
-        
+
         from psyclone.autodiff.psyir.nodes import ADOperation
 
         enters_in = []
         for fwd in self.forward_data_flow:
-            if isinstance(fwd, my_type):# and fwd not in enters_in:
+            if isinstance(fwd, my_type):  # and fwd not in enters_in:
                 enters_in.append(fwd)
-            
-            elif isinstance(fwd, (ADOperation)):#, ADCall)):
+
+            elif isinstance(fwd, (ADOperation)):  # , ADCall)):
                 if (linearity is None) or (fwd.linearity is linearity):
                     recurse = fwd.enters_in(my_type, linearity)
                     enters_in.extend(recurse)
                     # for node in recurse:
                     #     if node not in enters_in:
                     #         enters_in.append(node)
-                    #enters_in.extend(fwd.enters_in(my_type, linearity))
+                    # enters_in.extend(fwd.enters_in(my_type, linearity))
 
             # if stop_type and not isinstance(fwd, stop_type):
             #     if isinstance(fwd, (ADOperation)):#, ADCall)):
