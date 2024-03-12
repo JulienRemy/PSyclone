@@ -93,7 +93,9 @@ class ADSchedule(Schedule, ADNode):
         from psyclone.autodiff.psyir.nodes import ADRoutine
 
         if cls is ADRoutine:
-            ad_schedule = cls(name=schedule.name, symbol_table=new_symbol_table)
+            ad_schedule = ADRoutine(
+                name=schedule.name, symbol_table=new_symbol_table
+            )
         else:
             ad_schedule = cls(symbol_table=new_symbol_table)
         for child in schedule.children:

@@ -1,11 +1,11 @@
 from psyclone.psyir.nodes import Loop
 from psyclone.errors import GenerationError
 from psyclone.autodiff.psyir import ADPSyIR
-from psyclone.autodiff.psyir.nodes import ADDataNode, ADNode
+from psyclone.autodiff.psyir.nodes import ADDataNode, ADNode, ADStatement
 from psyclone.autodiff.psyir.symbols import ADDataSymbol, ADVariableSymbol
 
 
-class ADLoop(Loop, ADNode):
+class ADLoop(Loop, ADStatement):
     _children_valid_format = "ADDataNode, ADDataNode, ADDataNode, ADSchedule"
     _text_name = "ADLoop"
 

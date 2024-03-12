@@ -91,6 +91,7 @@ class ADUnaryOperation(UnaryOperation, ADOperation):
     def create(operator, operand):
         unary_operation = UnaryOperation.create(operator, operand)
         ad_op = ADUnaryOperation.from_psyir(unary_operation)
+        # TODO: this could be a later ADTrans
         ad_op._operation_adjoint_symbol = ADOperationAdjointSymbol(ad_op)
         return ad_op
 
@@ -134,6 +135,7 @@ class ADBinaryOperation(BinaryOperation, ADOperation):
     def create(operator, lhs, rhs):
         binary_operation = BinaryOperation.create(operator, lhs, rhs)
         ad_op = ADBinaryOperation.from_psyir(binary_operation)
+        # TODO: this could be a later ADTrans
         ad_op._operation_adjoint_symbol = ADOperationAdjointSymbol(ad_op)
         return ad_op
 

@@ -65,10 +65,35 @@ class ADPSyIR(object, metaclass=ABCMeta):
     simply for convenient typechecking and distinguishing between vanilla PSyIR
     and the AD version.
     """
+    _transformation = None
 
     @abstractmethod
     def __init__(self):
         pass
+
+    # @property
+    # def transformed_to(self):
+    #     return self._transformed_to
+    
+    # @property
+    # def transformed_from(self):
+    #     return self._transformed_from
+    
+    # def log_transformation(self, ad_trans_dag_node):
+    #     if not isinstance(ad_trans_dag_node, ADTransDAGNode):
+    #         raise TypeError("")
+    #     ad_trans = ad_trans_dag_node.transformation
+    #     if not isinstance(ad_trans, self._transformation):
+    #         raise TypeError("")
+        
+    #     source = ad_trans_dag_node.source
+    #     target = ad_trans_dag_node.target
+    #     if self == source:
+    #         self._transformed_to.append(ad_trans_dag_node)
+    #     if self == target:
+    #         self._transformed_from = ad_trans_dag_node
+        
+
 
     @classmethod
     def from_psyir(cls, psyir):
@@ -85,6 +110,8 @@ class ADPSyIR(object, metaclass=ABCMeta):
             IntrinsicCall,
             Schedule,
             Routine,
+            Range,
+            ArrayReference,
         )
         from psyclone.autodiff.psyir.symbols import (
             ADVariableSymbol,
@@ -102,6 +129,8 @@ class ADPSyIR(object, metaclass=ABCMeta):
             ADIntrinsicCall,
             ADSchedule,
             ADRoutine,
+            ADRange,
+            ADArrayReference,
         )
 
         psyir_to_AD = {
@@ -118,16 +147,20 @@ class ADPSyIR(object, metaclass=ABCMeta):
             IntrinsicCall: ADIntrinsicCall,
             Schedule: ADSchedule,
             Routine: ADRoutine,
+            Range: ADRange,
+            ArrayReference: ADArrayReference,
         }
         psyir_type = type(psyir)
-        # Only keep cls subclasses in the hashmap,
-        # so that eg. ADReference.from_psyir(ref) cannot create an ADLoop
-        for psyir_type, ad_psyir_type in psyir_to_AD.items():
-            if not issubclass(cls, ad_psyir_type):
-                psyir_to_AD.pop(psyir_type)
-        # Already an ADPSyIR instance, return it
-        if psyir_type in psyir_to_AD.values():
-            return psyir
+        # # Only keep cls subclasses in the hashmap,
+        # # so that eg. ADReference.from_psyir(ref) cannot create an ADLoop
+        # new_dict = dict()
+        # for psyir_type, ad_psyir_type in psyir_to_AD.items():
+        #     if issubclass(ad_psyir_type, cls):
+        #         new_dict[psyir_type] = ad_psyir_type
+        # psyir_to_AD = new_dict
+        # # Already an ADPSyIR instance, return it
+        # if psyir_type in psyir_to_AD.values():
+        #     return psyir
         # PSyIR not in map
         if psyir_type not in psyir_to_AD:
             raise TypeError(f"{psyir_type.__name__}")

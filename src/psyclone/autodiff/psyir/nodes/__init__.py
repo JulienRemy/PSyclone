@@ -38,13 +38,16 @@
 
 from psyclone.autodiff.psyir.nodes.ad_node import ADNode
 from psyclone.autodiff.psyir.nodes.ad_datanode import ADDataNode
+from psyclone.autodiff.psyir.nodes.ad_literal import ADLiteral
 from psyclone.autodiff.psyir.nodes.ad_reference import ADReference
+from psyclone.autodiff.psyir.nodes.ad_range import ADRange
+from psyclone.autodiff.psyir.nodes.ad_array_reference import ADArrayReference
 from psyclone.autodiff.psyir.nodes.ad_operation import (
     ADOperation,
     ADUnaryOperation,
     ADBinaryOperation,
 )
-from psyclone.autodiff.psyir.nodes.ad_literal import ADLiteral
+from psyclone.autodiff.psyir.nodes.ad_statement import ADStatement
 from psyclone.autodiff.psyir.nodes.ad_assignment import ADAssignment
 from psyclone.autodiff.psyir.nodes.ad_call import ADCall
 from psyclone.autodiff.psyir.nodes.ad_intrinsic_call import ADIntrinsicCall
@@ -52,7 +55,8 @@ from psyclone.autodiff.psyir.nodes.ad_if_block import ADIfBlock
 from psyclone.autodiff.psyir.nodes.ad_loop import ADLoop
 from psyclone.autodiff.psyir.nodes.ad_schedule import ADSchedule
 from psyclone.autodiff.psyir.nodes.ad_routine import ADRoutine
-from psyclone.autodiff.psyir.nodes.ad_container import ADContainer
+
+# from psyclone.autodiff.psyir.nodes.NO_ad_container import ADContainer
 
 
 # The entities in the __all__ list are made available to import directly from
@@ -62,10 +66,13 @@ __all__ = [
     "ADNode",
     "ADDataNode",
     "ADReference",
+    "ADRange",
+    "ADArrayReference",
     "ADOperation",
     "ADUnaryOperation",
     "ADBinaryOperation",
     "ADLiteral",
+    "ADStatement",
     "ADAssignment",
     "ADCall",
     "ADIntrinsicCall",
@@ -73,5 +80,5 @@ __all__ = [
     "ADIfBlock",
     "ADLoop",
     "ADRoutine",
-    "ADContainer",
+    # "ADContainer",
 ]

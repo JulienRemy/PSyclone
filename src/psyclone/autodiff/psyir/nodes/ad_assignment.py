@@ -1,9 +1,9 @@
 from psyclone.psyir.nodes import Assignment
 from psyclone.autodiff.psyir import ADPSyIR
-from psyclone.autodiff.psyir.nodes import ADNode, ADDataNode
+from psyclone.autodiff.psyir.nodes import ADStatement, ADDataNode
 
 
-class ADAssignment(Assignment, ADNode):
+class ADAssignment(Assignment, ADStatement):
     _children_valid_format = "ADDataNode, ADDataNode"
     _text_name = "ADAssignment"
 

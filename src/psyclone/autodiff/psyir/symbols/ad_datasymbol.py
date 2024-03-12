@@ -45,6 +45,7 @@ class ADVariableSymbol(ADDataSymbol):
         **kwargs,
     ):
         super().__init__(name, datatype, is_constant, initial_value, **kwargs)
+        # TODO: these could be ADTrans
         if (
             datatype is ScalarType
             and datatype.intrinsic is ScalarType.Intrinsic.REAL
@@ -61,6 +62,7 @@ class ADVariableSymbol(ADDataSymbol):
         if not isinstance(is_loop_variable, bool):
             raise TypeError("")
 
+        # TODO: might not be version 0, should be a specific one and a specific loop
         self._version_0_is_loop_variable = is_loop_variable
 
         if self.version_0_is_argument_value or self.version_0_is_loop_variable:
@@ -94,10 +96,10 @@ class ADVariableSymbol(ADDataSymbol):
 
     @property
     def version_0_is_a_symbol(self):
-        if self.version_0_is_argument_value:
-            print(f"{self.name} is an arg")
-        if self.version_0_is_loop_variable:
-            print(f"{self.name} is a loop var")
+        # if self.version_0_is_argument_value:
+        #     print(f"{self.name} is an arg")
+        # if self.version_0_is_loop_variable:
+        #     print(f"{self.name} is a loop var")
         return (
             self.version_0_is_argument_value or self.version_0_is_loop_variable
         )
@@ -189,22 +191,45 @@ class ADVariableSymbol(ADDataSymbol):
         #         debug.append(l)
         # print(debug)
 
-    def create_last_version_reference(self):
+    def create_last_version_reference(self, indices = [":"]):
         from psyclone.autodiff.psyir.nodes import ADReference
 
         if self.versions == 0:
             version = 0
         else:
             version = self.versions - 1
+
         return ADReference(self, version, ADReference.Access.READ)
-        # self.log_reference(reference)
+
+    def create_last_version_array_reference(self, indices = [":"]):
+        from psyclone.autodiff.psyir.nodes import ADReference, ADArrayReference
+
+        if not isinstance(self.datatype, ArrayType):
+            raise TypeError("")
+        
+        if self.versions == 0:
+            version = 0
+        else:
+            version = self.versions - 1
+        
+        return ADArrayReference(self, version, ADReference.Access.READ, indices)
 
     def create_new_version_reference(self):
         from psyclone.autodiff.psyir.nodes import ADReference
 
         version = self.versions
+    
         return ADReference(self, version, ADReference.Access.WRITE)
-        # self.log_reference(reference)
+
+    def create_new_version_array_reference(self, indices = [":"]):
+        from psyclone.autodiff.psyir.nodes import ADReference, ADArrayReference
+
+        if not isinstance(self.datatype, ArrayType):
+            raise TypeError("")
+        
+        version = self.versions
+        
+        return ADArrayReference(self, version, ADReference.Access.WRITE, indices)
 
     # NOTE: this either creates a new ADVariableSymbol or returns the existing one
     @classmethod

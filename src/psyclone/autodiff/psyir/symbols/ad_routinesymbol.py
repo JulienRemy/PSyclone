@@ -30,6 +30,8 @@ class ADRoutineSymbol(RoutineSymbol, ADPSyIR):
 
         if motion is ADMotion.ADVANCING:
             self._advancing_routine_symbol = self
+
+            # TODO: these could be ADTrans
             self._tangent_routine_symbol = self.create_tangent_routine_symbol()
             self._recording_routine_symbol = (
                 self.create_recording_routine_symbol()

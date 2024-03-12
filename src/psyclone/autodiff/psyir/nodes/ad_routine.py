@@ -1,8 +1,8 @@
 from psyclone.psyir.nodes import Routine
-from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
 from psyclone.autodiff.psyir import ADPSyIR
 from psyclone.autodiff.psyir.nodes import ADSchedule, ADNode
+from psyclone.autodiff.psyir.symbols import ADRoutineSymbol
 
 
 class ADRoutine(Routine, ADSchedule):
@@ -15,7 +15,10 @@ class ADRoutine(Routine, ADSchedule):
         self.__init_ad__(children, parent)
 
         routine_symbol = self.routine_symbol
-        ad_routine_symbol = ADPSyIR.from_psyir(routine_symbol)
+        if isinstance(routine_symbol, ADRoutineSymbol):
+            ad_routine_symbol = routine_symbol
+        else:
+            ad_routine_symbol = ADPSyIR.from_psyir(routine_symbol)
         self.symbol_table.remove(routine_symbol)
         self.symbol_table.add(ad_routine_symbol, "own_routine_symbol")
 
@@ -40,7 +43,6 @@ class ADRoutine(Routine, ADSchedule):
             if not isinstance(child, ADNode):
                 raise TypeError("")
 
-        # TODO: check this returns an ADRoutine and not an ADSchedule...
         return cls.from_psyir(routine)
 
     def node_str(self, colour=True):

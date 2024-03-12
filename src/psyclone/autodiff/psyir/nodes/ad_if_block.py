@@ -1,10 +1,10 @@
 from psyclone.psyir.nodes import IfBlock
 
 from psyclone.autodiff.psyir import ADPSyIR
-from psyclone.autodiff.psyir.nodes import ADNode, ADDataNode
+from psyclone.autodiff.psyir.nodes import ADNode, ADStatement, ADDataNode
 
 
-class ADIfBlock(IfBlock, ADNode):
+class ADIfBlock(IfBlock, ADStatement):
     def __init__(self, ast=None, children=None, parent=None, annotations=None):
         super().__init__(ast, children, parent, annotations)
         self.__init_ad__(children, parent)
