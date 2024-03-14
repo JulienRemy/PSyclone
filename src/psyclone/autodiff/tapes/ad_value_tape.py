@@ -128,27 +128,34 @@ class ADValueTape(ADTape):
 
         value_tape_ref = super().record(reference, do_loop)
 
-        if (isinstance(reference, ArrayReference)
+        # if (isinstance(reference, ArrayReference)
+        #     or isinstance(reference.datatype, ScalarType)):
+        #if isinstance(reference.datatype, ScalarType):
+        # This is a Reference to a scalar
+        if (not isinstance(reference, ArrayReference) 
             or isinstance(reference.datatype, ScalarType)):
             assignment = Assignment.create(value_tape_ref, reference.copy())
 
-        elif len(reference.datatype.shape) == 1:
-            assignment = Assignment.create(value_tape_ref,
-                                           ArrayReference.create(
-                                               reference.symbol,
-                                               [":"]))
-
+        # This is an ArrayReference
         else:
-            # Create an IntrinsicCall to RESHAPE to reshape the reference array
-            # to 1D vector
-            fortran_writer = FortranWriter()
-            size = self._array_size(reference)
-            size_str = fortran_writer(size)
-            shape_array = Literal(f"(/ {size_str} /)",
-                                  ArrayType(INTEGER_TYPE, [1]))
-            reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                            [reference.copy(), shape_array])
-            assignment = Assignment.create(value_tape_ref, reshaped)
+            if len(reference.datatype.shape) == 1:
+                index = [i.copy() for i in reference.indices]
+                assignment = Assignment.create(value_tape_ref,
+                                            ArrayReference.create(
+                                                reference.symbol,
+                                                index))
+
+            else:
+                # Create an IntrinsicCall to RESHAPE to reshape the reference array
+                # to 1D vector
+                fortran_writer = FortranWriter()
+                size = self._array_size(reference)
+                size_str = fortran_writer(size)
+                shape_array = Literal(f"(/ {size_str} /)",
+                                    ArrayType(INTEGER_TYPE, [1]))
+                reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
+                                                [reference.copy(), shape_array])
+                assignment = Assignment.create(value_tape_ref, reshaped)
 
         return assignment
 
@@ -188,27 +195,34 @@ class ADValueTape(ADTape):
 
         value_tape_ref = super().restore(reference, do_loop)
 
-        if (isinstance(reference, ArrayReference)
+        # if (isinstance(reference, ArrayReference)
+        #     or isinstance(reference.datatype, ScalarType)):
+        # This is a Reference to a scalar
+        if (not isinstance(reference, ArrayReference) 
             or isinstance(reference.datatype, ScalarType)):
+        #if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(reference.copy(), value_tape_ref)
 
-        elif len(reference.datatype.shape) == 1:
-            assignment = Assignment.create(ArrayReference.create(
-                                                reference.symbol,
-                                                [":"]),
-                                           value_tape_ref)
-
+        # This is an ArrayReference
         else:
-            # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
-            # slice to the dimensions of the reference array
-            fortran_writer = FortranWriter()
-            dimensions = self._array_dimensions(reference)
-            str_dimensions = [fortran_writer(dim) for dim in dimensions]
-            shape_str = "(/ " + ", ".join(str_dimensions) + " /)"
-            shape_datatype = ArrayType(INTEGER_TYPE, [len(dimensions)])
-            shape_array = Literal(shape_str, shape_datatype)
-            reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                            [value_tape_ref, shape_array])
-            assignment = Assignment.create(reference.copy(), reshaped)
+            if len(reference.datatype.shape) == 1:
+                index = [i.copy() for i in reference.indices]
+                assignment = Assignment.create(ArrayReference.create(
+                                                    reference.symbol,
+                                                    index),
+                                            value_tape_ref)
+
+            else:
+                # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
+                # slice to the dimensions of the reference array
+                fortran_writer = FortranWriter()
+                dimensions = self._array_dimensions(reference)
+                str_dimensions = [fortran_writer(dim) for dim in dimensions]
+                shape_str = "(/ " + ", ".join(str_dimensions) + " /)"
+                shape_datatype = ArrayType(INTEGER_TYPE, [len(dimensions)])
+                shape_array = Literal(shape_str, shape_datatype)
+                reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
+                                                [value_tape_ref, shape_array])
+                assignment = Assignment.create(reference.copy(), reshaped)
 
         return assignment

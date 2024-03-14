@@ -541,7 +541,7 @@ class ADTape(object, metaclass=ABCMeta):
         if do_loop:
             lengths.append(self.do_offset)
 
-        return self._add_datanodes(lengths)
+        return self._add_datanodes(lengths).copy()
 
     def first_index_of_last_element(self, do_loop = False):
         """Gives the first index of the last element that was recorded.
