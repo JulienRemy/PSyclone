@@ -958,7 +958,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Apply the transformation
         recording, returning = self.loop_trans.apply(loop, options)
 
-        return [recording], [returning]
+        return recording, returning
 
     def transform_children(self, options=None):
         """Transforms all the children of the routine being transformed \
