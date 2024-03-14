@@ -1,5 +1,5 @@
 from enum import Enum
-from psyclone.psyir.nodes import Reference, Assignment
+from psyclone.psyir.nodes import Reference, Assignment, BinaryOperation
 from psyclone.autodiff.psyir.nodes import ADDataNode
 from psyclone.autodiff.psyir.symbols import ADDataSymbol, ADVariableSymbol
 
@@ -10,6 +10,7 @@ class ADReference(Reference, ADDataNode):
     class Access(Enum):
         READ = 1
         WRITE = 2
+        INCREMENT = 3
 
     # def __init__(self, symbol, version, access, motion=ADMotion.ADVANCING,
     #     advancing_node=None, **kwargs):
@@ -85,6 +86,7 @@ class ADReference(Reference, ADDataNode):
             isinstance(reference.parent, Assignment)
             and reference == reference.parent.lhs
         ):
+            # TODO: ADIncrement goes here
             return ad_symbol.create_new_version_reference()
             # version = ad_symbol.versions
             # access = ADReference.Access.WRITE

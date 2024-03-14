@@ -93,7 +93,9 @@ class ADPSyIR(object, metaclass=ABCMeta):
     #     if self == target:
     #         self._transformed_from = ad_trans_dag_node
         
-
+    @property
+    def transformation(self):
+        return self._transformation
 
     @classmethod
     def from_psyir(cls, psyir):
