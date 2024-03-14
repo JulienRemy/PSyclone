@@ -49,13 +49,14 @@ from psyclone.psyir.nodes import (
     ArrayReference,
     Literal,
     Assignment,
-    IfBlock
+    IfBlock,
 )
 from psyclone.psyir.symbols import (
     INTEGER_TYPE,
     REAL_TYPE,
     SymbolTable,
     DataSymbol,
+    ScalarType,
     ArrayType,
 )
 from psyclone.psyir.symbols.interfaces import (
@@ -123,13 +124,17 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         :rtype: :py:class:`psyclone.psyir.nodes.Reference`
         """
         if not isinstance(reference, Reference):
-            raise TypeError(f"'reference' argument should be of type "
-                            f"'Reference' but found "
-                            f"'{type(reference).__name__}'.")
+            raise TypeError(
+                f"'reference' argument should be of type "
+                f"'Reference' but found "
+                f"'{type(reference).__name__}'."
+            )
         if reference.symbol not in self.data_symbol_differential_map:
-            raise TypeError("'reference' argument's symbol should be in the "
-                            "data_symbol_differential_map of this "
-                            "transformation but it isn't.")
+            raise TypeError(
+                "'reference' argument's symbol should be in the "
+                "data_symbol_differential_map of this "
+                "transformation but it isn't."
+            )
 
         diff_sym = self.data_symbol_differential_map[reference.symbol]
 
@@ -348,7 +353,17 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         """
 
         for symbol in self.routine_table.datasymbols:
-            self.create_differential_symbol(symbol, options)
+            if (
+                isinstance(symbol.datatype, ScalarType)
+                and (symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL)
+            ) or (
+                isinstance(symbol.datatype, ArrayType)
+                and (
+                    symbol.datatype.datatype.intrinsic
+                    is ScalarType.Intrinsic.REAL
+                )
+            ):
+                self.create_differential_symbol(symbol, options)
 
     def create_differential_symbol(self, datasymbol, options=None):
         """Create the derivative/adjoint symbol of the argument symbol in the \
@@ -385,8 +400,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         datatype = self._default_differential_datatype
         # ArrayType if array datasymbol
         if isinstance(datasymbol.datatype, ArrayType):
-            datatype = ArrayType(self._default_differential_datatype,
-                                 datasymbol.datatype.shape)
+            datatype = ArrayType(
+                self._default_differential_datatype, datasymbol.datatype.shape
+            )
         # New adjoint symbol with unique name in the correct transformed table
         differential = self.transformed_tables[
             self._differential_table_index
@@ -401,9 +417,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
         return differential
 
-    def validate(
-        self, routine, dependent_vars, independent_vars, options=None
-    ):
+    def validate(self, routine, dependent_vars, independent_vars, options=None):
         """Validates the arguments of the `apply` method.
 
         :param routine: routine Node to the transformed.
@@ -722,38 +736,38 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
 
         return routines
 
-#    @abstractmethod
-#    def transform_assignment(self, assignment, options=None):
-#        """Transforms an Assignment child of the routine.
-#
-#        :param assignment: assignment to transform.
-#        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
-#        :param options: a dictionary with options for transformations, \
-#                        defaults to None.
-#        :type options: Optional[Dict[Str, Any]]
-#        """
-#
-#    @abstractmethod
-#    def transform_call(self, call, options=None):
-#        """Transforms a Call child of the routine.
-#
-#        :param call: call to transform.
-#        :type call: :py:class:`psyclone.psyir.nodes.Call`
-#        :param options: a dictionary with options for transformations, \
-#                        defaults to None.
-#        :type options: Optional[Dict[Str, Any]]
-#        """
-#
-#    @abstractmethod
-#    def transform_if_block(self, if_block, options=None):
-#        """Transforms an IfBlock child of the routine.
-#
-#        :param if_block: if block to transform.
-#        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
-#        :param options: a dictionary with options for transformations, \
-#                        defaults to None.
-#        :type options: Optional[Dict[Str, Any]]
-#        """
+    #    @abstractmethod
+    #    def transform_assignment(self, assignment, options=None):
+    #        """Transforms an Assignment child of the routine.
+    #
+    #        :param assignment: assignment to transform.
+    #        :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
+    #        :param options: a dictionary with options for transformations, \
+    #                        defaults to None.
+    #        :type options: Optional[Dict[Str, Any]]
+    #        """
+    #
+    #    @abstractmethod
+    #    def transform_call(self, call, options=None):
+    #        """Transforms a Call child of the routine.
+    #
+    #        :param call: call to transform.
+    #        :type call: :py:class:`psyclone.psyir.nodes.Call`
+    #        :param options: a dictionary with options for transformations, \
+    #                        defaults to None.
+    #        :type options: Optional[Dict[Str, Any]]
+    #        """
+    #
+    #    @abstractmethod
+    #    def transform_if_block(self, if_block, options=None):
+    #        """Transforms an IfBlock child of the routine.
+    #
+    #        :param if_block: if block to transform.
+    #        :type if_block: :py:class:`psyclone.psyir.nodes.IfBlock`
+    #        :param options: a dictionary with options for transformations, \
+    #                        defaults to None.
+    #        :type options: Optional[Dict[Str, Any]]
+    #        """
 
     @abstractmethod
     def transform_children(self, options=None):
