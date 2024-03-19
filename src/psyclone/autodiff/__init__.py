@@ -63,7 +63,10 @@ from psyclone.autodiff.utils import (
     div,
     exp,
     sign,
-    own_routine_symbol
+    own_routine_symbol,
+    add_datanodes,
+    substract_datanodes,
+    multiply_datanodes
 )
 from psyclone.autodiff.simplify import simplify_node
 from psyclone.autodiff.subroutine_generator import SubroutineGenerator
@@ -97,6 +100,9 @@ __all__ = [
     "exp",
     "sign",
     "simplify_node",
+    "add_datanodes",
+    "substract_datanodes",
+    "multiply_datanodes",
     "ComparatorGenerator",
     "NumericalComparator",
     "SubroutineGenerator"

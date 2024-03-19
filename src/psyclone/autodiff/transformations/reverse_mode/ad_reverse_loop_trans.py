@@ -45,12 +45,27 @@ from psyclone.psyir.nodes import (
     Operation,
     ArrayReference,
     Range,
+    BinaryOperation,
+    Routine,
+    IntrinsicCall,
 )
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
 
-from psyclone.autodiff import sub, mul, assign, div, add, minus, one
+from psyclone.autodiff import (
+    sub,
+    mul,
+    assign,
+    div,
+    add,
+    minus,
+    one,
+    zero,
+    add_datanodes,
+    substract_datanodes,
+    multiply_datanodes,
+)
 
 
 class ADReverseLoopTrans(ADLoopTrans):
@@ -81,47 +96,10 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         super().validate(loop, options)
 
-        # Get all references in the stop and step bounds to check that they
-        # are not modified in the loop body
-        if isinstance(loop.stop_expr, (Operation, Call)):
-            stop_refs = loop.stop_expr.walk(Reference)
-        elif isinstance(loop.stop_expr, Reference):
-            stop_refs = [loop.stop_expr]
-        else:
-            stop_refs = []
-
-        if isinstance(loop.step_expr, (Operation, Call)):
-            step_refs = loop.step_expr.walk(Reference)
-        elif isinstance(loop.step_expr, Reference):
-            step_refs = [loop.step_expr]
-        else:
-            step_refs = []
-
-        for assignment in loop.loop_body.walk(Assignment):
-            if assignment.lhs.symbol == loop.variable:
-                raise NotImplementedError(
-                    "Loops that modify their iteration "
-                    "variable are not implemented yet."
-                )
-            for ref in stop_refs:
-                if assignment.lhs.symbol == ref.symbol:
-                    raise NotImplementedError(
-                        "Loops that modify their stop "
-                        "bound are not implemented "
-                        "yet."
-                    )
-            for ref in step_refs:
-                if assignment.lhs.symbol == ref.symbol:
-                    raise NotImplementedError(
-                        "Loops that modify their step "
-                        "bound are not implemented yet."
-                    )
-
         # TODO: conditional branches in loops are not implemented yet.
         if loop.loop_body.walk(IfBlock) != []:
             raise NotImplementedError(
-                "Loops containing conditional branches "
-                "are not implemented yet."
+                "Loops containing conditional branches are not implemented yet."
             )
 
         if not self._is_only_nested_loops(loop):
@@ -131,14 +109,63 @@ class ADReverseLoopTrans(ADLoopTrans):
                 "supported."
             )
 
-        if not self._all_arrays_can_be_tape_restored_afterwards(loop):
-            raise NotImplementedError(
-                "For now, only loops that write to array elements *once*, "
-                "*at indices which are exactly their loop variables* "
-                "and *before* they are read can be transformed."
-                "These are the ones were tape restores can be done *after* "
-                "the loop, on the whole array slice accessed by the loop."
-            )
+        # Go through the nested loops, get all references in the stop and step
+        # bounds expression to check that they are not modified in the loop body
+        for nested_loop in loop.walk(Loop):
+            if isinstance(nested_loop.stop_expr, (Operation, Call)):
+                stop_refs = nested_loop.stop_expr.walk(Reference)
+            elif isinstance(nested_loop.stop_expr, Reference):
+                stop_refs = [nested_loop.stop_expr]
+            else:
+                stop_refs = []
+
+            if isinstance(nested_loop.step_expr, (Operation, Call)):
+                step_refs = nested_loop.step_expr.walk(Reference)
+            elif isinstance(nested_loop.step_expr, Reference):
+                step_refs = [nested_loop.step_expr]
+            else:
+                step_refs = []
+
+            for assignment in nested_loop.loop_body.walk(Assignment):
+                if assignment.lhs.symbol == nested_loop.variable:
+                    raise NotImplementedError(
+                        "Loops that modify their iteration "
+                        "variable are not implemented yet."
+                    )
+                for ref in stop_refs:
+                    if assignment.lhs.symbol == ref.symbol:
+                        raise NotImplementedError(
+                            "Loops that modify their stop "
+                            "bound are not implemented "
+                            "yet."
+                        )
+                for ref in step_refs:
+                    if assignment.lhs.symbol == ref.symbol:
+                        raise NotImplementedError(
+                            "Loops that modify their step "
+                            "bound are not implemented yet."
+                        )
+
+        # if not self._all_lhs_of_assignments_are_array_references(loop):
+        #     raise NotImplementedError(
+        #         "For now, only array references are allowed on the LHS of "
+        #         "assignment nodes inside loops."
+        #     )
+
+        # if not self._all_arrays_are_indexed_on_lhs_without_offsets(loop):
+        #     raise NotImplementedError(
+        #         "For now, only loops that write to array elements "
+        #         "at indices which are *exactly* their loop variables "
+        #         "can be transformed."
+        #     )
+
+        # if not self._all_arrays_can_be_taped_outside_the_loops(loop):
+        #     raise NotImplementedError(
+        #         "For now, only loops that write to/increment array elements "
+        #         "*once* and *before* they are read can be transformed."
+        #         "These are the ones were tape restores can be done *after* "
+        #         "the loop, on the whole array slice accessed by the loop."
+        #     )
 
     def apply(self, loop, options=None):
         """Applies the transformation, generating the recording and returning \
@@ -172,43 +199,53 @@ class ADReverseLoopTrans(ADLoopTrans):
         # pylint: disable=arguments-renamed
         self.validate(loop, options)
 
-        # Get the current length of the tapes
-        # (before transforming the loop body)
-        # value_tape_length = self.routine_trans.value_tape.length()
-        # control_tape_length = self.routine_trans.control_tape.length()
-
         recording = []
         returning = []
 
-        ########################################################################
-        ########################################################################
-        ########################################################################
-        # FIXME: THIS IS A HUGE SIMPLIFICATION
-        # WHICH WOULDN'T WORK FOR MOST LOOPS!!!!!!!
-        if self._all_arrays_can_be_tape_restored_afterwards(loop):
-            # Get all ArrayReference nodes that are LHS of Assignments in the
-            # nested loops
-            written_arrays_refs = []
-            for assignment in loop.walk(Assignment):
-                if isinstance(assignment.lhs, ArrayReference):
-                    written_arrays_refs.append(assignment.lhs)
+        # # First make sure the offset is assigned
+        # # TODO: deduplicate
+        # value_tape_offset_assignment = (
+        #     self.routine_trans.value_tape.offset_assignment
+        # )
+        # recording.append(value_tape_offset_assignment)
+        # returning.append(value_tape_offset_assignment.copy())
 
-            # Get all nested loops variables and bounds
-            loops_vars_and_bounds = self.nested_loops_variables_and_bounds(loop)
-            # For all LHS arrays in assignments
-            for written_array_ref in written_arrays_refs:
+        # if self._is_only_nested_loops(loop):
+        #################
+        # Taping some arrays outside of the nested loop (under some conditions)
+        #################
+        # Some arrays can be taped outside
+        arrays_to_tape_outside = self._list_arrays_to_tape_outside(loop)
+
+        # Get all nested loops variables and bounds
+        loops_vars_and_bounds = self.nested_loops_variables_and_bounds(loop)
+        loops_vars = self.nested_loops_variables(loop)
+        nodes_taped_outside = []
+        # For all LHS arrays in assignments
+        for written_array_ref in arrays_to_tape_outside:
+            # TODO: TBR analysis
+            is_tbr = True
+
+            if is_tbr:
                 tbr_ranges = []
                 # Go through the indices they are being written at
                 for index in written_array_ref.children:
                     index_sym = index.symbol
-                    # Get the bounds of the loop with that same variable
-                    # and make a range from them
-                    for var, start, stop, step in loops_vars_and_bounds:
-                        if var == index_sym:
-                            slice_range = Range.create(
-                                start.copy(), stop.copy(), step.copy()
-                            )
-                            tbr_ranges.append(slice_range)
+                    # For indices that are loop variables
+                    if index_sym in loops_vars:
+                        # Get the bounds of the loop with that same variable
+                        # and make a range from them
+                        for var, start, stop, step in loops_vars_and_bounds:
+                            if var == index_sym:
+                                slice_range = Range.create(
+                                    start.copy(), stop.copy(), step.copy()
+                                )
+                                tbr_ranges.append(slice_range)
+                                break
+                    # For indices that are not loop variable, not a range
+                    else:
+                        tbr_ranges.append(index.copy())
+                    
                 # Create an ArrayReference to that range/slice for the array
                 # to be recorded
                 tbr_array_ref = ArrayReference.create(
@@ -220,24 +257,38 @@ class ADReverseLoopTrans(ADLoopTrans):
                 recording.append(
                     self.routine_trans.value_tape.record(tbr_array_ref)
                 )
-                returning.append(
-                    self.routine_trans.value_tape.restore(tbr_array_ref)
+                returning.insert(
+                    0, self.routine_trans.value_tape.restore(tbr_array_ref)
                 )
-        else:
-            raise NotImplementedError(
-                "Taping inside the loop body has not " "been implemented yet."
+
+                nodes_taped_outside.append(tbr_array_ref)
+
+        if len(nodes_taped_outside) != 0:
+            # Update the tape offset and tape mask
+            value_tape_offset_assignment = (
+                self.routine_trans.value_tape.update_offset_and_mask(
+                    one(), nodes_taped_outside
+                )
             )
+            recording.append(value_tape_offset_assignment)
+            returning.insert(0, value_tape_offset_assignment.copy())
+        # else:
+        #     arrays_to_tape_outside = []
+
+        #################
+        # Transform the loop body and create loops for both motions
+        #################
+        # Get the nodes that were recorded to the tapes before this loop
+        # or outside of it
+        number_of_previously_taped_nodes = len(
+            self.routine_trans.value_tape.recorded_nodes
+        )
 
         # Transform the statements found in the for loop body (Schedule)
         # This creates tape record/restore statements and extends the tapes
-        recording_body, returning_body = self.transform_children(loop, options)
-
-        # Get the number of tape records/restores performed in a single loop
-        # iteration (by substraction)
-        # value_tape_records = sub(self.routine_trans.value_tape.length(),
-        #                          value_tape_length)
-        # control_tape_records = sub(self.routine_trans.control_tape.length(),
-        #                          control_tape_length)
+        recording_body, returning_body = self.transform_children(
+            loop, arrays_to_tape_outside, options
+        )
 
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
@@ -262,39 +313,6 @@ class ADReverseLoopTrans(ADLoopTrans):
             returning_body,
         )
 
-        ##################
-        # TODO
-        # Should not tape undef values at first iteration
-
-        # If the do_offset symbol of a tape was used in the bodies,
-        # it needs to be defined at the beginning of each iteration (in both)
-        # value/ctrl_do_offset = n_value/ctrl * (i - start)/step
-        # This is common to both tapes:
-        # substraction = sub(loop.variable, loop.start_expr)
-        # division = div(substraction, loop.step_expr)
-
-        # # Value tape offset definition
-        # for ref in recording_loop.loop_body.walk(Reference):
-        #     if ref.symbol == self.routine_trans.value_tape.symbol:
-        #         product = mul(value_tape_records, division)
-        #         symbol = self.routine_trans.value_tape.do_offset_symbol
-        #         value_tape_def = assign(symbol, product)
-        #         recording_loop.loop_body.addchild(value_tape_def, 0)
-        #         returning_loop.loop_body.addchild(value_tape_def.copy(), 0)
-        #         # Only add it once
-        #         break
-
-        # # Control tape offset definition
-        # for ref in recording_loop.loop_body.walk(Reference):
-        #     if ref.symbol == self.routine_trans.control_tape.symbol:
-        #         product = mul(control_tape_records, division)
-        #         symbol = self.routine_trans.value_tape.do_offset_symbol
-        #         control_tape_def = assign(symbol, product)
-        #         recording_loop.loop_body.addchild(control_tape_def, 0)
-        #         returning_loop.loop_body.addchild(control_tape_def.copy(), 0)
-        #         # Only add it once
-        #         break
-
         # verbose option adds comments to the returning do loop
         # specifying the original loop bounds
         verbose = self.unpack_option("verbose", options)
@@ -312,20 +330,100 @@ class ADReverseLoopTrans(ADLoopTrans):
             )
             returning_loop.preceding_comment = verbose_comment
 
+        #################
+        # Insert the transformed loops in the motions
+        #################
         recording.append(recording_loop)
+        returning.insert(0, returning_loop)  # + returning
 
-        # FIXME: THIS IS A HUGE SIMPLIFICATION WHICH WOULDN'T WORK
-        # FOR MOST LOOPS!!!!!!!
-        # FIXME: Here I'm doing tape restores *after* the whole loop
-        if self._all_arrays_can_be_tape_restored_afterwards(loop):
-            returning = [returning_loop] + returning
-        else:
-            returning.append(returning_loop)
-            raise NotImplementedError(
-                "The general case of taping inside "
-                "loop bodies has not been implemented "
-                "yet."
+        ##################
+        # TODO
+        # Should not tape undef values at first iteration,
+        # rather than a conditional branch it should probably extract the
+        # first iteration
+
+        #################
+        # Deal with the nodes which were taped inside the loop body, as they
+        # need to be taken into account for offsetting the indices
+        #################
+        # Get the newly recorded nodes
+        nodes_taped_inside = self.routine_trans.value_tape.recorded_nodes[
+            number_of_previously_taped_nodes:
+        ]
+
+        if len(nodes_taped_inside) != 0:
+            # Update the tape offset and tape mask
+            value_tape_offset_assignment = (
+                self.routine_trans.value_tape.update_offset_and_mask(
+                    self.number_of_iterations(loop), nodes_taped_inside
+                )
             )
+            recording.append(value_tape_offset_assignment)
+            returning.insert(0, value_tape_offset_assignment.copy())
+
+            # Value tape do offset definition
+            for ref in recording_loop.loop_body.walk(Reference):
+                if ref.symbol == self.routine_trans.value_tape.symbol:
+                    # # For nested loop, the assignment goes in the innermost loop
+                    # # body so walk and get last
+                    # if self._is_only_nested_loops(loop):
+                    # Multiply the iteration counter by the length of all
+                    # recorded nodes
+                    product = mul(
+                        self.iteration_counter_within_innermost_nested_loop(
+                            loop
+                        ),
+                        self.routine_trans.value_tape.length_of_nodes(
+                            nodes_taped_inside
+                        ),
+                    )
+                    # Assign it to the do offset
+                    symbol = self.routine_trans.value_tape.do_offset_symbol
+                    value_do_offset_assignment = assign(symbol, product)
+
+                    innermost_recording_loop = recording_loop.walk(Loop)[-1]
+                    innermost_recording_loop.loop_body.addchild(
+                        value_do_offset_assignment, 0
+                    )
+                    innermost_returning_loop = returning_loop.walk(Loop)[-1]
+                    innermost_returning_loop.loop_body.addchild(
+                        value_do_offset_assignment.copy(), 0
+                    )
+                    # # For general loops it goes in the loop bodies
+                    # else:
+                    #     # Multiply the iteration counter by the length of all
+                    #     # recorded nodes
+                    #     product = mul(
+                    #         self.iteration_counter_within_this_loop(
+                    #             loop
+                    #         ),
+                    #         self.routine_trans.value_tape.length_of_nodes(
+                    #             nodes_taped_inside
+                    #         ),
+                    #     )
+                    #     # Assign it to the do offset
+                    #     symbol = self.routine_trans.value_tape.do_offset_symbol
+                    #     value_do_offset_assignment = assign(symbol, product)
+
+                    #     recording_loop.loop_body.addchild(
+                    #         value_do_offset_assignment, 0
+                    #     )
+                    #     returning_loop.loop_body.addchild(
+                    #         value_do_offset_assignment.copy(), 0
+                    #     )
+                    # Only add it once
+                    break
+
+            # # Control tape offset definition
+            # for ref in recording_loop.loop_body.walk(Reference):
+            #     if ref.symbol == self.routine_trans.control_tape.symbol:
+            #         product = mul(control_tape_records, division)
+            #         symbol = self.routine_trans.value_tape.do_offset_symbol
+            #         control_tape_def = assign(symbol, product)
+            #         recording_loop.loop_body.addchild(control_tape_def, 0)
+            #         returning_loop.loop_body.addchild(control_tape_def.copy(), 0)
+            #         # Only add it once
+            #         break
 
         return recording, returning
 
@@ -355,6 +453,39 @@ class ADReverseLoopTrans(ADLoopTrans):
         rev_stop = loop.start_expr.copy()
         rev_step = minus(loop.step_expr.copy())
         return rev_start, rev_stop, rev_step
+
+    def surrounding_loops_variables_and_bounds(self, loop):
+        """Get a list of [variable, start, stop, step] elements for all loops
+        surrounding loop (ie. loop is the innermost one), including it. 
+
+        :param loop: loop whose ancestors to consider.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+
+        :return: list of lists containing the variable symbol, start, stop and \
+                 step expressions of each nested loop.
+        :rtype: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                          :py:class:`psyclone.psyir.nodes.DataNode`,
+                          :py:class:`psyclone.psyir.nodes.DataNode`,
+                          :py:class:`psyclone.psyir.nodes.DataNode`]]
+        """
+        # Includes the current loop
+        surrounding_loops = [loop]
+        while loop.ancestor(Loop, include_self=False) is not None:
+            loop = loop.ancestor(Loop, include_self=False)
+            surrounding_loops.insert(0, loop)
+
+        variables_and_bounds = []
+        for surrounding_loop in surrounding_loops:
+            variables_and_bounds.append(
+                [
+                    surrounding_loop.variable,
+                    surrounding_loop.start_expr,
+                    surrounding_loop.stop_expr,
+                    surrounding_loop.step_expr,
+                ]
+            )
+
+        return variables_and_bounds
 
     def nested_loops_variables_and_bounds(self, loop):
         """Get a list of [variable, start, stop, step] elements for all nested
@@ -402,6 +533,191 @@ class ADReverseLoopTrans(ADLoopTrans):
             for var_bounds in self.nested_loops_variables_and_bounds(loop)
         ]
 
+    def _single_loop_number_of_iterations(self, start, stop, step):
+        """Computes the total number of iterations of a single loop based on \
+        its bounds.
+
+        :param start: start expression of the loop.
+        :type start: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param stop: stop expression of the loop.
+        :type stop: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param step: step expression of the loop.
+        :type step: :py:class:`psyclone.psyir.nodes.DataNode`
+
+        :return: total number of iterations performed by the loop.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        if step == one():
+            if start == one():
+                return stop.copy()
+
+            return substract_datanodes([stop, one()], [start])
+
+        # (step * ((stop - start + 1)/step) + start)/step
+        # TODO: some literal simplifications
+        return div(
+            add_datanodes(
+                [
+                    mul(
+                        step,
+                        div(substract_datanodes([stop, one()], [start]), step),
+                    ),
+                    start,
+                ]
+            ),
+            step,
+        )
+
+    def number_of_iterations(self, loop):
+        """Computes the total number of iterations of a nested loop.
+
+        :param loop: nested loop.
+        :type start: :py:class:`psyclone.psyir.nodes.Loop`
+
+        :return: total number of iterations performed by the nested loops.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        variables_and_bounds = self.nested_loops_variables_and_bounds(loop)
+
+        _, start, stop, step = variables_and_bounds[0]
+        number_of_iterations = self._single_loop_number_of_iterations(
+            start, stop, step
+        )
+
+        if len(variables_and_bounds) > 1:
+            for _, start, stop, step in variables_and_bounds[1:]:
+                number_of_iterations = multiply_datanodes(
+                    [
+                        number_of_iterations,
+                        self._single_loop_number_of_iterations(
+                            start, stop, step
+                        ),
+                    ],
+                )
+
+        return number_of_iterations
+
+    def _single_loop_current_iteration(self, var, start, _, step):
+        """Computes the iteration counter on a single loop based on its \
+        loop variable and bounds.
+        This starts at 0.
+
+        :param var: loop variable as a symbol.
+        :type var: :py:class:`psyclone.psyir.symbols.DataSymbol`
+        :param start: start expression of the loop.
+        :type start: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param stop: stop expression of the loop.
+        :type stop: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param step: step expression of the loop.
+        :type step: :py:class:`psyclone.psyir.nodes.DataNode`
+
+        :return: iteration counter for the loop.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        # (i - start)/step
+        if step == one():
+            if start == zero():
+                return Reference(var)
+            return sub(var, start)
+
+        # TODO: some literal simplifications
+        return div(sub(var, start), step)
+
+    def _iteration_counter_from_variables_and_bounds(
+        self, variables_and_bounds
+    ):
+        """Takes a list of loop variables and bounds and returns an iteration \
+        counter. The list should be order from the outermost to the innermost \
+        loop.
+        eg. for a loop with variable i containing a loop with variable j,
+        given [[var_i, start_i, stop_i, step_i], 
+               [var_j, start_j, stop_j, step_j]]
+        this method returns the counter to be used inside the j loop.
+
+        :param variables_and_bounds: list of lists containing the loop variable as \
+                                a symbol and the loop bounds as datanodes.
+        :type variables_and_bounds: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                                         :py:class:`psyclone.psyir.nodes.DataNode`,
+                                         :py:class:`psyclone.psyir.nodes.DataNode`,
+                                         :py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :return: iteration counter for the loops.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        # if not isinstance(variables_and_bounds, list):
+        #     raise TypeError("")
+        # for var_bounds in variables_and_bounds:
+        #     if not isinstance(var_bounds, list):
+        #         raise TypeError("")
+        #     if len(var_bounds) != 4:
+        #         raise TypeError("")
+        #     var = var_bounds[0]
+        #     bounds = var_bounds[1:]
+        #     if not isinstance(var, DataSymbol):
+        #         raise TypeError("")
+        #     for bound in bounds:
+        #         if not isinstance(bound, DataNode):
+        #             raise TypeError("")
+
+        if variables_and_bounds == []:
+            return zero()
+
+        variables_and_bounds.reverse()
+
+        inner_var, start, stop, step = variables_and_bounds[0]
+        current_iteration = self._single_loop_current_iteration(
+            inner_var, start, stop, step
+        )
+        inner_max = self._single_loop_number_of_iterations(start, stop, step)
+
+        if len(variables_and_bounds) > 1:
+            for var, start, stop, step in variables_and_bounds[1:]:
+                loop_iteration = mul(
+                    self._single_loop_current_iteration(var, start, stop, step),
+                    inner_max,
+                )
+                loop_max = self._single_loop_number_of_iterations(
+                    start, stop, step
+                )
+                current_iteration = add(loop_iteration, current_iteration)
+                inner_max = mul(loop_max, inner_max)
+
+        return current_iteration
+
+    def iteration_counter_within_this_loop(self, loop):
+        """Computes the iteration counter to be used in this loop.
+        The 'loop' argument is the current one. Takes into account the \
+        surrounding loops.
+
+        :param loop: current loop.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+
+        :return: iteration counter for this loop.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        variables_and_bounds = self.surrounding_loops_variables_and_bounds(loop)
+        return self._iteration_counter_from_variables_and_bounds(
+            variables_and_bounds
+        )
+
+    def iteration_counter_within_innermost_nested_loop(self, loop):
+        """Computes the iteration counter to be used within the innermost \
+        nested loop within 'loop'.
+        The 'loop' argument is the outermost (purely) nested one.
+
+        :param loop: outermost nested loop.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+
+        :return: iteration counter for the nested loops.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
+        # nested i, j, k => iter_i * (max_j * max_k) + iter_j * max_k + iter_k
+        # variables_and_bounds = self.surrounding_loops_variables_and_bounds(loop)[:-1]
+        variables_and_bounds = self.nested_loops_variables_and_bounds(loop)
+        return self._iteration_counter_from_variables_and_bounds(
+            variables_and_bounds
+        )
+
     def _is_only_nested_loops(self, loop):
         """Checks if only the innermost nested loop contains nodes different \
         from a loop.
@@ -425,55 +741,201 @@ class ADReverseLoopTrans(ADLoopTrans):
                     return False
         return True
 
-    def _all_arrays_can_be_tape_restored_afterwards(self, loop):
-        # TODO: doc this
-        lhs_of_assignments = []
-        nested_loops_vars = self.nested_loops_variables(loop)
-        for assignment in loop.walk(Assignment):
-            lhs_of_assignments.append(assignment.lhs)
-            if isinstance(assignment.lhs, ArrayReference):
-                indices_symbols = [
-                    index.symbol for index in assignment.lhs.children
-                ]
-                if set(nested_loops_vars) != set(indices_symbols):
-                    return False
-                    # raise NotImplementedError(
-                    #     "For now, only nested loops "
-                    #     "which write to an array at "
-                    #     "indices which are exactly "
-                    #     "the loop variables are "
-                    #     "supported."
-                    # )
-            else:
-                return False
-                # raise NotImplementedError(
-                #     "For now, assignments in loops "
-                #     "should all be to array elements."
-                # )
+    # def _all_lhs_of_assignments_are_array_references(self, loop):
+    #     """Check if the LHS of assignment nodes are all ArrayReferences.
+
+    #     :param loop: loop to be checked.
+    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+    #     :return: whether all LHS of assignment nodes verify this property.
+    #     :rtype: bool
+    #     """
+    #     # Get all the LHS of assignements and check them
+    #     for assignment in loop.walk(Assignment):
+    #         if not isinstance(assignment.lhs, ArrayReference):
+    #             return False
+    #     return True
+
+    # def _all_arrays_are_indexed_on_lhs_without_offsets(self, loop):
+    #     """Check if the arrays are indexed using the exact loop(s) variable(s) \
+    #     on the LHS of assignements ie. without offsets, eg. `array(i,j) = ...` \
+    #     is fine but `array(i+1, j) = ...` is not).
+
+    #     :param loop: loop to be checked.
+    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+    #     :return: whether all arrays verify this property.
+    #     :rtype: bool
+    #     """
+    #     # Get the symbols of all nested loops
+    #     nested_loops_vars = self.nested_loops_variables(loop)
+    #     # Get all the LHS of assignements
+    #     for assignment in loop.walk(Assignment):
+    #         # If an ArrayReference, make sure that indexing uses exactly the
+    #         # same set of symbols as the nested loops
+    #         if isinstance(assignment.lhs, ArrayReference):
+    #             indices_symbols = [
+    #                 index.symbol for index in assignment.lhs.children
+    #             ]
+    #             if set(nested_loops_vars) != set(indices_symbols):
+    #                 return False
+    #                 # raise NotImplementedError(
+    #                 #     "For now, only nested loops "
+    #                 #     "which write to an array at "
+    #                 #     "indices which are exactly "
+    #                 #     "the loop variables are "
+    #                 #     "supported."
+    #                 # )
+    #     return True
+
+    # def _all_arrays_can_be_taped_outside_the_loops(self, loop):
+    #     """Check if the arrays are all written to or incremented *once* and \
+    #     *before* being read from. If so, only their post-values are used in \
+    #     adjoint computations, which means that their pre-values can be \
+    #     restored from the tape after exiting the loop(s) body.
+
+    #     :param loop: loop to be checked.
+    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+    #     :return: whether all arrays verify this property.
+    #     :rtype: bool
+    #     """
+    #     all_assignments = loop.walk(Assignment)
+    #     # Get all the LHS of assignments
+    #     lhs_of_assignments = []
+    #     for assignment in all_assignments:
+    #         lhs_of_assignments.append(assignment.lhs)
+
+    #     # Check for all LHS, for all assignments up to this one
+    #     for i, lhs in enumerate(lhs_of_assignments):
+    #         # only for LHS which are array elements
+    #         if isinstance(lhs_of_assignments, ArrayReference):
+    #             assignments_up_to_this_one = all_assignments[: i + 1]
+    #             rhs_of_assignments = [
+    #                 assignment.rhs for assignment in assignments_up_to_this_one
+    #             ]
+    #             # For these RHS, only increments are allowed. Check that the path
+    #             # from the lhs to the rhs is only made of BinaryOperation nodes
+    #             # with '+' operator.
+    #             # NOTE: b(i) = b(i) + a(i)**2 + w
+    #             # parses as b(i) = (b(i) + a(i)**2) + w, hence the path
+    #             for rhs in rhs_of_assignments:
+    #                 rhs_array_refs = rhs.walk(ArrayReference)
+    #                 if lhs in rhs_array_refs:
+    #                     for ref in rhs_array_refs:
+    #                         if ref == lhs:
+    #                             indices = ref.path_from(lhs.parent)
+    #                             cursor = lhs.parent
+    #                             for index in indices[:-1]:
+    #                                 cursor = cursor.children[index]
+    #                                 # print(cursor.view())
+    #                                 if not isinstance(cursor, BinaryOperation):
+    #                                     return False
+    #                                 if (
+    #                                     cursor.operator
+    #                                     is not BinaryOperation.Operator.ADD
+    #                                 ):
+    #                                     return False
+    #                     # return False
+    #                     # raise NotImplementedError("For now only loops were "
+    #                     #                         "references "
+    #                     #                         "that are written to are written "
+    #                     #                         "BEFORE they are read are "
+    #                     #                         "supported "
+    #                     #                         "due to tape restores being made "
+    #                     #                         "after the loop.")
+
+    #             # Also ensure that this is on LHS only once
+    #             if lhs_of_assignments.count(lhs) != 1:
+    #                 return False
+    #                 # raise NotImplementedError("For now only one write to every "
+    #                 #                           "reference per loop body is "
+    #                 #                           "supported.")
+    #     return True
+
+    def _list_arrays_to_tape_outside(self, loop):
+        """List all arrays that use the nested loop variables as \
+        indices (without increment or decrement), are written only once and \
+        are either written to or incremented before being read from.
+
+        :param loop: nested loop to look outside.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+
+        :return: list of array references
+        :rtype: List[:py:class:`psyclone.psyir.nodes.ArrayReference`]
+        """
+        # Get the symbols of all nested loops
+        # nested_loops_vars = self.nested_loops_variables(loop)
 
         all_assignments = loop.walk(Assignment)
+        # Get all the LHS of assignments to ArrayReferences
+        lhs_of_assignments = []
+        for assignment in all_assignments:
+            lhs_of_assignments.append(assignment.lhs)
+
+        arrays_which_can_be_taped_outside = []
+
+        # Check for all LHS
         for i, lhs in enumerate(lhs_of_assignments):
+            # Ensure that this is on LHS only once
+            if lhs_of_assignments.count(lhs) != 1:
+                continue
+
+            # Only consider assignments to array elements
+            if not isinstance(lhs, ArrayReference):
+                continue
+
+            # Only allow Reference indices (ie. not operations, literals, etc)
+            indices_are_refs = [
+                isinstance(index, Reference) for index in lhs.children
+            ]
+            if not all(indices_are_refs):
+                continue
+
+            # # Only consider those that are indexed using exactly (some of)
+            # # the nested loops variables
+            # indices_symbols = [index.symbol for index in lhs.children]
+            # if (
+            #     len(set(indices_symbols).difference(set(nested_loops_vars)))
+            #     != 0
+            # ):
+            #     continue
+
+            can_be_taped_outside = True
+
+            # Check all assignments up to there
             assignments_up_to_this_one = all_assignments[: i + 1]
             rhs_of_assignments = [
                 assignment.rhs for assignment in assignments_up_to_this_one
             ]
+            # For these RHS, only increments are allowed. Check that the path
+            # from the lhs to the rhs is only made of BinaryOperation nodes
+            # with '+' operator.
+            # NOTE: b(i) = b(i) + a(i)**2 + w
+            # parses as b(i) = (b(i) + a(i)**2) + w, hence the path
             for rhs in rhs_of_assignments:
-                if lhs in rhs.walk(Reference):
-                    return False
-                    # raise NotImplementedError("For now only loops were "
-                    #                         "references "
-                    #                         "that are written to are written "
-                    #                         "BEFORE they are read are "
-                    #                         "supported "
-                    #                         "due to tape restores being made "
-                    #                         "after the loop.")
+                rhs_array_refs = rhs.walk(ArrayReference)
+                if lhs in rhs_array_refs:
+                    for ref in rhs_array_refs:
+                        if ref == lhs:
+                            if ref.ancestor(Assignment) != lhs.parent:
+                                can_be_taped_outside = False
+                            else:
+                                indices = ref.path_from(lhs.parent)
+                                cursor = lhs.parent
+                                for index in indices[:-1]:
+                                    cursor = cursor.children[index]
+                                    # print(cursor.view())
+                                    if not isinstance(cursor, BinaryOperation):
+                                        can_be_taped_outside = False
+                                    if (
+                                        cursor.operator
+                                        is not BinaryOperation.Operator.ADD
+                                    ):
+                                        can_be_taped_outside = False
 
-            if lhs_of_assignments.count(lhs) != 1:
-                return False
-                # raise NotImplementedError("For now only one write to every "
-                #                           "reference per loop body is "
-                #                           "supported.")
-        return True
+            if can_be_taped_outside:
+                # print(lhs.symbol, "can be taped outside")
+                arrays_which_can_be_taped_outside.append(lhs)
+
+        return arrays_which_can_be_taped_outside
 
     ############################################################################
     ############################################################################
@@ -483,12 +945,17 @@ class ADReverseLoopTrans(ADLoopTrans):
     ############################################################################
     ############################################################################
 
-    def transform_children(self, loop, options=None):
+    def transform_children(self, loop, arrays_to_tape_outside, options=None):
         """Transforms all the children of the loop body being transformed \
         and returns lists of Nodes for the recording and returning loops.
 
         :param loop: the loop to be transformed.
         :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+        :param arrays_to_tape_outside: list of array references that should \
+                                       not be taped inside the loop when \
+                                       assigned to.
+        :type arrays_to_tape_outside: 
+                           List[:py:class:`psyclone.psyir.nodes.ArrayReference`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -512,7 +979,7 @@ class ADReverseLoopTrans(ADLoopTrans):
                         "variable."
                     )
                 (recording, returning) = self.transform_assignment(
-                    child, options
+                    child, arrays_to_tape_outside, options
                 )
             elif isinstance(child, Call):
                 raise NotImplementedError(
@@ -528,9 +995,15 @@ class ADReverseLoopTrans(ADLoopTrans):
                 )
                 (recording, returning) = self.transform_if_block(child, options)
             elif isinstance(child, Loop):
-                (recording, returning) = self.transform_inner_loop(
-                    child, options
-                )
+                #################
+                # TODO: might benefit from a LoopTrans split
+                #################
+                if self._is_only_nested_loops(loop):
+                    (recording, returning) = self.transform_inner_loop(
+                        child, arrays_to_tape_outside, options
+                    )
+                else:
+                    (recording, returning) = self.apply(child, options)
             else:
                 raise NotImplementedError(
                     f"Transformations for "
@@ -549,14 +1022,32 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         return recording_body, returning_body
 
-    def transform_inner_loop(self, inner_loop, options=None):
-        # TODO: doc
+    def transform_inner_loop(
+        self, inner_loop, arrays_to_tape_outside, options=None
+    ):
+        """Transform an inner loop in case of nested loops.
+
+        :param inner_loop: inner loop to transform.
+        :type inner_loop: :py:class:`psyclone.psyir.nodes.Loop`
+        :param arrays_to_tape_outside: list of array references that should \
+                                       not be taped inside the loop when \
+                                       assigned to.
+        :type arrays_to_tape_outside: 
+                           List[:py:class:`psyclone.psyir.nodes.ArrayReference`]
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+
+        :return: recording inner loop, returning inner loop.
+        :rtype: :py:class:`psyclone.psyir.nodes.Loop`,
+                :py:class:`psyclone.psyir.nodes.Loop`
+        """
 
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(inner_loop, options)
 
         recording_body, returning_body = self.transform_children(
-            inner_loop, options
+            inner_loop, arrays_to_tape_outside, options
         )
 
         returning_body.reverse()
@@ -579,12 +1070,19 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         return [recording_loop], [returning_loop]
 
-    def transform_assignment(self, assignment, options=None):
+    def transform_assignment(
+        self, assignment, arrays_to_tape_outside, options=None
+    ):
         """Transforms an Assignment child of the loop and returns the \
         statements to add to the recording and returning loop bodies.
 
         :param assignment: assignment to transform.
         :type assignment: :py:class:`psyclone.psyir.nodes.Assignement`
+        :param arrays_to_tape_outside: list of array references that should \
+                                       not be taped inside the loop when \
+                                       assigned to.
+        :type arrays_to_tape_outside: 
+                           List[:py:class:`psyclone.psyir.nodes.ArrayReference`]
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -606,21 +1104,27 @@ class ADReverseLoopTrans(ADLoopTrans):
         recording = []
         returning = []
 
-        # TODO: if NOT overwriting this should NOT tape at first iteration???
+        # print("Assignment with lhs", assignment.lhs.name)
 
-        # FIXME: implement the general case
-        # Tape record and restore first
-        # overwriting = self.routine_trans.is_overwrite(assignment.lhs)
-        # if overwriting:
-        #    value_tape_record = self.routine_trans.value_tape.record(
-        #        assignment.lhs, do_loop=True
-        #    )
-        #    recording.append(value_tape_record)
-        #
-        #    value_tape_restore = self.routine_trans.value_tape.restore(
-        #        assignment.lhs, do_loop=True
-        #    )
-        #    returning.append(value_tape_restore)
+        # If taping is done inside
+        if assignment.lhs.symbol not in [
+            array_ref.symbol for array_ref in arrays_to_tape_outside
+        ]:
+
+            # TODO: if NOT overwriting this should NOT tape at first iteration
+            # Should extract the first iteration rather than using a conditional
+            # branch?
+
+            # Tape record and restore first
+            value_tape_record = self.routine_trans.value_tape.record(
+                assignment.lhs, do_loop=True
+            )
+            recording.append(value_tape_record)
+
+            value_tape_restore = self.routine_trans.value_tape.restore(
+                assignment.lhs, do_loop=True
+            )
+            returning.append(value_tape_restore)
 
         # Apply the transformation
         rec, ret = self.routine_trans.assignment_trans.apply(
@@ -631,6 +1135,8 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         return recording, returning
 
+    # TODO: this needs lots of edits, for now any calls will raise a
+    # NotImplementedError.
     def transform_call(self, call, options=None):
         """Transforms a Call child of the routine and adds the \
         statements to the recording and returning routines.

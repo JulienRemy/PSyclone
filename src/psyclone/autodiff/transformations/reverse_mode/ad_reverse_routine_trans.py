@@ -41,12 +41,13 @@ from psyclone.core import VariablesAccessInfo
 from psyclone.psyir.nodes import (
     Call,
     Reference,
+    ArrayReference,
     Assignment,
     Literal,
     Operation,
     IntrinsicCall,
     IfBlock,
-    Loop
+    Loop,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -57,7 +58,7 @@ from psyclone.psyir.symbols import (
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
-from psyclone.autodiff import own_routine_symbol
+from psyclone.autodiff import own_routine_symbol, assign_zero
 from psyclone.autodiff.tapes import ADTape, ADValueTape, ADControlTape
 from psyclone.autodiff.transformations import ADRoutineTrans
 
@@ -100,9 +101,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
     _number_of_routines = 3  # Recording, returning, reversing
     _differential_prefix = ""
     _differential_postfix = "_adj"
-    _differential_table_index = (
-        1  # Adjoints are created in the returning table
-    )
+    _differential_table_index = 1  # Adjoints are created in the returning table
 
     _operation_adjoint_name = "op_adj"
     # _call_adjoint_name = "call_adj"
@@ -133,7 +132,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             ADReverseAssignmentTrans,
             ADReverseCallTrans,
             ADReverseIfBlockTrans,
-            ADReverseLoopTrans
+            ADReverseLoopTrans,
         )
 
         # Initialize the sub transformations
@@ -522,8 +521,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # pylint: disable=arguments-renamed, too-many-arguments
 
         self.validate(
-            routine, dependent_vars, independent_vars, value_tape, control_tape,
-            options
+            routine,
+            dependent_vars,
+            independent_vars,
+            value_tape,
+            control_tape,
+            options,
         )
 
         # Transformation can only be applied once
@@ -573,8 +576,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Transform the statements found in the Routine
         self.transform_children(options)
 
-        # Postprocess (simplify, substitute operation adjoints) the returning
-        # routine
+        # Postprocess (simplify, substitute operation adjoints) the recording 
+        # and returning routines
+        self.postprocess(self.recording, options)
         self.postprocess(self.returning, options)
 
         # Add the transformed routines symbols to the container_trans map
@@ -611,7 +615,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Add the assignments of 0 to non-argument adjoints at the beginning of
         # the returning routine
-        self.add_differentials_zero_assignments(self. returning, options)
+        self.add_differentials_zero_assignments(self.returning, options)
 
         # Add the value_tape as argument of both routines iff it's actually used
         # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
@@ -696,9 +700,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # All preceding nodes
         preceding = reference.preceding(routine=True)
         # All preceding calls
-        preceding_calls = [
-            node for node in preceding if isinstance(node, Call)
-        ]
+        preceding_calls = [node for node in preceding if isinstance(node, Call)]
 
         # If the reference is in a call, get it
         # then remove it from the calls to consider.
@@ -813,10 +815,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         return recording, returning
 
         ## Insert in the recording routine
-        #self.add_children(self.recording, recording)
+        # self.add_children(self.recording, recording)
 
         ## Insert in the returning routine
-        #self.add_children(self.returning, returning, reverse=True)
+        # self.add_children(self.returning, returning, reverse=True)
 
     def transform_call(self, call, options=None):
         """Transforms a Call child of the routine and returns the \
@@ -922,9 +924,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         control_tape_ref = self.control_tape.restore(if_block.condition)
 
         # Apply the transformation
-        rec, ret = self.if_block_trans.apply(if_block,
-                                             control_tape_ref,
-                                             options)
+        rec, ret = self.if_block_trans.apply(
+            if_block, control_tape_ref, options
+        )
 
         recording.append(rec)
         returning.append(ret)
@@ -975,17 +977,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Go line by line through the Routine
         for child in self.routine.children:
             if isinstance(child, Assignment):
-                (recording,
-                 returning) = self.transform_assignment(child, options)
+                (recording, returning) = self.transform_assignment(
+                    child, options
+                )
             elif isinstance(child, Call):
-                (recording,
-                 returning) = self.transform_call(child, options)
+                (recording, returning) = self.transform_call(child, options)
             elif isinstance(child, IfBlock):
-                (recording,
-                 returning) = self.transform_if_block(child, options)
+                (recording, returning) = self.transform_if_block(child, options)
             elif isinstance(child, Loop):
-                (recording, 
-                 returning) = self.transform_loop(child, options)
+                (recording, returning) = self.transform_loop(child, options)
             else:
                 raise NotImplementedError(
                     f"Transforming a Routine child of "
@@ -1016,14 +1016,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             raise TypeError(
                 f"'operation' argument should be of type "
                 f"'Operation' or 'IntrinsicCall' but found "
-                f"'{type(operation).__name__}'.")
+                f"'{type(operation).__name__}'."
+            )
 
         datatype = operation.datatype
         if not isinstance(datatype, (ScalarType, ArrayType)):
             raise TypeError(
                 f"'datatype' attribute of 'operation' argument should be of "
                 f"type 'ScalarType' or 'ArrayType' but found "
-                f"'{type(datatype).__name__}'." 
+                f"'{type(datatype).__name__}'."
             )
 
         adjoint = self.returning_table.new_symbol(
@@ -1079,9 +1080,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                         # is a Reference or Literal
                         # so stop there
                         if (
-                            not isinstance(
-                                assignment.rhs, (Reference, Literal)
-                            )
+                            not isinstance(assignment.rhs, (Reference, Literal))
                         ) and (len(rhs_occurences) == 2):
                             break
 
@@ -1156,10 +1155,18 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # NOTE: Arguments with intent(in) are not written back but cannot
         # be modified.
         for var in self.recording_table.datasymbols:
-            if (var not in self.recording_table.argument_list
-                and var.datatype.intrinsic is ScalarType.Intrinsic.REAL):
+            if (
+                var not in self.recording_table.argument_list
+                and var.datatype.intrinsic is ScalarType.Intrinsic.REAL
+            ):
                 # "fake" reference to value_tape the last value
-                ref = Reference(var)
+                # Either the whole array or the scalar variable
+                if isinstance(var.datatype, ArrayType):
+                    ref = ArrayReference.create(
+                        var, [":"] * len(var.datatype.shape)
+                    )
+                else:
+                    ref = Reference(var)
 
                 # Record and restore
                 value_tape_record = self.value_tape.record(ref)
@@ -1279,9 +1286,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Use the correct intents
         # intent(out) for the recording routine
-        symbols[0].interface = ArgumentInterface(
-            ArgumentInterface.Access.WRITE
-        )
+        symbols[0].interface = ArgumentInterface(ArgumentInterface.Access.WRITE)
         # intent(in) for the returning routine
         symbols[1].interface = ArgumentInterface(ArgumentInterface.Access.READ)
         # The reversing routine declares the value_tape,
@@ -1293,21 +1298,31 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Append it to the arguments lists of the recording and returning
         # routines only
-        # Also add the tape's do loop offset symbol to their symbol tables iff
-        # it's used
         for table, symbol in zip(self.transformed_tables[:-1], symbols[:-1]):
             table._argument_list.append(symbol)
 
-            # Get Reference nodes in said routine
-            references = table.node.walk(Reference)
-            # Check if one is a Reference to the tape do_offset symbol
-            # if so, add the symbol to the table
-            for ref in references:
-                if ref.symbol == tape.do_offset_symbol:
-                    table.add(tape.do_offset_symbol)
-                    break # Only add it once
+            # # Get Reference nodes in said routine
+            # references = table.node.walk(Reference)
+            # # Check if one is a Reference to the tape do_offset symbol
+            # # if so, add the symbol to the table
+            # for ref in references:
+            #     if ref.symbol == tape.do_offset_symbol:
+            table.add(tape.do_offset_symbol)
+                    # break  # Only add it once
+
+            # # Same for the offset_symbol
+            # for ref in references:
+            #     if ref.symbol == tape.offset_symbol:
+            table.add(tape.offset_symbol)
+                    # break  # Only add it once
 
         # The tape is not an argument of the reversing routine
+
+        # Add an assignment of the tape offset at the very beginning of the
+        # recording and returning routines, respectively assigning 0 and its 
+        # last value to it
+        self.recording.addchild(assign_zero(tape.offset), 0)
+        self.returning.addchild(tape.offset_assignment, 0)
 
         # Also add ALLOCATE statements using the tape length at the beginning
         # of the reversing routine if it's a dynamic array
@@ -1316,7 +1331,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.reversing.addchild(allocate, 0)
             deallocate = tape.deallocate()
             self.reversing.addchild(deallocate, len(self.reversing.children))
-
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \

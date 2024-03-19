@@ -353,16 +353,16 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         """
 
         for symbol in self.routine_table.datasymbols:
-            if (
-                isinstance(symbol.datatype, ScalarType)
-                and (symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL)
-            ) or (
-                isinstance(symbol.datatype, ArrayType)
-                and (
-                    symbol.datatype.datatype.intrinsic
-                    is ScalarType.Intrinsic.REAL
-                )
-            ):
+            # if (
+                # isinstance(symbol.datatype, ScalarType)
+                # and (symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL)
+            # ) or (
+                # isinstance(symbol.datatype, ArrayType)
+                # and (
+                    # symbol.datatype.datatype.intrinsic
+                    # is ScalarType.Intrinsic.REAL
+                # )
+            # ):
                 self.create_differential_symbol(symbol, options)
 
     def create_differential_symbol(self, datasymbol, options=None):

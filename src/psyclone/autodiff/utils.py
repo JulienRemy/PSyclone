@@ -46,7 +46,7 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Routine,
-    IntrinsicCall
+    IntrinsicCall,
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
@@ -716,3 +716,304 @@ def sign(lhs, rhs):
     right = datanode(rhs)
 
     return IntrinsicCall.create(IntrinsicCall.Intrinsic.SIGN, [left, right])
+
+
+#####################################################
+#####################################################
+#####################################################
+# TODO: functions below need to be tested
+# and should be combined?
+# NOTE: they could/should be in simplify instead?
+
+
+
+
+def _typecheck_list_of_int_literals(int_literals):
+    """Check that the argument is a list of scalar integer literals.
+
+    :param int_literals: list of scalar integer literals.
+    :type int_literals: List[:py:class:`psyclone.psyir.nodes.Literal`]
+
+    :raises TypeError: if int_literals is of the wrong type.
+    :raises TypeError: if an element of int_literals is of the wrong type.
+    :raises ValueError: if an element of int_literals is not of datatype \
+                        ScalarType.
+    :raises ValueError: if an element of int_literals is not of intrinsic \
+                        ScalarType.Intrinsic.INTEGER.
+    """
+    if not isinstance(int_literals, list):
+        raise TypeError(
+            f"'int_literals' argument should be of type 'list' "
+            f"but found '{type(int_literals).__name__}'."
+        )
+    for literal in int_literals:
+        if not isinstance(literal, Literal):
+            raise TypeError(
+                f"'int_literals' argument should be a 'list' "
+                f"of elements of type 'Literal' "
+                f"but found '{type(literal).__name__}'."
+            )
+        if not isinstance(literal.datatype, ScalarType):
+            raise ValueError(
+                f"'int_literals' argument should be a 'list' "
+                f"of elements of datatype 'ScalarType' but "
+                f"found '{type(literal.datatype).__name__}'."
+            )
+        if literal.datatype.intrinsic is not ScalarType.Intrinsic.INTEGER:
+            raise ValueError(
+                f"'int_literals' argument should be a 'list' "
+                f"of elements of intrinsic "
+                f"'ScalarType.Intrinsic.INTEGER' but found "
+                f"'{type(literal.datatype.intrinsic).__name__}'."
+            )
+
+
+def _typecheck_list_of_datanodes(datanodes):
+    """Check that the argument is a list of datanodes.
+
+    :param datanodes: list of datanodes.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+    :raises TypeError: if datanodes is of the wrong type.
+    :raises TypeError: if an element of datanodes is of the wrong type.
+    """
+    if not isinstance(datanodes, list):
+        raise TypeError(
+            f"'datanodes' argument should be of type 'list' "
+            f"but found '{type(datanodes).__name__}'."
+        )
+    for datanode in datanodes:
+        if not isinstance(datanode, DataNode):
+            raise TypeError(
+                f"'datanodes' argument should be a 'list' "
+                f"of elements of type 'DataNode' "
+                f"but found '{type(datanode).__name__}'."
+            )
+
+
+def _separate_int_literals(datanodes):
+    """| Separates the datanodes from a list into:
+    | - a list of scalar integer Literals,
+    | - a list of other datanodes. 
+
+    :param datanodes: list of datanodes to separate.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+    :return: list of integer literals, list of other datanodes
+    :rtype: List[:py:class:`psyclone.psyir.nodes.Literal`], \
+            List[:py:class:`psyclone.psyir.nodes.DataNode`]
+    """
+    _typecheck_list_of_datanodes(datanodes)
+
+    int_literals = []
+    other_datanodes = []
+    for datanode in datanodes:
+        if (
+            isinstance(datanode, Literal)
+            and isinstance(datanode.datatype, ScalarType)
+            and (datanode.datatype.intrinsic is ScalarType.Intrinsic.INTEGER)
+        ):
+            int_literals.append(datanode)
+        else:
+            other_datanodes.append(datanode)
+
+    return int_literals, other_datanodes
+
+
+def _add_int_literals(int_literals):
+    """Add the int Literals from a list, summing in Python and returning \
+    a new Literal.
+
+    :param datanodes: list of literals.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.Literal`]
+
+    :return: sum, as a Literal.
+    :rtype: :py:class:`psyclone.psyir.nodes.Literal`
+    """
+    _typecheck_list_of_int_literals(int_literals)
+
+    result = 0
+    for literal in int_literals:
+        result += int(literal.value)
+
+    return Literal(str(result), INTEGER_TYPE)
+
+
+def _apply_binary_operation(binary_operation):
+    if not isinstance(binary_operation, BinaryOperation):
+        raise TypeError(
+            f"'binary_operation' argument should be of "
+            f"type 'BinaryOperation "
+            f"but found '{type(datanode).__name__}'."
+        )
+    if binary_operation.operator is BinaryOperation.Operator.ADD:
+        return add_datanodes(binary_operation.children)
+
+    if binary_operation.operator is BinaryOperation.Operator.SUB:
+        return substract_datanodes(
+            [binary_operation.children[0]], [binary_operation.children[1]]
+        )
+
+    if binary_operation.operator is BinaryOperation.Operator.MUL:
+        return multiply_datanodes(binary_operation.children)
+
+    return binary_operation
+
+
+def _apply_all_binary_operations(datanodes):
+    _typecheck_list_of_datanodes(datanodes)
+    result = []
+    for datanode in datanodes:
+        if isinstance(datanode, BinaryOperation):
+            result.append(_apply_binary_operation(datanode))
+        else:
+            result.append(datanode)
+    return result
+
+
+def add_datanodes(datanodes):
+    """Add the datanodes from a list, dealing with Literals in Python \
+    and others in BinaryOperations.
+
+    :param datanodes: list of datanodes.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+    :return: sum, as a Literal or BinaryOperation.
+    :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`, \
+                    :py:class:`psyclone.psyir.nodes.BinaryOperation`]
+    """
+    _typecheck_list_of_datanodes(datanodes)
+
+    int_literals, other_datanodes = _separate_int_literals(datanodes)
+    int_sum = _add_int_literals(int_literals)
+
+    if int_sum.value != "0":
+        other_datanodes.append(int_sum)
+
+    other_datanodes = _apply_all_binary_operations(other_datanodes)
+
+    result = zero()
+    if len(other_datanodes) != 0:
+        result = other_datanodes[0]
+        if len(other_datanodes) > 1:
+            for datanode in other_datanodes[1:]:
+                result = BinaryOperation.create(
+                    BinaryOperation.Operator.ADD,
+                    result.copy(),
+                    datanode.copy(),
+                )
+
+    return result
+
+
+def substract_datanodes(lhs, rhs):
+    """Substract the datanodes from two lists, dealing with int Literals \
+    in Python and others in BinaryOperations.
+
+    :param lhs: list of datanodes to sum as lhs of '-'.
+    :type lhs: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+    :param rhs: list of datanodes to sum as rhs of '-'.
+    :type rhs: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+    :return: substraction, as a Literal or BinaryOperation.
+    :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`, \
+                    :py:class:`psyclone.psyir.nodes.BinaryOperation`]
+    """
+    _typecheck_list_of_datanodes(lhs)
+    _typecheck_list_of_datanodes(rhs)
+
+    lhs_int_literals, lhs_others = _separate_int_literals(lhs)
+    rhs_int_literals, rhs_others = _separate_int_literals(rhs)
+
+    lhs_int_sum = _add_int_literals(lhs_int_literals)
+    rhs_int_sum = _add_int_literals(rhs_int_literals)
+
+    int_literal = Literal(
+        str(int(lhs_int_sum.value) - int(rhs_int_sum.value)), INTEGER_TYPE
+    )
+
+    if int_literal.value != "0":
+        lhs_others.append(int_literal)
+
+    lhs_others = _apply_all_binary_operations(lhs_others)
+    rhs_others = _apply_all_binary_operations(rhs_others)
+
+    result = zero()
+    if len(lhs_others) != 0:
+        result = lhs_others[0]
+        if len(lhs_others) > 1:
+            for datanode in lhs_others[1:]:
+                result = BinaryOperation.create(
+                    BinaryOperation.Operator.ADD,
+                    result.copy(),
+                    datanode.copy(),
+                )
+
+    if len(rhs_others) != 0:
+        substract = rhs_others[0]
+        if len(rhs_others) > 1:
+            for datanode in rhs_others[1:]:
+                substract = BinaryOperation.create(
+                    BinaryOperation.Operator.ADD,
+                    substract.copy(),
+                    datanode.copy(),
+                )
+        result = BinaryOperation.create(
+            BinaryOperation.Operator.SUB, result.copy(), substract.copy()
+        )
+
+    return result
+
+
+def _multiply_int_literals(int_literals):
+    """Multiply the int literals from a list.
+    Performs the multiplication in Python and returns a new Literal.
+
+    :param datanodes: list of literals.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.Literal`]
+
+    :return: multiplication, as a Literal.
+    :rtype: :py:class:`psyclone.psyir.nodes.Literal`
+    """
+    _typecheck_list_of_int_literals(int_literals)
+
+    result = 1
+    for literal in int_literals:
+        result *= int(literal.value)
+
+    return Literal(str(result), INTEGER_TYPE)
+
+
+def multiply_datanodes(datanodes):
+    """Multiply the datanodes from a list, dealing with Literals in Python \
+    and others in BinaryOperations.
+
+    :param datanodes: list of datanodes.
+    :type datanodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+    :return: multiplication, as a Literal or BinaryOperation.
+    :rtype: Union[:py:class:`psyclone.psyir.nodes.Literal`, \
+                    :py:class:`psyclone.psyir.nodes.BinaryOperation`]
+    """
+    _typecheck_list_of_datanodes(datanodes)
+
+    int_literals, other_datanodes = _separate_int_literals(datanodes)
+    int_mul = _multiply_int_literals(int_literals)
+
+    if int_mul.value != "1":
+        other_datanodes.append(int_mul)
+
+    other_datanodes = _apply_all_binary_operations(other_datanodes)
+
+    result = one()
+    if len(other_datanodes) != 0:
+        result = other_datanodes[0]
+        if len(other_datanodes) > 1:
+            for datanode in other_datanodes[1:]:
+                result = BinaryOperation.create(
+                    BinaryOperation.Operator.MUL,
+                    result.copy(),
+                    datanode.copy(),
+                )
+
+    return result

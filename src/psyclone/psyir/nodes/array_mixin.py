@@ -581,7 +581,7 @@ class ArrayMixin(metaclass=abc.ABCMeta):
             if isinstance(idx_expr, Range):
                 shape.append(self._extent(idx))
 
-            elif isinstance(idx_expr, Reference):
+            elif isinstance(idx_expr, (Reference, IntrinsicCall, Operation)):
                 dtype = idx_expr.datatype
                 if isinstance(dtype, ArrayType):
                     # An array slice can be defined by a 1D slice of another
@@ -596,7 +596,7 @@ class ArrayMixin(metaclass=abc.ABCMeta):
                     # pylint: disable=protected-access
                     shape.append(idx_expr._extent(idx))
 
-            elif isinstance(idx_expr, (Call, Operation, CodeBlock)):
+            elif isinstance(idx_expr, (Call, CodeBlock)):
                 # We can't yet straightforwardly query the type of a function
                 # call or Operation - TODO #1799.
                 raise NotImplementedError(
