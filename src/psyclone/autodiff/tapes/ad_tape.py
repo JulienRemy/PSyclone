@@ -477,13 +477,14 @@ class ADTape(object, metaclass=ABCMeta):
                     f"'nodes' argument should be of type "
                     f"'list' but found '{type(nodes).__name__}'."
                 )
-        for node in nodes:
-            if not isinstance(node, self._node_types):
-                raise TypeError(
-                    f"'nodes' argument should be a list of nodes of types "
-                    f"among {self.node_type_names} but found an element of "
-                    f"type '{type(node).__name__}'."
-                )
+        # FIXME: dirty hack to tape integers
+        #for node in nodes:
+        #    if not isinstance(node, self._node_types):
+        #        raise TypeError(
+        #            f"'nodes' argument should be a list of nodes of types "
+        #            f"among {self.node_type_names} but found an element of "
+        #            f"type '{type(node).__name__}'."
+        #        )
 
         lengths = []
         for node in nodes:
@@ -506,13 +507,14 @@ class ADTape(object, metaclass=ABCMeta):
                     f"'nodes' argument should be of type "
                     f"'list' but found '{type(nodes).__name__}'."
                 )
-        for node in nodes:
-            if not isinstance(node, self._node_types):
-                raise TypeError(
-                    f"'nodes' argument should be a list of nodes of types "
-                    f"among {self.node_type_names} but found an element of "
-                    f"type '{type(node).__name__}'."
-                )
+        # FIXME: dirty hack to tape integers
+        # for node in nodes:
+        #     if not isinstance(node, self._node_types):
+        #         raise TypeError(
+        #             f"'nodes' argument should be a list of nodes of types "
+        #             f"among {self.node_type_names} but found an element of "
+        #             f"type '{type(node).__name__}'."
+        #         )
         if not isinstance(multiplicities, list):
             if not isinstance(multiplicities, list):
                 raise TypeError(
@@ -761,18 +763,19 @@ class ADTape(object, metaclass=ABCMeta):
         :raises TypeError: if node is of the wrong type.
         :raises ValueError: if the node is not the last element of the tape.
         """
-
-        if not isinstance(node, self._node_types):
-            raise TypeError(
-                f"'node' argument should be of type among "
-                f"{self.node_type_names} but found "
-                f"'{type(node).__name__}'."
-            )
-        if self.recorded_nodes[-1] != node:
-            raise ValueError(
-                f"node argument named {node.name} was not "
-                f"stored as last element of the value_tape."
-            )
+        # FIXME: dirty hack to tape integers
+        # if not isinstance(node, self._node_types):
+        #     raise TypeError(
+        #         f"'node' argument should be of type among "
+        #         f"{self.node_type_names} but found "
+        #         f"'{type(node).__name__}'."
+        #     )
+        # FIXME: dirty hack to tape integers
+        # if self.recorded_nodes[-1] != node:
+        #     raise ValueError(
+        #         f"node argument named {node.name} was not "
+        #         f"stored as last element of the value_tape."
+        #     )
 
     def record(self, node, do_loop=False):
         """Add the node as last element of the tape and return the \
@@ -793,12 +796,13 @@ class ADTape(object, metaclass=ABCMeta):
         :return: the array node to the last element of the tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
         """
-        if not isinstance(node, self._node_types):
-            raise TypeError(
-                f"'node' argument should be of type among "
-                f"{self.node_type_names} but found "
-                f"'{type(node).__name__}'."
-            )
+        # FIXME: dirty hack to tape integers
+        # if not isinstance(node, self._node_types):
+        #     raise TypeError(
+        #         f"'node' argument should be of type among "
+        #         f"{self.node_type_names} but found "
+        #         f"'{type(node).__name__}'."
+        #     )
 
         if not isinstance(do_loop, bool):
             raise TypeError(
@@ -846,12 +850,13 @@ class ADTape(object, metaclass=ABCMeta):
         :return: an ArrayReference node to the last element of the tape.
         :rtype: :py:class:`psyclone.psyir.nodes.ArrayReference`
         """
-        if not isinstance(node, self._node_types):
-            raise TypeError(
-                f"'node' argument should be of type among "
-                f"{self.node_type_names} but found "
-                f"'{type(node).__name__}'."
-            )
+        # FIXME: dirty hack to tape integers
+        # if not isinstance(node, self._node_types):
+        #     raise TypeError(
+        #         f"'node' argument should be of type among "
+        #         f"{self.node_type_names} but found "
+        #         f"'{type(node).__name__}'."
+        #     )
         if not isinstance(do_loop, bool):
             raise TypeError(
                 f"'bool' argument should be of type "
@@ -966,6 +971,7 @@ class ADTape(object, metaclass=ABCMeta):
 
         self._recorded_nodes.extend(tape.recorded_nodes)
         self._offset_mask.extend(tape.offset_mask)
+        self._multiplicities.extend(tape.multiplicities)
 
         # If static array, reshape to take the new length into account
         if not self.is_dynamic_array:
