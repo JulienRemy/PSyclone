@@ -113,12 +113,14 @@ class ADReverseIfBlockTrans(ADIfBlockTrans):
         # Transform the if body to get both motions
         (recording_if_block,
          returning_if_block) = self.transform_body(if_block.if_body, options)
+        returning_if_block.reverse()
 
         # If it exists, transform the else body to get both motions
         if if_block.else_body is not None:
             (recording_else_block,
              returning_else_block) = self.transform_body(if_block.else_body, 
                                                          options)
+            returning_else_block.reverse()
         else:
             recording_else_block = returning_else_block = None
 
@@ -176,6 +178,6 @@ class ADReverseIfBlockTrans(ADIfBlockTrans):
             # Add to returning motion in reversed order and before the existing
             # statements
             returning.reverse()
-            returning_body = returning + returning_body
+            returning_body.extend(returning)
 
         return recording_body, returning_body
