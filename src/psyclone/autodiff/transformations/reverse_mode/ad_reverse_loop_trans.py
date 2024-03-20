@@ -49,6 +49,7 @@ from psyclone.psyir.nodes import (
     Routine,
     IntrinsicCall,
 )
+from psyclone.psyir.symbols.interfaces import ArgumentInterface
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
@@ -202,19 +203,15 @@ class ADReverseLoopTrans(ADLoopTrans):
         recording = []
         returning = []
 
-        # # First make sure the offset is assigned
-        # # TODO: deduplicate
-        # value_tape_offset_assignment = (
-        #     self.routine_trans.value_tape.offset_assignment
-        # )
-        # recording.append(value_tape_offset_assignment)
-        # returning.append(value_tape_offset_assignment.copy())
+        # First make sure the offset is assigned
+        value_tape_offset_assignment_before = (
+            self.routine_trans.value_tape.offset_assignment
+        )
 
-        # if self._is_only_nested_loops(loop):
         #################
         # Taping some arrays outside of the nested loop (under some conditions)
         #################
-        # Some arrays can be taped outside
+        # Some arrays can be taped outside under some
         arrays_to_tape_outside = self._list_arrays_to_tape_outside(loop)
 
         # Get all nested loops variables and bounds
@@ -224,10 +221,12 @@ class ADReverseLoopTrans(ADLoopTrans):
         # For all LHS arrays in assignments
         for written_array_ref in arrays_to_tape_outside:
             # TODO: TBR analysis
+
+            # NOTE: tbr stands for to be recorded
             is_tbr = True
 
             if is_tbr:
-                tbr_ranges = []
+                tbr_slice = []
                 # Go through the indices they are being written at
                 for index in written_array_ref.children:
                     index_sym = index.symbol
@@ -240,16 +239,16 @@ class ADReverseLoopTrans(ADLoopTrans):
                                 slice_range = Range.create(
                                     start.copy(), stop.copy(), step.copy()
                                 )
-                                tbr_ranges.append(slice_range)
+                                tbr_slice.append(slice_range)
                                 break
-                    # For indices that are not loop variable, not a range
+                    # For indices that are not loop variable, use the ref
                     else:
-                        tbr_ranges.append(index.copy())
-                    
+                        tbr_slice.append(index.copy())
+
                 # Create an ArrayReference to that range/slice for the array
                 # to be recorded
                 tbr_array_ref = ArrayReference.create(
-                    written_array_ref.symbol, tbr_ranges
+                    written_array_ref.symbol, tbr_slice
                 )
 
                 # Add the tape records and restores operations to the correct
@@ -261,8 +260,22 @@ class ADReverseLoopTrans(ADLoopTrans):
                     0, self.routine_trans.value_tape.restore(tbr_array_ref)
                 )
 
+                # Keep track of the nodes that were taped outside
                 nodes_taped_outside.append(tbr_array_ref)
 
+        # If some nodes are taped outside, make sure the offset from *before*
+        # they are taped is inserted *before* the tape records in the returning
+        # motion
+        if len(nodes_taped_outside) != 0:
+            returning.insert(0, value_tape_offset_assignment_before)
+
+        ##########################################
+        # Now deal with the loop body itself (and its internal taping)
+        recording_offsets_and_loop = []
+        returning_offsets_and_loop = []
+
+        # If some nodes were taped outside, the offset changed and should be
+        # defined *before* the loop body in *both* motions
         if len(nodes_taped_outside) != 0:
             # Update the tape offset and tape mask
             value_tape_offset_assignment = (
@@ -270,11 +283,12 @@ class ADReverseLoopTrans(ADLoopTrans):
                     one(), nodes_taped_outside
                 )
             )
-            recording.append(value_tape_offset_assignment)
-            returning.insert(0, value_tape_offset_assignment.copy())
-        # else:
-        #     arrays_to_tape_outside = []
-
+            recording_offsets_and_loop.append(value_tape_offset_assignment)
+            returning_offsets_and_loop.append(
+                value_tape_offset_assignment.copy()
+            )
+        else:
+            returning_offsets_and_loop.append(0, value_tape_offset_assignment_before)
         #################
         # Transform the loop body and create loops for both motions
         #################
@@ -293,10 +307,7 @@ class ADReverseLoopTrans(ADLoopTrans):
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
 
-        # Postprocess (simplify, substitute operation adjoints) the returning
-        # routine
-        # self.postprocess(self.returning, options)
-
+        # Create the recording loop (same var, same bounds)
         recording_loop = Loop.create(
             loop.variable,
             loop.start_expr.copy(),
@@ -305,6 +316,7 @@ class ADReverseLoopTrans(ADLoopTrans):
             recording_body,
         )
 
+        # Create the returning loop (same var, reversed bounds)
         returning_loop = Loop.create(
             loop.variable,  # Use same var or different one ?
             rev_start,
@@ -318,23 +330,13 @@ class ADReverseLoopTrans(ADLoopTrans):
         verbose = self.unpack_option("verbose", options)
 
         if verbose:
-            from psyclone.psyir.backend.fortran import FortranWriter
-
-            fwriter = FortranWriter()
-            start = fwriter(loop.start_expr)
-            stop = fwriter(loop.stop_expr)
-            step = fwriter(loop.step_expr)
-            verbose_comment = (
-                f"Reversing do loop 'do {loop.variable.name} "
-                + f"= {start}, {stop}, {step}'"
-            )
-            returning_loop.preceding_comment = verbose_comment
+            self._verbose_comment_loop(returning_loop, loop)
 
         #################
         # Insert the transformed loops in the motions
         #################
-        recording.append(recording_loop)
-        returning.insert(0, returning_loop)  # + returning
+        recording_offsets_and_loop.append(recording_loop)
+        returning_offsets_and_loop.append(returning_loop)  # + returning
 
         ##################
         # TODO
@@ -351,6 +353,8 @@ class ADReverseLoopTrans(ADLoopTrans):
             number_of_previously_taped_nodes:
         ]
 
+        # If some taping went on inside the loop body, then the offset needs
+        # to be updated
         if len(nodes_taped_inside) != 0:
             # Update the tape offset and tape mask
             value_tape_offset_assignment = (
@@ -358,74 +362,59 @@ class ADReverseLoopTrans(ADLoopTrans):
                     self.number_of_iterations(loop), nodes_taped_inside
                 )
             )
-            recording.append(value_tape_offset_assignment)
-            returning.insert(0, value_tape_offset_assignment.copy())
+            recording_offsets_and_loop.append(value_tape_offset_assignment)
 
-            # Value tape do offset definition
-            for ref in recording_loop.loop_body.walk(Reference):
-                if ref.symbol == self.routine_trans.value_tape.symbol:
-                    # # For nested loop, the assignment goes in the innermost loop
-                    # # body so walk and get last
-                    # if self._is_only_nested_loops(loop):
-                    # Multiply the iteration counter by the length of all
-                    # recorded nodes
-                    product = mul(
-                        self.iteration_counter_within_innermost_nested_loop(
-                            loop
-                        ),
-                        self.routine_trans.value_tape.length_of_nodes(
-                            nodes_taped_inside
-                        ),
-                    )
-                    # Assign it to the do offset
-                    symbol = self.routine_trans.value_tape.do_offset_symbol
-                    value_do_offset_assignment = assign(symbol, product)
+            ######
+            # The do offset (used within the loop, dependent on the loops vars)
+            # needs to be computed and defined at the start of each iteration
 
-                    innermost_recording_loop = recording_loop.walk(Loop)[-1]
-                    innermost_recording_loop.loop_body.addchild(
-                        value_do_offset_assignment, 0
-                    )
-                    innermost_returning_loop = returning_loop.walk(Loop)[-1]
-                    innermost_returning_loop.loop_body.addchild(
-                        value_do_offset_assignment.copy(), 0
-                    )
-                    # # For general loops it goes in the loop bodies
-                    # else:
-                    #     # Multiply the iteration counter by the length of all
-                    #     # recorded nodes
-                    #     product = mul(
-                    #         self.iteration_counter_within_this_loop(
-                    #             loop
-                    #         ),
-                    #         self.routine_trans.value_tape.length_of_nodes(
-                    #             nodes_taped_inside
-                    #         ),
-                    #     )
-                    #     # Assign it to the do offset
-                    #     symbol = self.routine_trans.value_tape.do_offset_symbol
-                    #     value_do_offset_assignment = assign(symbol, product)
+            # Multiply the iteration counter by the length of all
+            # recorded nodes
+            product = mul(
+                self.iteration_counter_within_innermost_nested_loop(loop),
+                self.routine_trans.value_tape.length_of_nodes(
+                    nodes_taped_inside
+                ),
+            )
+            symbol = self.routine_trans.value_tape.do_offset_symbol
+            value_do_offset_assignment = assign(symbol, product)
 
-                    #     recording_loop.loop_body.addchild(
-                    #         value_do_offset_assignment, 0
-                    #     )
-                    #     returning_loop.loop_body.addchild(
-                    #         value_do_offset_assignment.copy(), 0
-                    #     )
-                    # Only add it once
-                    break
+            # For nested loop, the assignment goes in the innermost loop
+            # body so walk and get last
+            innermost_recording_loop = recording_loop.walk(Loop)[-1]
+            innermost_recording_loop.loop_body.addchild(
+                value_do_offset_assignment, 0
+            )
+            innermost_returning_loop = returning_loop.walk(Loop)[-1]
+            innermost_returning_loop.loop_body.addchild(
+                value_do_offset_assignment.copy(), 0
+            )
 
-            # # Control tape offset definition
-            # for ref in recording_loop.loop_body.walk(Reference):
-            #     if ref.symbol == self.routine_trans.control_tape.symbol:
-            #         product = mul(control_tape_records, division)
-            #         symbol = self.routine_trans.value_tape.do_offset_symbol
-            #         control_tape_def = assign(symbol, product)
-            #         recording_loop.loop_body.addchild(control_tape_def, 0)
-            #         returning_loop.loop_body.addchild(control_tape_def.copy(), 0)
-            #         # Only add it once
-            #         break
+        recording.extend(recording_offsets_and_loop)
+        returning = returning_offsets_and_loop + returning
 
         return recording, returning
+
+    def _verbose_comment_loop(self, returning_loop, loop):
+        """Add a verbose comment to returning_loop, using information from the \
+        original loop, specifying the original bounds.
+
+        :param returning_loop: transformed loop to be commented.
+        :type returning_loop: :py:class:`psyclone.psyir.nodes.Loop`
+        :param loop: original (primal) loop.
+        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+        """
+        from psyclone.psyir.backend.fortran import FortranWriter
+
+        fwriter = FortranWriter()
+        start = fwriter(loop.start_expr)
+        stop = fwriter(loop.stop_expr)
+        step = fwriter(loop.step_expr)
+        verbose_comment = (
+            f"Reversing do loop 'do {loop.variable.name} "
+            + f"= {start}, {stop}, {step}'"
+        )
+        returning_loop.preceding_comment = verbose_comment
 
     def reverse_bounds(self, loop, options=None):
         """Reverses the start, stop and step values for the returning loop.
@@ -437,7 +426,9 @@ class ADReverseLoopTrans(ADLoopTrans):
         :type options: Optional[Dict[Str, Any]]
 
         :return: start, stop and step PSyIR node expressions, reversed.
-        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`, \
+                :py:class:`psyclone.psyir.nodes.DataNode`, \
+                :py:class:`psyclone.psyir.nodes.DataNode`
         """
         # If step is '1' then go from stop to start by -1 steps
         if loop.step_expr == one():
@@ -454,41 +445,41 @@ class ADReverseLoopTrans(ADLoopTrans):
         rev_step = minus(loop.step_expr.copy())
         return rev_start, rev_stop, rev_step
 
-    def surrounding_loops_variables_and_bounds(self, loop):
-        """Get a list of [variable, start, stop, step] elements for all loops
-        surrounding loop (ie. loop is the innermost one), including it. 
+    # def surrounding_loops_variables_and_bounds(self, loop):
+    #     """Get a list of [variable, start, stop, step] elements for all loops
+    #     surrounding loop (ie. loop is the innermost one), including it.
 
-        :param loop: loop whose ancestors to consider.
-        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+    #     :param loop: loop whose ancestors to consider.
+    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
 
-        :return: list of lists containing the variable symbol, start, stop and \
-                 step expressions of each nested loop.
-        :rtype: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
-                          :py:class:`psyclone.psyir.nodes.DataNode`,
-                          :py:class:`psyclone.psyir.nodes.DataNode`,
-                          :py:class:`psyclone.psyir.nodes.DataNode`]]
-        """
-        # Includes the current loop
-        surrounding_loops = [loop]
-        while loop.ancestor(Loop, include_self=False) is not None:
-            loop = loop.ancestor(Loop, include_self=False)
-            surrounding_loops.insert(0, loop)
+    #     :return: list of lists containing the variable symbol, start, stop and \
+    #              step expressions of each nested loop.
+    #     :rtype: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+    #                       :py:class:`psyclone.psyir.nodes.DataNode`,
+    #                       :py:class:`psyclone.psyir.nodes.DataNode`,
+    #                       :py:class:`psyclone.psyir.nodes.DataNode`]]
+    #     """
+    #     # Includes the current loop
+    #     surrounding_loops = [loop]
+    #     while loop.ancestor(Loop, include_self=False) is not None:
+    #         loop = loop.ancestor(Loop, include_self=False)
+    #         surrounding_loops.insert(0, loop)
 
-        variables_and_bounds = []
-        for surrounding_loop in surrounding_loops:
-            variables_and_bounds.append(
-                [
-                    surrounding_loop.variable,
-                    surrounding_loop.start_expr,
-                    surrounding_loop.stop_expr,
-                    surrounding_loop.step_expr,
-                ]
-            )
+    #     variables_and_bounds = []
+    #     for surrounding_loop in surrounding_loops:
+    #         variables_and_bounds.append(
+    #             [
+    #                 surrounding_loop.variable,
+    #                 surrounding_loop.start_expr,
+    #                 surrounding_loop.stop_expr,
+    #                 surrounding_loop.step_expr,
+    #             ]
+    #         )
 
-        return variables_and_bounds
+    #     return variables_and_bounds
 
     def nested_loops_variables_and_bounds(self, loop):
-        """Get a list of [variable, start, stop, step] elements for all nested
+        """Get a list of [variable, start, stop, step] elements for all nested \
         loops within loop, including it. 
 
         :param loop: loop to walk.
@@ -634,12 +625,14 @@ class ADReverseLoopTrans(ADLoopTrans):
                [var_j, start_j, stop_j, step_j]]
         this method returns the counter to be used inside the j loop.
 
-        :param variables_and_bounds: list of lists containing the loop variable as \
-                                a symbol and the loop bounds as datanodes.
-        :type variables_and_bounds: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
-                                         :py:class:`psyclone.psyir.nodes.DataNode`,
-                                         :py:class:`psyclone.psyir.nodes.DataNode`,
-                                         :py:class:`psyclone.psyir.nodes.DataNode`]
+        :param variables_and_bounds: list of lists containing the loop \
+                                     variable as a symbol and the loop bounds \
+                                    as datanodes.
+        :type variables_and_bounds: \
+                    List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
+                              :py:class:`psyclone.psyir.nodes.DataNode`,
+                              :py:class:`psyclone.psyir.nodes.DataNode`,
+                              :py:class:`psyclone.psyir.nodes.DataNode`]
 
         :return: iteration counter for the loops.
         :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
@@ -684,21 +677,21 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         return current_iteration
 
-    def iteration_counter_within_this_loop(self, loop):
-        """Computes the iteration counter to be used in this loop.
-        The 'loop' argument is the current one. Takes into account the \
-        surrounding loops.
+    # def iteration_counter_within_this_loop(self, loop):
+    #     """Computes the iteration counter to be used in this loop.
+    #     The 'loop' argument is the current one. Takes into account the \
+    #     surrounding loops.
 
-        :param loop: current loop.
-        :type loop: :py:class:`psyclone.psyir.nodes.Loop`
+    #     :param loop: current loop.
+    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
 
-        :return: iteration counter for this loop.
-        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
-        """
-        variables_and_bounds = self.surrounding_loops_variables_and_bounds(loop)
-        return self._iteration_counter_from_variables_and_bounds(
-            variables_and_bounds
-        )
+    #     :return: iteration counter for this loop.
+    #     :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+    #     """
+    #     variables_and_bounds = self.surrounding_loops_variables_and_bounds(loop)
+    #     return self._iteration_counter_from_variables_and_bounds(
+    #         variables_and_bounds
+    #     )
 
     def iteration_counter_within_innermost_nested_loop(self, loop):
         """Computes the iteration counter to be used within the innermost \
@@ -982,9 +975,9 @@ class ADReverseLoopTrans(ADLoopTrans):
                     child, arrays_to_tape_outside, options
                 )
             elif isinstance(child, Call):
-                raise NotImplementedError(
-                    "Calls in loop " "bodies are not implemented yet."
-                )
+                # raise NotImplementedError(
+                #     "Calls in loop " "bodies are not implemented yet."
+                # )
                 # TODO: this should check if the called subroutine might modify
                 #       the loop variable, but that requires checking intents...
                 (recording, returning) = self.transform_call(child, options)
@@ -1015,10 +1008,12 @@ class ADReverseLoopTrans(ADLoopTrans):
             # Add to recording motion in same order
             recording_body.extend(recording)
 
-            # Add to returning motion in reversed order and before the existing
+            # Add to returning motion in reversed order and after the existing
             # statements
             returning.reverse()
-            returning_body = returning + returning_body
+            # returning_body = returning + returning_body
+
+            returning_body.extend(returning)
 
         return recording_body, returning_body
 
@@ -1067,6 +1062,13 @@ class ADReverseLoopTrans(ADLoopTrans):
             rev_step,
             returning_body,
         )
+
+        # verbose option adds comments to the returning do loop
+        # specifying the original loop bounds
+        verbose = self.unpack_option("verbose", options)
+
+        if verbose:
+            self._verbose_comment_loop(returning_loop, inner_loop)
 
         return [recording_loop], [returning_loop]
 
@@ -1135,8 +1137,6 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         return recording, returning
 
-    # TODO: this needs lots of edits, for now any calls will raise a
-    # NotImplementedError.
     def transform_call(self, call, options=None):
         """Transforms a Call child of the routine and adds the \
         statements to the recording and returning routines.
@@ -1164,6 +1164,14 @@ class ADReverseLoopTrans(ADLoopTrans):
         recording = []
         returning = []
 
+        # Call RoutineSymbol
+        call_symbol = call.routine
+        # Routine
+        routine = self.routine_trans.container_trans.routine_from_symbol(
+            call_symbol
+        )
+        routine_arguments = routine.symbol_table.argument_list
+
         # Tape record/restore the Reference arguments of the Call
         # Symbols already value_taped due to this call
         # to avoid taping multiple times if it appears as multiple
@@ -1171,26 +1179,24 @@ class ADReverseLoopTrans(ADLoopTrans):
         value_taped_symbols = []
         # accumulate the restores for now
         value_tape_restores = []
-        for arg in call.children:
-            if isinstance(arg, Reference):
-                # Check whether the lhs variable was written before
-                # or if it is an argument of a call before
-                overwriting = self.routine_trans.is_overwrite(arg)
-                # TODO: this doesn't deal with the intents
-                # of the routine being called for now
-                # ie. intent(in) doesn't need to be value_taped?
-                # see self.is_call_argument_before
-
+        for call_arg, routine_arg in zip(call.children, routine_arguments):
+            if isinstance(call_arg, Reference):
                 # TODO: if NOT overwriting this should NOT tape at first
                 #       iteration???
 
-                if overwriting:
+                # intent(in) arguments of the routine cannot be modified,
+                # so they do not need to be taped.
+                # All other intents can be modifed and need to be taped.
+                if (
+                    routine_arg.interface.access
+                    is not ArgumentInterface.Access.READ
+                ):
                     # Symbol wasn't value_taped yet
-                    if arg.symbol not in value_taped_symbols:
+                    if call_arg.symbol not in value_taped_symbols:
                         # Tape record in the recording routine
                         value_tape_record = (
                             self.routine_trans.value_tape.record(
-                                arg, do_loop=True
+                                call_arg, do_loop=True
                             )
                         )
                         recording.append(value_tape_record)
@@ -1198,13 +1204,13 @@ class ADReverseLoopTrans(ADLoopTrans):
                         # Associated value_tape restore in the returning routine
                         value_tape_restore = (
                             self.routine_trans.value_tape.restore(
-                                arg, do_loop=True
+                                call_arg, do_loop=True
                             )
                         )
                         value_tape_restores.append(value_tape_restore)
 
                         # Don't value_tape the same symbol again in this call
-                        value_taped_symbols.append(arg.symbol)
+                        value_taped_symbols.append(call_arg.symbol)
 
         # Apply an ADReverseCallTrans
         rec, returning = self.routine_trans.call_trans.apply(call, options)
