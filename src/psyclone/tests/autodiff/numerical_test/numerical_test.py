@@ -42,9 +42,14 @@ import sys
 import numpy as np
 import pytest
 
-from psyclone.autodiff import NumericalComparator, SubroutineGenerator
+from psyclone.autodiff import NumericalComparator, SubroutineGenerator, assign
 
-from psyclone.psyir.nodes import Literal, UnaryOperation, BinaryOperation, Reference
+from psyclone.psyir.nodes import (
+    Literal,
+    UnaryOperation,
+    BinaryOperation,
+    Reference,
+)
 from psyclone.psyir.nodes.intrinsic_call import IntrinsicCall
 from psyclone.psyir.symbols import REAL_TYPE, ArrayType
 
@@ -58,25 +63,30 @@ MAX_ERROR = 1e-5
 
 MODES = ("forward", "reverse")
 
+
 def _iterative_and_inline_modes(mode):
     if mode == "forward":
-        return (False, )
+        return (False,)
     else:
         return (True, False)
+
 
 def _datatype(vector):
     if vector:
         return ArrayType(REAL_TYPE, [5])
     return REAL_TYPE
 
+
 def _input_shape(n, vector):
     if vector:
         return (n, 5)
     return n
 
+
 def _file_dir():
     file_path = __file__
-    return file_path[:file_path.rfind("/")]
+    return file_path[: file_path.rfind("/")]
+
 
 def _intrinsic_or_operation(op, arg0, arg1=None):
     if op in IntrinsicCall.Intrinsic:
@@ -89,23 +99,134 @@ def _intrinsic_or_operation(op, arg0, arg1=None):
     if op in BinaryOperation.Operator:
         return BinaryOperation.create(op, arg0, arg1)
 
-@pytest.mark.parametrize("mode, iterative, vector, op",
-                         product(MODES,
-                                 (True, False),
-                                 (True, False),
-                                 (UnaryOperation.Operator.PLUS,
-                                  UnaryOperation.Operator.MINUS,
-                                  IntrinsicCall.Intrinsic.SQRT,
-                                  IntrinsicCall.Intrinsic.EXP,
-                                  IntrinsicCall.Intrinsic.LOG,
-                                  IntrinsicCall.Intrinsic.LOG10,
-                                  IntrinsicCall.Intrinsic.COS,
-                                  IntrinsicCall.Intrinsic.SIN,
-                                  IntrinsicCall.Intrinsic.TAN,
-                                  IntrinsicCall.Intrinsic.ACOS,
-                                  IntrinsicCall.Intrinsic.ASIN,
-                                  IntrinsicCall.Intrinsic.ATAN,
-                                  IntrinsicCall.Intrinsic.ABS)))
+
+@pytest.mark.parametrize("mode", MODES)
+def test_if_block(mode):
+    """Test if blocks in both modes, by applying `psyclone.autodiff` \
+    and Tapenade transformations to a subroutine and comparing numerical \
+    results for random values of `x`.
+
+    :raises ValueError: if the error is above MAX_ERROR or is NaN.
+    """
+    print(f"Testing if block in {mode}-mode")
+
+    vector = False
+
+    routine = SubroutineGenerator("routine_if_block")
+
+    x = routine.new_in_arg("x", _datatype(vector))
+    f = routine.new_out_arg("f", _datatype(vector))
+
+    routine.new_assignment(
+        f,
+        BinaryOperation.create(
+            BinaryOperation.Operator.MUL,
+            Reference(x),
+            Literal("2.0", REAL_TYPE),
+        ),
+    )
+
+    condition = BinaryOperation.create(
+        BinaryOperation.Operator.GE, Reference(x), Literal("0.0", REAL_TYPE)
+    )
+    if_body = [
+        assign(
+            f,
+            BinaryOperation.create(
+                BinaryOperation.Operator.POW,
+                Reference(x),
+                Literal("2.0", REAL_TYPE),
+            ),
+        ),
+        assign(
+            f,
+            BinaryOperation.create(
+                BinaryOperation.Operator.MUL, Reference(x), Reference(f)
+            ),
+        ),
+    ]
+    else_body = [
+        assign(
+            f,
+            BinaryOperation.create(
+                BinaryOperation.Operator.POW,
+                Reference(x),
+                Literal("3.0", REAL_TYPE),
+            ),
+        ),
+        assign(
+            f,
+            BinaryOperation.create(
+                BinaryOperation.Operator.MUL, Reference(x), Reference(f)
+            ),
+        ),
+    ]
+
+    routine.new_if_block(condition, if_body, else_body)
+
+    routine.new_assignment(
+        f,
+        BinaryOperation.create(
+            BinaryOperation.Operator.MUL, Reference(x), Reference(f)
+        ),
+    )
+
+    with open(f"{_file_dir()}/outputs/routine.f90", "w") as file:
+        file.write(routine.write())
+
+    rg = np.random.default_rng(123456)
+
+    x_val = rg.uniform(-2, 2, _input_shape(1000, vector))
+
+    # Whichever schedule will work
+    rev_schedule = ADJointReversalSchedule()
+
+    max_error, associated_values = NumericalComparator.compare(
+        f"{_file_dir()}/tapenade_3.16",
+        f"{_file_dir()}/outputs/routine.f90",
+        "routine_if_block",
+        ["f"],
+        ["x"],
+        {"x": x_val.tolist()},
+        "Linf_error",
+        {"verbose": True},
+        mode,
+        rev_schedule,
+    )
+
+    if max_error > MAX_ERROR or np.isnan(max_error):
+        raise ValueError(
+            f"Test failed, Linf_error = {max_error} for argument values {associated_values}"
+        )
+    print("passed")
+    print("-----------------------")
+
+    print("===============================\n")
+
+
+@pytest.mark.parametrize(
+    "mode, iterative, vector, op",
+    product(
+        MODES,
+        (True, False),
+        (True, False),
+        (
+            UnaryOperation.Operator.PLUS,
+            UnaryOperation.Operator.MINUS,
+            IntrinsicCall.Intrinsic.SQRT,
+            IntrinsicCall.Intrinsic.EXP,
+            IntrinsicCall.Intrinsic.LOG,
+            IntrinsicCall.Intrinsic.LOG10,
+            IntrinsicCall.Intrinsic.COS,
+            IntrinsicCall.Intrinsic.SIN,
+            IntrinsicCall.Intrinsic.TAN,
+            IntrinsicCall.Intrinsic.ACOS,
+            IntrinsicCall.Intrinsic.ASIN,
+            IntrinsicCall.Intrinsic.ATAN,
+            IntrinsicCall.Intrinsic.ABS,
+        ),
+    ),
+)
 def test_unary(mode, iterative, vector, op):
     """Test all unary operators in both modes, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing `f = op(x)` or \
@@ -113,7 +234,9 @@ def test_unary(mode, iterative, vector, op):
 
     :raises ValueError: if the error is above MAX_ERROR or is NaN.
     """
-    print(f"Testing unary operator {op} in {mode}-mode with{'' if vector else 'out'} vectors")
+    print(
+        f"Testing unary operator {op} in {mode}-mode with{'' if vector else 'out'} vectors"
+    )
 
     routine = SubroutineGenerator("routine_unary")
 
@@ -158,7 +281,7 @@ def test_unary(mode, iterative, vector, op):
         "Linf_error",
         {"verbose": True},
         mode,
-        rev_schedule
+        rev_schedule,
     )
 
     if max_error > MAX_ERROR or np.isnan(max_error):
@@ -170,15 +293,22 @@ def test_unary(mode, iterative, vector, op):
 
     print("===============================\n")
 
-@pytest.mark.parametrize("mode, iterative, vector, op",
-                         product(("forward", "reverse"),
-                                 (False, True),
-                                 (False, True),
-                                 (BinaryOperation.Operator.ADD,
-                                  BinaryOperation.Operator.SUB,
-                                  BinaryOperation.Operator.MUL,
-                                  BinaryOperation.Operator.DIV,
-                                  BinaryOperation.Operator.POW,)))
+
+@pytest.mark.parametrize(
+    "mode, iterative, vector, op",
+    product(
+        ("forward", "reverse"),
+        (False, True),
+        (False, True),
+        (
+            BinaryOperation.Operator.ADD,
+            BinaryOperation.Operator.SUB,
+            BinaryOperation.Operator.MUL,
+            BinaryOperation.Operator.DIV,
+            BinaryOperation.Operator.POW,
+        ),
+    ),
+)
 def test_binary(mode, iterative, vector, op):
     """Test all binary operators in both modes, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing `f = x (op) y` or \
@@ -216,7 +346,7 @@ def test_binary(mode, iterative, vector, op):
     if op is BinaryOperation.Operator.POW:
         x_val = rg.uniform(0, 2, _input_shape(5, vector))
     else:
-        x_val = rg.uniform(-2, 2,_input_shape(5, vector))
+        x_val = rg.uniform(-2, 2, _input_shape(5, vector))
     y_val = rg.uniform(-2, 2, _input_shape(5, vector))
 
     rev_schedule = ADJointReversalSchedule()
@@ -231,7 +361,7 @@ def test_binary(mode, iterative, vector, op):
         "Linf_error",
         {"verbose": True},
         mode,
-        rev_schedule
+        rev_schedule,
     )
 
     if max_error > MAX_ERROR or np.isnan(max_error):
@@ -244,27 +374,34 @@ def test_binary(mode, iterative, vector, op):
 
     print("===============================\n")
 
+
 unary_operators = (
-                UnaryOperation.Operator.PLUS,
-                UnaryOperation.Operator.MINUS,
-                # IntrinsicCall.Intrinsic.SQRT,      #positive arg only
-                IntrinsicCall.Intrinsic.EXP,
-                # IntrinsicCall.Intrinsic.LOG,       #positive arg only
-                # IntrinsicCall.Intrinsic.LOG10,     #positive arg only
-                IntrinsicCall.Intrinsic.COS,
-                IntrinsicCall.Intrinsic.SIN,
-                IntrinsicCall.Intrinsic.TAN,
-                # IntrinsicCall.Intrinsic.ACOS,      #[1,1] arg only
-                # IntrinsicCall.Intrinsic.ASIN,      #[1,1] arg only
-                IntrinsicCall.Intrinsic.ATAN,
-                IntrinsicCall.Intrinsic.ABS,
-            )
-@pytest.mark.parametrize("mode, iterative, inline, vector, unaries",
-                         product(("forward", "reverse"),
-                                 (False, True),
-                                 (False, True),
-                                 (False, True),
-                                 product(unary_operators, unary_operators)))
+    UnaryOperation.Operator.PLUS,
+    UnaryOperation.Operator.MINUS,
+    # IntrinsicCall.Intrinsic.SQRT,      #positive arg only
+    IntrinsicCall.Intrinsic.EXP,
+    # IntrinsicCall.Intrinsic.LOG,       #positive arg only
+    # IntrinsicCall.Intrinsic.LOG10,     #positive arg only
+    IntrinsicCall.Intrinsic.COS,
+    IntrinsicCall.Intrinsic.SIN,
+    IntrinsicCall.Intrinsic.TAN,
+    # IntrinsicCall.Intrinsic.ACOS,      #[1,1] arg only
+    # IntrinsicCall.Intrinsic.ASIN,      #[1,1] arg only
+    IntrinsicCall.Intrinsic.ATAN,
+    IntrinsicCall.Intrinsic.ABS,
+)
+
+
+@pytest.mark.parametrize(
+    "mode, iterative, inline, vector, unaries",
+    product(
+        ("forward", "reverse"),
+        (False, True),
+        (False, True),
+        (False, True),
+        product(unary_operators, unary_operators),
+    ),
+)
 def test_unary_composition(mode, iterative, inline, vector, unaries):
     """Test composition of unary operators in both modes, by applying \
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
@@ -329,19 +466,26 @@ def test_unary_composition(mode, iterative, inline, vector, unaries):
 
     print("===============================\n")
 
+
 binary_operators = (
-                BinaryOperation.Operator.ADD,
-                BinaryOperation.Operator.SUB,
-                BinaryOperation.Operator.MUL,
-                BinaryOperation.Operator.DIV,
-                #BinaryOperation.Operator.POW,
-            )
-@pytest.mark.parametrize("mode, iterative, inline, vector, binaries",
-                         product(("forward", "reverse"),
-                                 (False, True),
-                                 (False, True),
-                                 (False, True),
-                                 product(binary_operators, binary_operators)))
+    BinaryOperation.Operator.ADD,
+    BinaryOperation.Operator.SUB,
+    BinaryOperation.Operator.MUL,
+    BinaryOperation.Operator.DIV,
+    # BinaryOperation.Operator.POW,
+)
+
+
+@pytest.mark.parametrize(
+    "mode, iterative, inline, vector, binaries",
+    product(
+        ("forward", "reverse"),
+        (False, True),
+        (False, True),
+        (False, True),
+        product(binary_operators, binary_operators),
+    ),
+)
 def test_binary_composition(mode, iterative, inline, vector, binaries):
     """Test composition of binary operators in both modes, by applying \
     `psyclone.autodiff` and Tapenade transformations to a subroutine computing \
@@ -372,7 +516,9 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
                 f,
                 _intrinsic_or_operation(
                     binary_1,
-                    _intrinsic_or_operation(binary_2, Reference(f), Reference(y)),
+                    _intrinsic_or_operation(
+                        binary_2, Reference(f), Reference(y)
+                    ),
                     Reference(z),
                 ),
             )
@@ -382,7 +528,9 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
                 f,
                 _intrinsic_or_operation(
                     binary_1,
-                    _intrinsic_or_operation(binary_2, Reference(x), Reference(y)),
+                    _intrinsic_or_operation(
+                        binary_2, Reference(x), Reference(y)
+                    ),
                     Reference(z),
                 ),
             )
@@ -499,9 +647,7 @@ def _create_taping_routine(name, vector):
             ),
         )
 
-        routine.new_assignment(
-            a, Literal(str(rg.uniform(-1, 1)), REAL_TYPE)
-        )
+        routine.new_assignment(a, Literal(str(rg.uniform(-1, 1)), REAL_TYPE))
 
         routine.new_assignment(
             f,
@@ -514,9 +660,10 @@ def _create_taping_routine(name, vector):
 
     return routine
 
-@pytest.mark.parametrize("vector, inline",
-                         product((False, True),
-                                 (False, True)))
+
+@pytest.mark.parametrize(
+    "vector, inline", product((False, True), (False, True))
+)
 def test_taping(vector, inline):
     """Test taping function values in reverse-mode, by applying `psyclone.autodiff` \
     and Tapenade transformations to a subroutine computing non-linear operations,
@@ -536,7 +683,11 @@ def test_taping(vector, inline):
 
     rg = np.random.default_rng(123456)
     if vector:
-        x_val = rg.uniform(0.1, 0.12, _input_shape(5, vector), )
+        x_val = rg.uniform(
+            0.1,
+            0.12,
+            _input_shape(5, vector),
+        )
     else:
         x_val = rg.uniform(0.1, 0.12, 1)
 
@@ -560,13 +711,22 @@ def test_taping(vector, inline):
 
     print("===============================\n")
 
-@pytest.mark.parametrize("vector, schedule",
-                         product((False, True),
-                                 (ADJointReversalSchedule(),
-                                  ADSplitReversalSchedule(),
-                                  ADLinkReversalSchedule(strong_links=[["calling", "called_1"]], weak_links=[["calling", "called_2"]]),
-                                  None
-                         )))
+
+@pytest.mark.parametrize(
+    "vector, schedule",
+    product(
+        (False, True),
+        (
+            ADJointReversalSchedule(),
+            ADSplitReversalSchedule(),
+            ADLinkReversalSchedule(
+                strong_links=[["calling", "called_1"]],
+                weak_links=[["calling", "called_2"]],
+            ),
+            None,
+        ),
+    ),
+)
 def test_nested_calls(vector, schedule):
     """Test nested subroutine calls in both modes and with all three possible 
     reversal schedules in reverse-mode by applying `psyclone.autodiff` \
@@ -624,7 +784,9 @@ def test_nested_calls(vector, schedule):
         file.write(called_routine_2.write())
         file.write(calling_routine.write())
 
-    print(f"Testing in reverse-mode using reversal schedule {type(schedule).__name__}")
+    print(
+        f"Testing in reverse-mode using reversal schedule {type(schedule).__name__}"
+    )
 
     if schedule:
         max_error, associated_values = NumericalComparator.compare(
@@ -633,7 +795,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [[0.1]*5] if vector else [0.1]},
+            {"x": [[0.1] * 5] if vector else [0.1]},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "reverse",
@@ -646,7 +808,7 @@ def test_nested_calls(vector, schedule):
             "calling",
             ["f"],
             ["x"],
-            {"x": [[0.1]*5] if vector else [0.1]},
+            {"x": [[0.1] * 5] if vector else [0.1]},
             "Linf_error",
             {"verbose": True, "inline_operation_adjoints": False},
             "forward",
@@ -661,9 +823,9 @@ def test_nested_calls(vector, schedule):
     print("-----------------------")
 
 
-@pytest.mark.parametrize("mode, vector",
-                         product(("forward", "reverse"),
-                                 (False, True)))
+@pytest.mark.parametrize(
+    "mode, vector", product(("forward", "reverse"), (False, True))
+)
 def test_many_arguments(mode, vector):
     """Test applying `psyclone.autodiff` and Tapenade transformations to a \
     subroutine with arguments of all possible intents (in, out, inout, undefined) \
@@ -684,17 +846,17 @@ def test_many_arguments(mode, vector):
     n = 4
 
     for i in range(n * 4):
-        if i < n*1:
+        if i < n * 1:
             arg = routine.new_in_arg(f"arg{i}", _datatype(vector))
             in_args.append(arg)
-        elif i < n*2:
+        elif i < n * 2:
             arg = routine.new_out_arg(f"arg{i}", _datatype(vector))
             out_args.append(arg)
         # elif i < n*3:
         #     # TODO: fix this issue between f2py and intent(inout)
         #     arg = routine.new_inout_arg(f"arg{i}", _datatype(vector))
         #     inout_args.append(arg)
-        elif i < n*3:
+        elif i < n * 3:
             arg = routine.new_arg(f"arg{i}", _datatype(vector))
             undef_args.append(arg)
         else:
@@ -725,11 +887,11 @@ def test_many_arguments(mode, vector):
             _intrinsic_or_operation(
                 BinaryOperation.Operator.ADD,
                 Reference(out_args[i]),
-                Reference(non_args[i])
+                Reference(non_args[i]),
             ),
         )
 
-        for modified_args in (undef_args, ):#(inout_args, undef_args):
+        for modified_args in (undef_args,):  # (inout_args, undef_args):
             routine.new_assignment(
                 modified_args[i],
                 _intrinsic_or_operation(
@@ -759,7 +921,7 @@ def test_many_arguments(mode, vector):
                 _intrinsic_or_operation(
                     BinaryOperation.Operator.ADD,
                     Reference(modified_args[i]),
-                    Reference(non_args[i])
+                    Reference(non_args[i]),
                 ),
             )
 
@@ -771,15 +933,15 @@ def test_many_arguments(mode, vector):
     independent_names = []
     dependent_names = []
 
-    for arg in in_args + undef_args: # + inout_args:
+    for arg in in_args + undef_args:  # + inout_args:
         independent_names.append(arg.name)
 
-    for arg in out_args + undef_args: # + inout_args:
+    for arg in out_args + undef_args:  # + inout_args:
         dependent_names.append(arg.name)
 
     values = {}
-    for i, arg in enumerate(in_args + undef_args): #  + inout_args):
-        values[arg.name] = [[float(i)]*5] if vector else [float(i)]
+    for i, arg in enumerate(in_args + undef_args):  #  + inout_args):
+        values[arg.name] = [[float(i)] * 5] if vector else [float(i)]
 
     max_error, associated_values = NumericalComparator.compare(
         f"{_file_dir()}/tapenade_3.16",
@@ -801,5 +963,6 @@ def test_many_arguments(mode, vector):
 
     print("===============================\n")
 
+
 if __name__ == "__main__":
-    pytest.main(['numerical_test.py', '-rx'])
+    pytest.main(["numerical_test.py", "-rx"])
