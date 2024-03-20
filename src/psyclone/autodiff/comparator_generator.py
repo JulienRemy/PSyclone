@@ -73,6 +73,7 @@ from psyclone.psyir.symbols import (
     REAL_TYPE,
     INTEGER_TYPE,
     RoutineSymbol,
+    ScalarType,
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 from psyclone.line_length import FortLineLength
@@ -270,15 +271,15 @@ class ComparatorGenerator(object):
         tapenade_mode = "-tangent" if mode == "forward" else "-reverse"
 
         # Position of the dot in the file name
-        dot_index = file_path.rfind('.')
+        dot_index = file_path.rfind(".")
         tapenade_postfix = "_d" if mode == "forward" else "_b"
         tapenade_output_file_path = (
             file_path[:dot_index] + tapenade_postfix + file_path[dot_index:]
         )
 
-        slash_index = tapenade_output_file_path.rfind('/')
+        slash_index = tapenade_output_file_path.rfind("/")
         if slash_index != -1:
-            tapenade_output_dir = file_path[:(slash_index + 1)]
+            tapenade_output_dir = file_path[: (slash_index + 1)]
         else:
             tapenade_output_dir = "./"
 
@@ -336,7 +337,7 @@ class ComparatorGenerator(object):
             # these are also used in calling the transformed routines
 
             comparator_var = None
-            # Intent(out) arguments of the input routine are variables of 
+            # Intent(out) arguments of the input routine are variables of
             # the comparator
             if original_arg.interface.access is ArgumentInterface.Access.WRITE:
                 comparator_var = comparator.new_variable(
@@ -354,7 +355,7 @@ class ComparatorGenerator(object):
                 call_args.append(comparator_var)
 
             # Add variables to save the values of arguments to the comparator
-            # subroutine and save them, 
+            # subroutine and save them,
             # except for intent(in) which cannot be modified.
             # We will restore the values to 'comparator_arg' before each call
             # If intent(in), None so that the comparator_arguments and
@@ -405,26 +406,40 @@ class ComparatorGenerator(object):
 
         # Now deal with the Jacobians we are going to generate by calling
         # the transformed routines repeatedly
-        # Create an ArrayType of correct dimensions for the 
+        # Create an ArrayType of correct dimensions for the
         # autodiff/Tapenade Jacobians
-        dims = []
+        max_number_of_dimensions = max(
+            [
+                len(diff.datatype.shape)
+                for diff in dependent_diffs
+                if isinstance(diff.datatype, ArrayType)
+            ]
+            + [1]
+        )
+        dims = [[] for _ in range(max_number_of_dimensions)]
         for diff in dependent_diffs:
             if isinstance(diff.datatype, ArrayType):
-                if len(diff.datatype.shape) != 1:
-                    raise NotImplementedError("Can't generate a Jacobian for "
-                                              "arrays differentials of more "
-                                              "than 1D for now.") 
-                if (not isinstance(diff.datatype.shape[0],
-                                  ArrayType.ArrayBounds)
-                    or not isinstance(diff.datatype.shape[0].upper, Literal)):
-                    raise NotImplementedError("Only Literal shapes are "
-                                              "implemented.")
-                dims.append(int(diff.datatype.shape[0].upper.value))
+                # if len(diff.datatype.shape) != 1:
+                #     raise NotImplementedError("Can't generate a Jacobian for "
+                #                               "arrays differentials of more "
+                #                               "than 1D for now.")
+                for i, dimension in enumerate(diff.datatype.shape):
+                    if not isinstance(
+                        dimension, ArrayType.ArrayBounds
+                    ) or not isinstance(dimension.upper, Literal):
+                        raise NotImplementedError(
+                            "Only Literal shapes are " "implemented."
+                        )
+                    # if len(dims) - 1 >= i:
+                    dims[i].append(int(dimension.upper.value))
+                    # else:
+                    #    dims.append([int(dimension.upper.value)])
 
-        if not dims:
+        if dims == []:
             shape = [len(independent_vars), len(dependent_vars)]
         else:
-            shape = [len(independent_vars), len(dependent_vars), max(dims)]
+            max_dims = [max(dim + [1]) for dim in dims]
+            shape = [len(independent_vars), len(dependent_vars), *max_dims]
 
         jacobian_datatype = ArrayType(
             cls._default_scalar_datatype,
@@ -463,7 +478,7 @@ class ComparatorGenerator(object):
                 routine_name + tapenade_postfix,
             )
 
-        # Now for both the autodiff and Tapenade 
+        # Now for both the autodiff and Tapenade
         # (jacobian, reversing routine) pair
         for J, transformed_name in zip(jacobians, transformed_names):
             # Depending on the mode, we assign 1 to the (in)dependent variables
@@ -484,7 +499,7 @@ class ComparatorGenerator(object):
                     if saved_arg is not None:
                         comparator.new_assignment(comparator_arg, saved_arg)
 
-                # Assign 1 to independent derivative/dependent adjoint 
+                # Assign 1 to independent derivative/dependent adjoint
                 # for this column/row
                 comparator.new_assignment(
                     first_diff, Literal("1.0", first_diff.datatype)
@@ -497,7 +512,7 @@ class ComparatorGenerator(object):
                             Literal("0.0", other_first_diff.datatype),
                         )
 
-                # Assign 0 to all dependent derivatives/independent adjoints 
+                # Assign 0 to all dependent derivatives/independent adjoints
                 # but the indepdent/dependent one
                 for second_diff in second_diffs:
                     if first_diff != second_diff:
@@ -505,14 +520,14 @@ class ComparatorGenerator(object):
                             second_diff, Literal("0.0", first_diff.datatype)
                         )
 
-                # Create a RoutineSymbol for the autodiff/Tapenade routine 
+                # Create a RoutineSymbol for the autodiff/Tapenade routine
                 # and a call to it
                 transformed_symbol = RoutineSymbol(transformed_name)
                 call_arg_refs = [Reference(sym) for sym in call_args]
                 call = Call.create(transformed_symbol, call_arg_refs)
                 comparator.subroutine.addchild(call)
 
-                # Assign the dependent derivatives/independent adjoints 
+                # Assign the dependent derivatives/independent adjoints
                 # returns to elements of the Jacobian matrix
                 for second_dim, second_diff in enumerate(second_diffs):
                     if mode == "forward":
@@ -522,17 +537,24 @@ class ComparatorGenerator(object):
                         row = first_dim
                         col = second_dim
 
-                    if not dims:
+                    if dims == [] or isinstance(
+                        second_diff.datatype, ScalarType
+                    ):
                         shape = [
                             Literal(str(col + 1), INTEGER_TYPE),
                             Literal(str(row + 1), INTEGER_TYPE),
                         ]
+                        for one in [Literal("1", INTEGER_TYPE)] * len(dims):
+                            shape.append(one)
                     else:
                         shape = [
                             Literal(str(col + 1), INTEGER_TYPE),
                             Literal(str(row + 1), INTEGER_TYPE),
-                            ":"
                         ]
+                        for index in [":"] * len(second_diff.datatype.shape) + [
+                            Literal("1", INTEGER_TYPE)
+                        ] * (len(dims) - len(second_diff.datatype.shape)):
+                            shape.append(index)
 
                     J_element_ref = ArrayReference.create(J, shape)
                     comparator.new_assignment(J_element_ref, second_diff)
@@ -651,10 +673,12 @@ class ComparatorGenerator(object):
         module = import_module(module_name)
 
         # Move the .so files
-        subprocess.run(f"mv *.so {tapenade_output_dir}",
-                        shell=True,
-                        check=True,
-                        capture_output=True)
+        subprocess.run(
+            f"mv *.so {tapenade_output_dir}",
+            shell=True,
+            check=True,
+            capture_output=True,
+        )
 
         return getattr(module, routine_name + "_comp"), [
             arg.name for arg in comparator_arguments
