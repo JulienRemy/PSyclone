@@ -134,7 +134,7 @@ class ADForwardLoopTrans(ADLoopTrans):
                     self.routine_trans.assignment_trans.apply(node, options)
                     )
             elif isinstance(node, Call):
-                transformed_body.extend(
+                transformed_body.append(
                     self.routine_trans.call_trans.apply(node, options)
                     )
             elif isinstance(node, IfBlock):
