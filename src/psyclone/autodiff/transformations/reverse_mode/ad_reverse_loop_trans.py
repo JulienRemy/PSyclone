@@ -288,7 +288,7 @@ class ADReverseLoopTrans(ADLoopTrans):
                 value_tape_offset_assignment.copy()
             )
         else:
-            returning_offsets_and_loop.append(0, value_tape_offset_assignment_before)
+            returning_offsets_and_loop.append(value_tape_offset_assignment_before)
         #################
         # Transform the loop body and create loops for both motions
         #################
