@@ -545,10 +545,11 @@ class ArrayMixin(metaclass=abc.ABCMeta):
                 isinstance(stop, IntrinsicCall) and self.is_full_range(idx)):
             # Access is to full range and start and stop are expressed in terms
             # of LBOUND and UBOUND. Therefore, it's simpler to use SIZE.
-            return IntrinsicCall.create(
-                IntrinsicCall.Intrinsic.SIZE,
-                [start.children[0].copy(),
-                 ("dim", Literal(str(idx+1), INTEGER_TYPE))])
+            return self.symbol.datatype.shape[idx]
+            # return IntrinsicCall.create(
+            #     IntrinsicCall.Intrinsic.SIZE,
+            #     [start.children[0].copy(),
+            #      ("dim", Literal(str(idx+1), INTEGER_TYPE))])
 
         if start == one and step == one:
             # The range starts at 1 and the step is 1 so the extent is just
