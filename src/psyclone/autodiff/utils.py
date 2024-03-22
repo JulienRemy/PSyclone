@@ -890,7 +890,7 @@ def add_datanodes(datanodes):
     if int_sum.value != "0":
         other_datanodes.append(int_sum)
 
-    other_datanodes = _apply_all_binary_operations(other_datanodes)
+    # other_datanodes = _apply_all_binary_operations(other_datanodes)
 
     result = zero()
     if len(other_datanodes) != 0:
@@ -935,8 +935,8 @@ def substract_datanodes(lhs, rhs):
     if int_literal.value != "0":
         lhs_others.append(int_literal)
 
-    lhs_others = _apply_all_binary_operations(lhs_others)
-    rhs_others = _apply_all_binary_operations(rhs_others)
+    # lhs_others = _apply_all_binary_operations(lhs_others)
+    # rhs_others = _apply_all_binary_operations(rhs_others)
 
     result = zero()
     if len(lhs_others) != 0:
@@ -1003,7 +1003,7 @@ def multiply_datanodes(datanodes):
     if int_mul.value != "1":
         other_datanodes.append(int_mul)
 
-    other_datanodes = _apply_all_binary_operations(other_datanodes)
+    # other_datanodes = _apply_all_binary_operations(other_datanodes)
 
     result = one()
     if len(other_datanodes) != 0:
