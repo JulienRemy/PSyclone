@@ -138,8 +138,7 @@ class ADValueTape(ADTape):
         #     or isinstance(reference.datatype, ScalarType)):
         #if isinstance(reference.datatype, ScalarType):
         # This is a Reference to a scalar
-        if (not isinstance(reference, ArrayReference) 
-            or isinstance(reference.datatype, ScalarType)):
+        if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(value_tape_ref, reference.copy())
 
         # This is an ArrayReference
@@ -211,8 +210,7 @@ class ADValueTape(ADTape):
         # if (isinstance(reference, ArrayReference)
         #     or isinstance(reference.datatype, ScalarType)):
         # This is a Reference to a scalar
-        if (not isinstance(reference, ArrayReference) 
-            or isinstance(reference.datatype, ScalarType)):
+        if isinstance(reference.datatype, ScalarType):
         #if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(reference.copy(), value_tape_ref)
 
