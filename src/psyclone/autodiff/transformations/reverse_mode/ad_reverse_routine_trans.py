@@ -552,8 +552,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.value_tape = value_tape
 
         # Control tape for the transformation
-        # - none provided, create one iff there are if blocks in the routine
-        if (control_tape is None) and routine.walk(IfBlock) != []:
+        # - none provided, create one
+        if control_tape is None:# and routine.walk(IfBlock) != []:
             name = routine.name
             self.control_tape = ADControlTape(
                 name, self._default_control_tape_datatype
@@ -575,11 +575,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Transform the statements found in the Routine
         self.transform_children(options)
-
-        # Postprocess (simplify, substitute operation adjoints) the recording 
-        # and returning routines
-        self.postprocess(self.recording, options)
-        self.postprocess(self.returning, options)
 
         # Add the transformed routines symbols to the container_trans map
         self.container_trans.add_transformed_routines(
@@ -629,6 +624,11 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # a dynamic array
         if self.control_tape is not None:
             self.add_tape_argument(self.control_tape, options)
+
+        # Postprocess (simplify, substitute operation adjoints) the recording 
+        # and returning routines
+        self.postprocess(self.recording, options)
+        self.postprocess(self.returning, options)
 
         # Combine the calls to recording and returning in reversing
         self.add_calls_to_reversing(options)
