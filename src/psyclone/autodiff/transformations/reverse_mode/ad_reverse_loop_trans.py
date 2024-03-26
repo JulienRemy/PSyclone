@@ -303,6 +303,7 @@ class ADReverseLoopTrans(ADLoopTrans):
         recording_body, returning_body = self.transform_children(
             loop, arrays_to_tape_outside, options
         )
+        returning_body.reverse()
 
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
@@ -856,6 +857,11 @@ class ADReverseLoopTrans(ADLoopTrans):
         """
         # Get the symbols of all nested loops
         # nested_loops_vars = self.nested_loops_variables(loop)
+
+        all_calls = loop.walk(Call)
+        all_calls = [call for call in all_calls if type(call) is not IntrinsicCall]
+        if len(all_calls) != 0:
+            return []
 
         all_assignments = loop.walk(Assignment)
         # Get all the LHS of assignments to ArrayReferences
