@@ -48,6 +48,7 @@ from psyclone.psyir.nodes import (
     IntrinsicCall,
     IfBlock,
     Loop,
+    Range,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -112,6 +113,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
     def __init__(self, container_trans):
         super().__init__()
+
+        # self.substitution_map = dict()
 
         # Contextual container trans
         self.container_trans = container_trans
@@ -553,7 +556,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Control tape for the transformation
         # - none provided, create one
-        if control_tape is None:# and routine.walk(IfBlock) != []:
+        if control_tape is None:  # and routine.walk(IfBlock) != []:
             name = routine.name
             self.control_tape = ADControlTape(
                 name, self._default_control_tape_datatype
@@ -612,6 +615,42 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # the returning routine
         self.add_differentials_zero_assignments(self.returning, options)
 
+        # FIXME: tried postprocessing taping to remove useless ones but this isn't the correct way
+        # all_returning_refs = self.returning.walk(Reference)
+        # for node in self.value_tape.recorded_nodes:
+        #     recordings = []
+        #     restorings = []
+        #     tape_indices = []
+        #     for tape_index, (rec_node, record, restore) in enumerate(zip(self.value_tape.recorded_nodes,
+        #                                          self.value_tape._recordings,
+        #                                          self.value_tape._restorings)):
+        #         if node == rec_node:
+        #             recordings.append(record)
+        #             restorings.append(restore)
+        #             tape_indices.append(tape_index)
+        #     if isinstance(node, IntrinsicCall):
+        #         node = node.children[0]
+
+        #     assert isinstance(node, Reference)
+
+        #     same_refs = [ref for ref in all_returning_refs if ref == node]
+        #     # restorings_positions = [restore.abs_position for restore in restorings]
+
+        #     for tape_index, recording, restoring, next_restoring in zip(tape_indices, recordings, restorings, restorings[1:]):
+        #         # if restoring.ancestor(Loop) is not next_restoring.ancestor(Loop):
+        #         #     continue
+
+        #         same_refs_between_restorings = [ref.abs_position for ref in same_refs if (ref.abs_position > restoring.abs_position and ref.abs_position < next_restoring.abs_position) ]
+        #         if len(same_refs_between_restorings) == 0:
+        #             print(f"Found useless taping of {node.debug_string()}")
+        #             recording.detach()
+        #             restoring.detach()
+        #             self.value_tape._recorded_nodes.pop(tape_index)
+        #             self.value_tape._multiplicities.pop(tape_index)
+        #             self.value_tape._offset_mask.pop(tape_index)
+        #             self.value_tape._recordings.pop(tape_index)
+        #             self.value_tape._restorings.pop(tape_index)
+
         # Add the value_tape as argument of both routines iff it's actually used
         # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
         # a dynamic array
@@ -625,7 +664,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if self.control_tape is not None:
             self.add_tape_argument(self.control_tape, options)
 
-        # Postprocess (simplify, substitute operation adjoints) the recording 
+        # Postprocess (simplify, substitute operation adjoints) the recording
         # and returning routines
         self.postprocess(self.recording, options)
         self.postprocess(self.returning, options)
@@ -847,6 +886,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         recording = []
         returning = []
 
+        # Call RoutineSymbol
+        call_symbol = call.routine
+        # Routine
+        routine = self.container_trans.routine_from_symbol(call_symbol)
+        routine_arguments = routine.symbol_table.argument_list
+
         # Tape record/restore the Reference arguments of the Call
         # Symbols already value_taped due to this call
         # to avoid taping multiple times if it appears as multiple
@@ -854,29 +899,28 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         value_taped_symbols = []
         # accumulate the restores for now
         value_tape_restores = []
-        for arg in call.children:
-            if isinstance(arg, Reference):
-                # Check whether the lhs variable was written before
+        for call_arg, routine_arg in zip(call.children, routine_arguments):
+            if isinstance(call_arg, Reference):
+                # Check whether the argument variable was written before
                 # or if it is an argument of a call before
-                overwriting = self.is_overwrite(arg)
-                # TODO: this doesn't deal with the intents
-                # of the routine being called for now
-                # ie. intent(in) doesn't need to be value_taped?
-                # see self.is_call_argument_before
+                overwriting = self.is_overwrite(call_arg)
 
-                if overwriting:
+                if overwriting and (
+                    routine_arg.interface.access
+                    is not ArgumentInterface.Access.READ
+                ):
                     # Symbol wasn't value_taped yet
-                    if arg.symbol not in value_taped_symbols:
+                    if call_arg.symbol not in value_taped_symbols:
                         # Tape record in the recording routine
-                        value_tape_record = self.value_tape.record(arg)
+                        value_tape_record = self.value_tape.record(call_arg)
                         recording.append(value_tape_record)
 
                         # Associated value_tape restore in the returning routine
-                        value_tape_restore = self.value_tape.restore(arg)
+                        value_tape_restore = self.value_tape.restore(call_arg)
                         value_tape_restores.append(value_tape_restore)
 
                         # Don't value_tape the same symbol again in this call
-                        value_taped_symbols.append(arg.symbol)
+                        value_taped_symbols.append(call_arg.symbol)
 
         # Apply an ADReverseCallTrans
         rec, returning = self.call_trans.apply(call, options)
@@ -1156,8 +1200,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # be modified.
         for var in self.recording_table.datasymbols:
             if (
-                var not in self.recording_table.argument_list
-                and var.datatype.intrinsic is ScalarType.Intrinsic.REAL
+                var
+                not in self.recording_table.argument_list
+                # FIXME: dirty hack to tape ints
+                # and var.datatype.intrinsic is ScalarType.Intrinsic.REAL
             ):
                 # "fake" reference to value_tape the last value
                 # Either the whole array or the scalar variable
@@ -1281,6 +1327,37 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 f"'{type(tape).__name__}'."
             )
 
+        # if len(self.substitution_map) != 0:
+        #     length = tape.total_length.copy()
+        #     print(f"Replaced tape {tape.name} length \n"
+        #           f"{tape.total_length.debug_string()}")
+
+        #     for ref in length.walk(Reference):
+        #         if ref.name in self.substitution_map:
+        #             ref.replace_with(self.substitution_map[ref.name].copy())
+
+        #     tape.symbol.datatype = ArrayType(tape.symbol.datatype.datatype, [length])
+
+        #     print(f"by {length.debug_string()}")
+
+        # TODO: make this optional, etc.
+        from psyclone.psyir.backend.sympy_writer import SymPyWriter
+        from psyclone.psyir.frontend.sympy_reader import SymPyReader
+        from sympy import simplify
+
+        sympywriter = SymPyWriter()
+        sympyreader = SymPyReader(sympywriter)
+        fortran_expr = tape.symbol.datatype.shape[0].upper
+        sympy_expr = sympywriter(fortran_expr)
+        new_sympy_expr = simplify(sympy_expr)
+        length = sympyreader.psyir_from_expression(
+            new_sympy_expr, self.routine_table
+        )
+
+        tape.symbol.datatype = ArrayType(
+            tape.symbol.datatype.datatype, [length]
+        )
+
         # Get three symbols for the value_tape, one per routine
         symbols = [tape.symbol.copy() for i in range(3)]
 
@@ -1308,18 +1385,18 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             # for ref in references:
             #     if ref.symbol == tape.do_offset_symbol:
             table.add(tape.do_offset_symbol)
-                    # break  # Only add it once
+            # break  # Only add it once
 
             # # Same for the offset_symbol
             # for ref in references:
             #     if ref.symbol == tape.offset_symbol:
             table.add(tape.offset_symbol)
-                    # break  # Only add it once
+            # break  # Only add it once
 
         # The tape is not an argument of the reversing routine
 
         # Add an assignment of the tape offset at the very beginning of the
-        # recording and returning routines, respectively assigning 0 and its 
+        # recording and returning routines, respectively assigning 0 and its
         # last value to it
         self.recording.addchild(assign_zero(tape.offset), 0)
         self.returning.addchild(tape.offset_assignment, 0)
@@ -1331,6 +1408,47 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.reversing.addchild(allocate, 0)
             deallocate = tape.deallocate()
             self.reversing.addchild(deallocate, len(self.reversing.children))
+
+        for assignment in tape._recordings + tape._restorings:
+            simplified_operations = []
+            for operation in assignment.walk(Operation):
+                if operation.ancestor(Operation, include_self = False) not in simplified_operations:
+                    simplified_operations.append(operation)
+
+                    sympy_expr = sympywriter(operation)
+                    new_expr = sympyreader.psyir_from_expression(
+                        simplify(sympy_expr), self.recording_table
+                    )
+                    operation.replace_with(new_expr)
+                else:
+                    simplified_operations.append(operation)
+                    
+            # for array_ref in assignment.walk(ArrayReference):
+            #     if array_ref.parent is None:
+            #         print(
+            #             f"Found unattached array ref {array_ref.debug_string()}"
+            #         )
+            #     if array_ref.parent is not None:
+            #         new_indices = []
+            #         for psyir_expr in array_ref.indices:
+            #             if isinstance(psyir_expr, Range):
+            #                 sympy_exprs = sympywriter(psyir_expr.children)
+            #                 new_bounds = [
+            #                     sympyreader.psyir_from_expression(
+            #                         simplify(expr), self.recording_table
+            #                     )
+            #                     for expr in sympy_exprs
+            #                 ]
+            #                 new_indices.append(Range.create(*new_bounds))
+            #             else:
+            #                 sympy_expr = sympywriter(psyir_expr)
+            #                 new_index = sympyreader.psyir_from_expression(
+            #                     simplify(sympy_expr), self.recording_table
+            #                 )
+            #                 new_indices.append(new_index)
+            #         array_ref.replace_with(
+            #             ArrayReference.create(array_ref.symbol, new_indices)
+            #         )
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \
