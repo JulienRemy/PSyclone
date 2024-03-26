@@ -42,9 +42,11 @@ from psyclone.psyir.nodes import (
     Operation,
     IntrinsicCall,
     Literal,
-    Loop
+    Loop,
+    Assignment,
+    ArrayReference
 )
-from psyclone.psyir.symbols import DataSymbol
+from psyclone.psyir.symbols import DataSymbol, ArrayType
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
 from psyclone.autodiff.transformations import (
@@ -256,6 +258,110 @@ class ADReverseCallTrans(ADCallTrans):
 
             # If the value_tape has null length, it's unused
             if len(self.value_tape.recorded_nodes) != 0:
+
+                # calling_routine = self.routine_trans.routine
+                # print(f"Adding tape {self.value_tape.name} to calling routine {calling_routine.name}")
+                # parent_arguments_names = [sym.name for sym in calling_routine.symbol_table.argument_list]
+                # all_assignments = calling_routine.walk(Assignment)
+                # all_lhs_names = [assignment.lhs.name for assignment in all_assignments]
+                # subst_map = dict()
+
+                # for ref in self.value_tape.total_length.walk(Reference):
+                #     name = ref.name
+                #     if name not in parent_arguments_names:
+                #         print(f"Found {name} which is not in the arguments of {calling_routine.name}")
+                #         if name in subst_map:
+                #             value = subst_map[name]
+                #         else:
+                #             if all_lhs_names.count(name) != 1:
+                #                 raise NotImplementedError(name)
+                        
+                #             assignment_index = all_lhs_names.index(name)
+                #             value = all_assignments[assignment_index].rhs
+                #             subst_map[name] = value.copy()
+                
+                # self.routine_trans.substitution_map = subst_map | self.called_routine_trans.substitution_map
+
+
+                # for index, multiplicity in enumerate(self.value_tape.multiplicities):
+                #     for ref in multiplicity.walk(Reference):
+                #         name = ref.name
+                #         if name not in parent_arguments_names:
+                #             print(f"Found {name} which is not in the arguments of {calling_routine.name}")
+                #             if name in subst_map:
+                #                 value = subst_map[name]
+                #             else:
+                #                 if all_lhs_names.count(name) != 1:
+                #                     raise NotImplementedError(name)
+                            
+                #                 assignment_index = all_lhs_names.index(name)
+                #                 value = all_assignments[assignment_index].rhs
+                #                 subst_map[name] = value
+
+                #             print(f"Substituting {name} => {(value)}")
+
+                #             if ref == multiplicity:
+                #                 self.value_tape.multiplicities[index] = value.copy()
+                #             else:
+                #                 ref.replace_with(value.copy())
+
+                # for index, node in enumerate(self.value_tape.recorded_nodes):
+                #     for array_ref in node.walk(Reference):
+                #         if isinstance(array_ref, ArrayReference) or isinstance(array_ref.datatype, ArrayType):
+                #             for dim in array_ref.datatype.shape:
+                #                 if isinstance(dim, ArrayType.ArrayBounds):
+                #                     bounds = list(dim)
+                #                     for i, bound in enumerate(bounds):
+                #                         for ref in bound.walk(Reference):
+                #                             name = ref.name
+                #                             if name not in parent_arguments_names:
+                #                                 print(f"Found {name} which is not in the arguments of {calling_routine.name}")
+                #                                 if name in subst_map:
+                #                                     value = subst_map[name]
+                #                                 else:
+                #                                     if all_lhs_names.count(name) != 1:
+                #                                         raise NotImplementedError(f"{name}")
+                                                
+                #                                     assignment_index = all_lhs_names.index(name)
+                #                                     value = all_assignments[assignment_index].rhs
+                #                                     subst_map[name] = value
+
+                #                                 print(f"Substituting {name} => {(value)}")
+
+                #                                 if ref == bound:
+                #                                     bounds[i] = value.copy()
+                #                                 else:
+                #                                     ref.replace_with(value.copy())
+
+                #                     dim = ArrayType.ArrayBounds(*bounds)
+
+
+
+                #             indices_refs = []
+                #             for child in array_ref.children:
+                #                 indices_refs.extend(child.walk(Reference))
+                #             true_refs = []
+                #             for index_ref in indices_refs:
+                #                 if index_ref.name != array_ref.name:
+                #                     true_refs.append(index_ref)
+                #             for ref in true_refs:
+                #                 name = ref.name
+                #                 if name not in parent_arguments_names:
+                #                     print(f"Found {name} which is not in the arguments of {calling_routine.name}")
+                #                     if name in subst_map:
+                #                         value = subst_map[name]
+                #                     else:
+                #                         if all_lhs_names.count(name) != 1:
+                #                             raise NotImplementedError(f"{array_ref} with indices refs {[ref.name for ref in true_refs]} and current ref {name}")
+                                    
+                #                         assignment_index = all_lhs_names.index(name)
+                #                         value = all_assignments[assignment_index].rhs
+                #                         subst_map[name] = value
+
+                #                     print(f"Substituting {name} => {(value)}")
+
+                #                     ref.replace_with(value.copy())
+
                 # Extend the calling routine value tape by the called routine
                 # one and get the corresponding slice of the first
                 value_tape_slice = (
