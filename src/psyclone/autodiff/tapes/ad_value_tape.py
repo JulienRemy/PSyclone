@@ -162,6 +162,8 @@ class ADValueTape(ADTape):
                                                 [reference.copy(), shape_array])
                 assignment = Assignment.create(value_tape_ref, reshaped)
 
+        self._recordings[-1] = assignment
+
         return assignment
 
     def restore(self, reference, do_loop = False):
@@ -235,5 +237,7 @@ class ADValueTape(ADTape):
                 reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
                                                 [value_tape_ref, shape_array])
                 assignment = Assignment.create(reference.copy(), reshaped)
+
+        self._restorings[-1] = assignment
 
         return assignment

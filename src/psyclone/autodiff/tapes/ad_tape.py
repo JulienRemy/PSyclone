@@ -151,6 +151,10 @@ class ADTape(object, metaclass=ABCMeta):
         # Internal list of recorded nodes
         self._recorded_nodes = []
 
+        # TODO: describe
+        self._recordings = []
+        self._restorings = []
+
     @property
     def node_type_names(self):
         """Names of the types of nodes that can be stored in the tape.
@@ -255,6 +259,20 @@ class ADTape(object, metaclass=ABCMeta):
                 f"list but found {len(self._multiplicities)} "
                 f"and {len(self._recorded_nodes)}"
             )
+        # if len(self._recordings) != len(self._recorded_nodes):
+        #     raise ValueError(
+        #         f"The length of the recordings list should "
+        #         f"always be equal to that of the recorded_nodes "
+        #         f"list but found {len(self._recordings)} "
+        #         f"and {len(self._recorded_nodes)}"
+        #     )
+        # if len(self._restorings) != len(self._recorded_nodes):
+        #     raise ValueError(
+        #         f"The length of the restorings list should "
+        #         f"always be equal to that of the recorded_nodes "
+        #         f"list but found {len(self._restorings)} "
+        #         f"and {len(self._recorded_nodes)}"
+        #     )
 
         return self._recorded_nodes
 
@@ -435,13 +453,14 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'new_nodes' argument should be of type "
                 f"'list' but found '{type(new_nodes).__name__}'."
             )
-        for new_node in new_nodes:
-            if not isinstance(new_node, self._node_types):
-                raise TypeError(
-                    f"'new_nodes' argument should be a list of nodes of types "
-                    f"among {self.node_type_names} but found an element of "
-                    f"type '{type(new_node).__name__}'."
-                )
+        # FIXME: dirty fix to tape int
+        #for new_node in new_nodes:
+        #    if not isinstance(new_node, self._node_types):
+        #        raise TypeError(
+        #            f"'new_nodes' argument should be a list of nodes of types "
+        #            f"among {self.node_type_names} but found an element of "
+        #            f"type '{type(new_node).__name__}'."
+        #        )
         if len(new_nodes) != 0 and (
             self._recorded_nodes[-len(new_nodes) :] != new_nodes
         ):
@@ -832,6 +851,8 @@ class ADTape(object, metaclass=ABCMeta):
             )
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
+        self._recordings.append(tape_ref)
+
         return tape_ref
 
     def restore(self, node, do_loop=False):
@@ -878,6 +899,8 @@ class ADTape(object, metaclass=ABCMeta):
                 self.first_index_of_last_element(do_loop), self.length(do_loop)
             )
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
+
+        self._restorings.append(tape_ref)
 
         return tape_ref
 
@@ -972,6 +995,10 @@ class ADTape(object, metaclass=ABCMeta):
         self._recorded_nodes.extend(tape.recorded_nodes)
         self._offset_mask.extend(tape.offset_mask)
         self._multiplicities.extend(tape.multiplicities)
+        # TODO: property
+        self._recordings.extend(tape._recordings)
+        self._restorings.extend(tape._restorings)
+
 
         # If static array, reshape to take the new length into account
         if not self.is_dynamic_array:
