@@ -366,7 +366,7 @@ class ADReverseCallTrans(ADCallTrans):
                 # one and get the corresponding slice of the first
                 value_tape_slice = (
                     self.routine_trans.value_tape.extend_and_slice(
-                        self.value_tape, do_loop
+                        self.value_tape, call, do_loop
                     )
                 )
 
@@ -381,7 +381,7 @@ class ADReverseCallTrans(ADCallTrans):
                 # one and get the corresponding slice of the first
                 control_tape_slice = (
                     self.routine_trans.control_tape.extend_and_slice(
-                        self.control_tape, do_loop
+                        self.control_tape, call, do_loop
                     )
                 )
 

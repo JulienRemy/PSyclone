@@ -1327,36 +1327,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 f"'{type(tape).__name__}'."
             )
 
-        # if len(self.substitution_map) != 0:
-        #     length = tape.total_length.copy()
-        #     print(f"Replaced tape {tape.name} length \n"
-        #           f"{tape.total_length.debug_string()}")
+        use_sympy = self.unpack_option("use_sympy", options)
 
-        #     for ref in length.walk(Reference):
-        #         if ref.name in self.substitution_map:
-        #             ref.replace_with(self.substitution_map[ref.name].copy())
-
-        #     tape.symbol.datatype = ArrayType(tape.symbol.datatype.datatype, [length])
-
-        #     print(f"by {length.debug_string()}")
-
-        # TODO: make this optional, etc.
-        from psyclone.psyir.backend.sympy_writer import SymPyWriter
-        from psyclone.psyir.frontend.sympy_reader import SymPyReader
-        from sympy import simplify
-
-        sympywriter = SymPyWriter()
-        sympyreader = SymPyReader(sympywriter)
-        fortran_expr = tape.symbol.datatype.shape[0].upper
-        sympy_expr = sympywriter(fortran_expr)
-        new_sympy_expr = simplify(sympy_expr)
-        length = sympyreader.psyir_from_expression(
-            new_sympy_expr, self.routine_table
-        )
-
-        tape.symbol.datatype = ArrayType(
-            tape.symbol.datatype.datatype, [length]
-        )
+        if use_sympy:
+            tape.simplify_length_expression_with_sympy(self.routine_table)
 
         # Get three symbols for the value_tape, one per routine
         symbols = [tape.symbol.copy() for i in range(3)]
@@ -1409,46 +1383,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             deallocate = tape.deallocate()
             self.reversing.addchild(deallocate, len(self.reversing.children))
 
-        for assignment in tape._recordings + tape._restorings:
-            simplified_operations = []
-            for operation in assignment.walk(Operation):
-                if operation.ancestor(Operation, include_self = False) not in simplified_operations:
-                    simplified_operations.append(operation)
-
-                    sympy_expr = sympywriter(operation)
-                    new_expr = sympyreader.psyir_from_expression(
-                        simplify(sympy_expr), self.recording_table
-                    )
-                    operation.replace_with(new_expr)
-                else:
-                    simplified_operations.append(operation)
-                    
-            # for array_ref in assignment.walk(ArrayReference):
-            #     if array_ref.parent is None:
-            #         print(
-            #             f"Found unattached array ref {array_ref.debug_string()}"
-            #         )
-            #     if array_ref.parent is not None:
-            #         new_indices = []
-            #         for psyir_expr in array_ref.indices:
-            #             if isinstance(psyir_expr, Range):
-            #                 sympy_exprs = sympywriter(psyir_expr.children)
-            #                 new_bounds = [
-            #                     sympyreader.psyir_from_expression(
-            #                         simplify(expr), self.recording_table
-            #                     )
-            #                     for expr in sympy_exprs
-            #                 ]
-            #                 new_indices.append(Range.create(*new_bounds))
-            #             else:
-            #                 sympy_expr = sympywriter(psyir_expr)
-            #                 new_index = sympyreader.psyir_from_expression(
-            #                     simplify(sympy_expr), self.recording_table
-            #                 )
-            #                 new_indices.append(new_index)
-            #         array_ref.replace_with(
-            #             ArrayReference.create(array_ref.symbol, new_indices)
-            #         )
+        if use_sympy:
+            tape.simplify_assignments_with_sympy(self.recording_table)
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \

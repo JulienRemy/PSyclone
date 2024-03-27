@@ -172,8 +172,10 @@ class ADControlTape(ADTape):
             )
 
         control_tape_ref = super().record(node, do_loop)
+        assignment = Assignment.create(control_tape_ref, node.copy())
+        # self._recordings[-1] = assignment
 
-        return Assignment.create(control_tape_ref, node.copy())
+        return assignment
 
     def restore(self, node, do_loop = False):
         """Restore the boolean reference or operation result  from the tape.

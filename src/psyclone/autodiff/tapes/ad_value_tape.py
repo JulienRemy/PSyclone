@@ -38,7 +38,7 @@
 """
 
 from psyclone.psyir.nodes import (Assignment, Reference, IntrinsicCall, Literal,
-                                  ArrayReference)
+                                  ArrayReference, Operation)
 from psyclone.psyir.symbols import ScalarType, ArrayType, INTEGER_TYPE
 from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -68,7 +68,7 @@ class ADValueTape(ADTape):
     :raises TypeError: if is_dynamic_array is of the wrong type.
     """
 
-    _node_types = (Reference,)
+    _node_types = (Reference, Operation, IntrinsicCall)
     _tape_prefix = "value_tape_"
 
     def __init__(self, name, datatype, is_dynamic_array = False):

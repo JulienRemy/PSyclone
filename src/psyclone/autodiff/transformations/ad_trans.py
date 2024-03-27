@@ -54,6 +54,7 @@ class ADTrans(Transformation, metaclass=ABCMeta):
         "simplify": True,
         "simplify_n_times": 5,
         "inline_operation_adjoints": True,
+        "use_sympy": True,
     }
 
     @property
