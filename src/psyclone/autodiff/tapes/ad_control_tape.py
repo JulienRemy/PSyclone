@@ -44,6 +44,7 @@ from psyclone.psyir.nodes import (
     Operation,
     UnaryOperation,
     BinaryOperation,
+    Call
 )
 from psyclone.psyir.symbols import ScalarType
 
@@ -79,7 +80,7 @@ class ADControlTape(ADTape):
     :raises TypeError: if is_dynamic_array is of the wrong type.
     """
 
-    _node_types = (Reference, Operation, Literal)
+    _node_types = (Reference, Operation, Literal, Call)
     _tape_prefix = "ctrl_tape_"
 
     def __init__(self, name, datatype, is_dynamic_array = False):

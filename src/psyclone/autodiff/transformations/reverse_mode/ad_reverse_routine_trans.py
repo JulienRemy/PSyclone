@@ -1329,6 +1329,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         use_sympy = self.unpack_option("use_sympy", options)
 
+        # If using sympy, simplify the length expression of the tape
         if use_sympy:
             tape.simplify_length_expression_with_sympy(self.routine_table)
 
@@ -1383,8 +1384,46 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             deallocate = tape.deallocate()
             self.reversing.addchild(deallocate, len(self.reversing.children))
 
+        # Apply simplifications using sympy if needed to:
+        # - the indices/slices used in references to the tape
+        # - the expressions assigned to the tape offsets
+        # in both the recording and returning routines
         if use_sympy:
-            tape.simplify_assignments_with_sympy(self.recording_table)
+            for ref in self.recording.walk(ArrayReference):
+                if ref.name == tape.name:
+                    print(f"Simplifying {ref.name}")
+                    ref.replace_with(
+                        tape.simplify_expression_with_sympy(
+                            ref, self.recording_table
+                        )
+                    )
+            for ref in self.returning.walk(ArrayReference):
+                if ref.name == tape.name:
+                    ref.replace_with(
+                        tape.simplify_expression_with_sympy(
+                            ref, self.returning_table
+                        )
+                    )
+            for assignment in self.recording.walk(Assignment):
+                if assignment.lhs.name in (
+                    tape.do_offset_symbol.name,
+                    tape.offset_symbol.name,
+                ):
+                    assignment.rhs.replace_with(
+                        tape.simplify_expression_with_sympy(
+                            assignment.rhs, self.recording_table
+                        )
+                    )
+            for assignment in self.returning.walk(Assignment):
+                if assignment.lhs.name in (
+                    tape.do_offset_symbol.name,
+                    tape.offset_symbol.name,
+                ):
+                    assignment.rhs.replace_with(
+                        tape.simplify_expression_with_sympy(
+                            assignment.rhs, self.returning_table
+                        )
+                    )
 
     def add_calls_to_reversing(self, options=None):
         """Inserts two calls, to the recording and returning routines, in the \

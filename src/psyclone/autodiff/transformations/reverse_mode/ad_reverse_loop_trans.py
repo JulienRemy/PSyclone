@@ -147,38 +147,14 @@ class ADReverseLoopTrans(ADLoopTrans):
                             "bound are not implemented yet."
                         )
 
-        # if not self._all_lhs_of_assignments_are_array_references(loop):
-        #     raise NotImplementedError(
-        #         "For now, only array references are allowed on the LHS of "
-        #         "assignment nodes inside loops."
-        #     )
-
-        # if not self._all_arrays_are_indexed_on_lhs_without_offsets(loop):
-        #     raise NotImplementedError(
-        #         "For now, only loops that write to array elements "
-        #         "at indices which are *exactly* their loop variables "
-        #         "can be transformed."
-        #     )
-
-        # if not self._all_arrays_can_be_taped_outside_the_loops(loop):
-        #     raise NotImplementedError(
-        #         "For now, only loops that write to/increment array elements "
-        #         "*once* and *before* they are read can be transformed."
-        #         "These are the ones were tape restores can be done *after* "
-        #         "the loop, on the whole array slice accessed by the loop."
-        #     )
-
     def apply(self, loop, options=None):
         """Applies the transformation, generating the recording and returning \
         motions associated to this Loop.
-        
-        ************************************
-        ************************************
-        ************************************
-        TODO: DESCRIBE THIS
-        ************************************
-        ************************************
-        ************************************
+        The returning loop is reversed.
+        The loops cannot modify their loop variables, stop or step expression \
+        inside their bodies.
+        Where possible (quite restrictive conditions for now), the arrays are \
+        taped and restored before the loop.
             
         | Options:
         | - bool 'verbose' : toggles preceding and inline comments around the \
@@ -280,7 +256,9 @@ class ADReverseLoopTrans(ADLoopTrans):
             # Update the tape offset and tape mask
             value_tape_offset_assignment = (
                 self.routine_trans.value_tape.update_offset_and_mask(
-                    one(), nodes_taped_outside
+                    one(),
+                    nodes_taped_outside,
+                    [one()] * len(nodes_taped_outside),
                 )
             )
             recording_offsets_and_loop.append(value_tape_offset_assignment)
@@ -288,7 +266,9 @@ class ADReverseLoopTrans(ADLoopTrans):
                 value_tape_offset_assignment.copy()
             )
         else:
-            returning_offsets_and_loop.append(value_tape_offset_assignment_before)
+            returning_offsets_and_loop.append(
+                value_tape_offset_assignment_before
+            )
         #################
         # Transform the loop body and create loops for both motions
         #################
@@ -353,6 +333,9 @@ class ADReverseLoopTrans(ADLoopTrans):
         nodes_taped_inside = self.routine_trans.value_tape.recorded_nodes[
             number_of_previously_taped_nodes:
         ]
+        new_multiplicities = self.routine_trans.value_tape.multiplicities[
+            number_of_previously_taped_nodes:
+        ]
 
         # If some taping went on inside the loop body, then the offset needs
         # to be updated
@@ -360,7 +343,9 @@ class ADReverseLoopTrans(ADLoopTrans):
             # Update the tape offset and tape mask
             value_tape_offset_assignment = (
                 self.routine_trans.value_tape.update_offset_and_mask(
-                    self.number_of_iterations(loop), nodes_taped_inside
+                    self.number_of_iterations(loop),
+                    nodes_taped_inside,
+                    new_multiplicities,
                 )
             )
             recording_offsets_and_loop.append(value_tape_offset_assignment)
@@ -373,8 +358,8 @@ class ADReverseLoopTrans(ADLoopTrans):
             # recorded nodes
             product = mul(
                 self.iteration_counter_within_innermost_nested_loop(loop),
-                self.routine_trans.value_tape.length_of_nodes(
-                    nodes_taped_inside
+                self.routine_trans.value_tape.length_of_nodes_with_multiplicities(
+                    nodes_taped_inside, new_multiplicities
                 ),
             )
             symbol = self.routine_trans.value_tape.do_offset_symbol
@@ -405,6 +390,7 @@ class ADReverseLoopTrans(ADLoopTrans):
         :param loop: original (primal) loop.
         :type loop: :py:class:`psyclone.psyir.nodes.Loop`
         """
+        #pylint: disable=import-outside-toplevel
         from psyclone.psyir.backend.fortran import FortranWriter
 
         fwriter = FortranWriter()
@@ -445,39 +431,6 @@ class ADReverseLoopTrans(ADLoopTrans):
         rev_stop = loop.start_expr.copy()
         rev_step = minus(loop.step_expr.copy())
         return rev_start, rev_stop, rev_step
-
-    # def surrounding_loops_variables_and_bounds(self, loop):
-    #     """Get a list of [variable, start, stop, step] elements for all loops
-    #     surrounding loop (ie. loop is the innermost one), including it.
-
-    #     :param loop: loop whose ancestors to consider.
-    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
-
-    #     :return: list of lists containing the variable symbol, start, stop and \
-    #              step expressions of each nested loop.
-    #     :rtype: List[List[:py:class:`psyclone.psyir.symbols.DataSymbol`,
-    #                       :py:class:`psyclone.psyir.nodes.DataNode`,
-    #                       :py:class:`psyclone.psyir.nodes.DataNode`,
-    #                       :py:class:`psyclone.psyir.nodes.DataNode`]]
-    #     """
-    #     # Includes the current loop
-    #     surrounding_loops = [loop]
-    #     while loop.ancestor(Loop, include_self=False) is not None:
-    #         loop = loop.ancestor(Loop, include_self=False)
-    #         surrounding_loops.insert(0, loop)
-
-    #     variables_and_bounds = []
-    #     for surrounding_loop in surrounding_loops:
-    #         variables_and_bounds.append(
-    #             [
-    #                 surrounding_loop.variable,
-    #                 surrounding_loop.start_expr,
-    #                 surrounding_loop.stop_expr,
-    #                 surrounding_loop.step_expr,
-    #             ]
-    #         )
-
-    #     return variables_and_bounds
 
     def nested_loops_variables_and_bounds(self, loop):
         """Get a list of [variable, start, stop, step] elements for all nested \
@@ -859,7 +812,9 @@ class ADReverseLoopTrans(ADLoopTrans):
         # nested_loops_vars = self.nested_loops_variables(loop)
 
         all_calls = loop.walk(Call)
-        all_calls = [call for call in all_calls if type(call) is not IntrinsicCall]
+        all_calls = [
+            call for call in all_calls if type(call) is not IntrinsicCall
+        ]
         if len(all_calls) != 0:
             return []
 

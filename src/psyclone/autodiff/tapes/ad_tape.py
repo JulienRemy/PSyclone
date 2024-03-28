@@ -58,6 +58,7 @@ from psyclone.psyir.symbols import (
     INTEGER_TYPE,
     ScalarType,
     ArrayType,
+    SymbolTable
 )
 from psyclone.autodiff import (
     one,
@@ -154,7 +155,7 @@ class ADTape(object, metaclass=ABCMeta):
         # Internal list of recorded nodes
         self._recorded_nodes = []
 
-        # TODO: describe
+        # Lists of recording/restorings to/from the the tape
         self._recordings = []
         self._restorings = []
 
@@ -444,7 +445,34 @@ class ADTape(object, metaclass=ABCMeta):
 
         return offsets
 
-    def update_offset_and_mask(self, number_of_iterations, new_nodes):
+    def update_offset_and_mask(
+        self, number_of_iterations, new_nodes, new_multiplicities
+    ):
+        """Given the total number of iterations of a loop, \
+        some new nodes taped in it and their associated multiplicities \ 
+        current_offset_value attribute and the offset_mask list.
+        Returns the assignment of the new offset value to the tape offset.
+
+        :param number_of_iterations: total number of iterations of the loop.
+        :type number_of_iterations: :py:class:`psyclone.psyir.nodes.DataNode`
+        :param new_nodes: list of nodes recorded in the loop.
+        :type new_nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        :param new_multiplicities: list of multiplicites of the nodes.
+        :type new_multiplicities: List[\
+                                      :py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :raises TypeError: if number_of_iterations is of the wrong type.
+        :raises TypeError: if new_nodes is of the wrong type.
+        :raises TypeError: if a node in new_nodes is of the wrong type.
+        :raises TypeError: if new_multiplicities is of the wrong type.
+        :raises TypeError: if an item in new_multiplicities is of the wrong \
+                           type.
+        :raises ValueError: if new_nodes and new_multiplicities are not of the \
+                            same lengths.
+
+        :return: assignment of the new offset value to the tape offset.
+        :rtype: :py:class:`psyclone.psyir.nodes.Assignment`
+        """
         if not isinstance(number_of_iterations, DataNode):
             raise TypeError(
                 f"'number_of_iterations' argument should be of type "
@@ -463,15 +491,18 @@ class ADTape(object, metaclass=ABCMeta):
                     f"among {self.node_type_names} but found an element of "
                     f"type '{type(new_node).__name__}'."
                 )
-            # if new_node.datatype is not self.datatype or (
-            #     new_node.datatype is ArrayType
-            #     and new_node.datatype.datatype is not self.datatype
-            # ):
-            #     raise TypeError(
-            #         f"'new_nodes' argument should be a list of nodes of "
-            #         f"datatype {self.datatype} but found an element of "
-            #         f"datatype '{new_node.datatype}'."
-            #     )
+        if not isinstance(new_multiplicities, list):
+            raise TypeError(
+                f"'new_multiplicities' argument should be of type "
+                f"'list' but found '{type(new_multiplicities).__name__}'."
+            )
+        for new_multiplicity in new_multiplicities:
+            if not isinstance(new_multiplicity, DataNode):
+                raise TypeError(
+                    f"'new_multiplicities' argument should be a list of nodes "
+                    f"of type 'DataNode' but found an element of "
+                    f"type '{type(new_multiplicity).__name__}'."
+                )
         if len(new_nodes) != 0 and (
             self._recorded_nodes[-len(new_nodes) :] != new_nodes
         ):
@@ -480,27 +511,43 @@ class ADTape(object, metaclass=ABCMeta):
                 "recorded nodes but does not."
             )
 
-        # lengths = []
-        # for new_node in new_nodes:
-        #     if isinstance(new_node.datatype, ScalarType):
-        #         lengths.append(one())
-        #     else:
-        #         lengths.append(self._array_size(new_node))
+        # Compute the length of all new nodes, with their associated
+        # multiplicities
+        new_lengths = self.length_of_nodes_with_multiplicities(
+            new_nodes, new_multiplicities
+        )
 
-        new_lengths = self.length_of_nodes(new_nodes)
-
+        # Multiply with the number of iterations of the loop and add to the
+        # previous offset value
         length_increment = mul(number_of_iterations, new_lengths)
         self.current_offset_value = add(
             self.current_offset_value, length_increment
         )
 
+        # Set the new nodes to be masked and their multiplicities to be
+        # the number of iterations of the loop times their multiplicity in the
+        # loop
         for i in range(len(new_nodes)):
             self.offset_mask[-len(new_nodes) + i] = False
-            self.multiplicities[-len(new_nodes) + i] = number_of_iterations
+            self.multiplicities[-len(new_nodes) + i] = mul(
+                number_of_iterations, new_multiplicities[i]
+            )
 
+        # Return the assignement to the offset
         return assign(self.offset, self.current_offset_value)
 
     def _list_of_lengths_of_nodes(self, nodes):
+        """Returns a list of lengths of the nodes.
+
+        :param nodes: list of nodes.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :raises TypeError: if nodes is of the wrong type.
+        :raises TypeError: if a node in nodes is of the wrong type.
+
+        :return: list of lengths.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        """
         if not isinstance(nodes, list):
             if not isinstance(nodes, list):
                 raise TypeError(
@@ -514,19 +561,16 @@ class ADTape(object, metaclass=ABCMeta):
                     f"among {self.node_type_names} but found an element of "
                     f"type '{type(node).__name__}'."
                 )
-            # if node.datatype is not self.datatype or (
-            #     node.datatype is ArrayType
-            #     and node.datatype.datatype is not self.datatype
-            # ):
-            #     raise TypeError(
-            #         f"'nodes' argument should be a list of nodes of "
-            #         f"datatype {self.datatype} but found an element of "
-            #         f"datatype '{node.datatype}'."
-            #     )
 
         lengths = []
         for node in nodes:
-            if isinstance(node.datatype, ScalarType):
+            # Special case for split reversal schedule tape extension,
+            # the nodes taped inside the called routine are replaced with a
+            # Call node in the tape, with associated multiplicity equal to
+            # the called subroutine tape length.
+            if isinstance(node, Call):
+                lengths.append(one())
+            elif isinstance(node.datatype, ScalarType):
                 lengths.append(one())
             else:
                 lengths.append(self._array_size(node))
@@ -534,11 +578,37 @@ class ADTape(object, metaclass=ABCMeta):
         return lengths
 
     def length_of_nodes(self, nodes):
+        """Return the total length of the nodes.
+
+        :param nodes: list of nodes.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :return: total length of the nodes.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
         return add_datanodes(self._list_of_lengths_of_nodes(nodes))
 
     def _list_of_lengths_of_nodes_with_multiplicities(
         self, nodes, multiplicities
     ):
+        """Returns a list of lengths of the nodes times their respective \
+        multiplicities.
+
+        :param nodes: list of nodes.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        :param nodes: list of multiplicities.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :raises TypeError: if nodes is of the wrong type.
+        :raises TypeError: if a node in nodes is of the wrong type.
+        :raises TypeError: if multiplicities is of the wrong type.
+        :raises TypeError: if an item in multiplicities is of the wrong type.
+        :raises ValueError: if nodes and multiplicities are of different \
+                            lengths.
+
+        :return: list of lengths.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        """
         if not isinstance(nodes, list):
             if not isinstance(nodes, list):
                 raise TypeError(
@@ -552,15 +622,6 @@ class ADTape(object, metaclass=ABCMeta):
                     f"among {self.node_type_names} but found an element of "
                     f"type '{type(node).__name__}'."
                 )
-            # if node.datatype is not self.datatype or (
-            #     node.datatype is ArrayType
-            #     and node.datatype.datatype is not self.datatype
-            # ):
-            #     raise TypeError(
-            #         f"'nodes' argument should be a list of nodes of "
-            #         f"datatype {self.datatype} but found an element of "
-            #         f"datatype '{node.datatype}'."
-            # )
         if not isinstance(multiplicities, list):
             if not isinstance(multiplicities, list):
                 raise TypeError(
@@ -589,6 +650,17 @@ class ADTape(object, metaclass=ABCMeta):
         return mult_lengths
 
     def length_of_nodes_with_multiplicities(self, nodes, multiplicities):
+        """Return the total length of the nodes times their respective \
+        multiplicities.
+
+        :param nodes: list of nodes.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        :param nodes: list of multiplicities.
+        :type nodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+
+        :return: total length of the nodes times multiplicities.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
         return add_datanodes(
             self._list_of_lengths_of_nodes_with_multiplicities(
                 nodes, multiplicities
@@ -597,6 +669,13 @@ class ADTape(object, metaclass=ABCMeta):
 
     @property
     def total_length(self):
+        """Return the total length of the nodes in the tape, times their \
+        respective multiplicities. This ignores the mask and is used to get \
+        the length of the tape to use eg. in the tape declaration.
+
+        :return: total length of all nodes times their multiplicities.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
+        """
         return self.length_of_nodes_with_multiplicities(
             self.recorded_nodes, self.multiplicities
         )
@@ -644,14 +723,6 @@ class ADTape(object, metaclass=ABCMeta):
         )
 
         return add_datanodes(lengths).copy()
-        # for node, mask in zip(self.recorded_nodes, self.offset_mask):
-        #     if mask:
-        #         if isinstance(node.datatype, ScalarType):
-        #             lengths.append(one())
-        #         else:
-        #             lengths.append(self._array_size(node))
-
-        # return add_datanodes(lengths).copy()
 
     def first_index_of_last_element(self, do_loop=False):
         """Gives the first index of the last element that was recorded.
@@ -697,20 +768,6 @@ class ADTape(object, metaclass=ABCMeta):
         lengths.append(one())
 
         return add_datanodes(lengths).copy()
-
-        # # Add the offsets if necessary
-        # lengths.extend(self._tape_offsets(do_loop))
-
-        # for node, mask in zip(self.recorded_nodes[:-1], self.offset_mask[:-1]):
-        #     if mask:
-        #         if isinstance(node.datatype, ScalarType):
-        #             lengths.append(one())
-        #         else:
-        #             lengths.append(self._array_size(node))
-
-        # lengths.append(one())
-
-        # return add_datanodes(lengths)
 
     def _array_size(self, array):
         """Returns the BinaryOperation giving the size of the array.
@@ -815,21 +872,19 @@ class ADTape(object, metaclass=ABCMeta):
                 f"{self.node_type_names} but found "
                 f"'{type(node).__name__}'."
             )
-        # if node.datatype is not self.datatype or (
-        #     node.datatype is ArrayType
-        #     and node.datatype.datatype is not self.datatype
-        # ):
-        #     raise TypeError(
-        #         f"'node' argument should be of "
-        #         f"datatype {self.datatype} but found "
-        #         f"datatype '{node.datatype}'."
-        #     )
-        # FIXME: dirty hack to tape integers
-        # if self.recorded_nodes[-1] != node:
-        #     raise ValueError(
-        #         f"node argument named {node.name} was not "
-        #         f"stored as last element of the value_tape."
-        #     )
+
+        if isinstance(self.recorded_nodes[-1], IntrinsicCall):
+            if self.recorded_nodes[-1].children[0] != node:
+                raise ValueError(
+                    f"node argument named {node.name} was not "
+                    f"stored as last element of the value_tape."
+                )
+        else:
+            if self.recorded_nodes[-1] != node:
+                raise ValueError(
+                    f"node argument named {node.name} was not "
+                    f"stored as last element of the value_tape."
+                )
 
     def record(self, node, do_loop=False):
         """Add the node as last element of the tape and return the \
@@ -856,15 +911,6 @@ class ADTape(object, metaclass=ABCMeta):
                 f"{self.node_type_names} but found "
                 f"'{type(node).__name__}'."
             )
-        # if node.datatype is not self.datatype or (
-        #     node.datatype is ArrayType
-        #     and node.datatype.datatype is not self.datatype
-        # ):
-        #     raise TypeError(
-        #         f"'node' argument should be of "
-        #         f"datatype {self.datatype} but found "
-        #         f"datatype '{node.datatype}'."
-        #     )
 
         if not isinstance(do_loop, bool):
             raise TypeError(
@@ -920,15 +966,6 @@ class ADTape(object, metaclass=ABCMeta):
                 f"{self.node_type_names} but found "
                 f"'{type(node).__name__}'."
             )
-        # if node.datatype is not self.datatype or (
-        #     node.datatype is ArrayType
-        #     and node.datatype.datatype is not self.datatype
-        # ):
-        #     raise TypeError(
-        #         f"'node' argument should be of "
-        #         f"datatype {self.datatype} but found "
-        #         f"datatype '{node.datatype}'."
-        #     )
         if not isinstance(do_loop, bool):
             raise TypeError(
                 f"'bool' argument should be of type "
@@ -1021,17 +1058,39 @@ class ADTape(object, metaclass=ABCMeta):
         )
 
     def _substitute_non_argument_references_in_length(self, tape, call):
-        calling_routine = call.ancestor(Routine)
+        """Given a tape returned by a called subroutine (call being its primal \
+        call), substitutes all the references in its length which are not \
+        arguments in the routine in which call is found, so that the tape \
+        might be declared as a static array.
 
+        :param tape: tape whose length to substitute in.
+        :type tape: :py:class:`psyclone.autodiff.tapes.ADTape`
+        :param call: primal call to the subroutine which returned the tape.
+        :type call: :py:class:`psyclone.psyir.nodes.Call`
+        :raises NotImplementedError: _description_
+        :raises NotImplementedError: _description_
+        :raises NotImplementedError: _description_
+        :raises NotImplementedError: _description_
+        :return: _description_
+        :rtype: _type_
+        """
+
+        # Length expression to substitute in
         length = tape.total_length
 
-        print(
-            f"Adding tape {tape.name} to calling routine {calling_routine.name}"
-        )
+        # Get the calling routine
+        # All references in the tape length should ultimately be arguments of it
+        # or literal values
+        calling_routine = call.ancestor(Routine)
 
+        # Arguments names (the symbols being different between the length
+        # expression and the the symbol table of the calling routine)
         calling_routine_arguments_names = [
             sym.name for sym in calling_routine.symbol_table.argument_list
         ]
+
+        # Sort through the references in length to get the ones that are not
+        # arguments of the calling routine and should be substituted
         all_refs_in_length = length.walk(Reference)
         non_argument_refs_in_length = [
             ref
@@ -1042,10 +1101,10 @@ class ADTape(object, metaclass=ABCMeta):
             ref.name for ref in non_argument_refs_in_length
         ]
 
-        print(f"Non arg refs are {non_argument_refs_names_in_length}")
-
+        # Get the assignments in the calling routine, the position of the call,
+        # sort to get the assignments before the call, make sure there is only
+        # one per symbol and build a dictionary {name: value}
         all_assignments = calling_routine.walk(Assignment)
-
         call_pos = call.abs_position
         non_arg_ref_values = dict()
         for non_arg_ref_name in non_argument_refs_names_in_length:
@@ -1066,36 +1125,26 @@ class ADTape(object, metaclass=ABCMeta):
                     "Substitution only supports references which are on the LHS of a single assignement, for now."
                 )
             non_arg_ref_values[non_arg_ref_name] = values[0]
-        # all_assignments_to_non_arg_refs = [assignment for assignment in all_assignments if assignment.lhs.name in non_argument_refs_names_in_length]
 
-        # all_lhs_names = {assignment.lhs.name for assignment in all_assignments if assignment.abs_position < call_pos}
-
-        # last_values_before_call = dict()
-        # for name in all_lhs_names:
-        #     values = [
-        #         assignment.rhs
-        #         for assignment in all_assignments
-        #         if assignment.lhs.name == name
-        #     ]
-        #     last_values_before_call[name] = values[-1]
-
+        # Substitute until all references are arguments
         while len(non_argument_refs_in_length) != 0:
-            refs_being_substituted = []
-            new_non_arg_refs = []
+
+            # Some might have been detached, ignore them
             for ref in non_argument_refs_in_length:
                 if ref.parent is None:
                     continue
 
+                # Get the associated value in the calling routine and
+                # substitute
                 value = non_arg_ref_values[ref.name]
-                print(
-                    f"Trying to replace {ref.name} with {value.debug_string()}"
-                )
                 ref.replace_with(value.copy())
-                refs_being_substituted.append(ref)
+
+                # If substituting by an operation, a call, etc., the new value
+                # might itself contain non argument references, so "recurse"
+                # and get the associated values of these new ones
                 if not isinstance(value, Reference):
                     for new_ref in value.walk(Reference):
                         if new_ref.name not in calling_routine_arguments_names:
-                            new_non_arg_refs.append(new_ref)
                             values = [
                                 assignment.rhs
                                 for assignment in all_assignments
@@ -1106,26 +1155,33 @@ class ADTape(object, metaclass=ABCMeta):
                             ]
                             if len(values) == 0:
                                 raise NotImplementedError(
-                                    f"Could not find a value to substitute for {new_ref.name}."
+                                    f"Could not find a value to substitute for "
+                                    f"{new_ref.name}."
                                 )
                             if len(values) > 1:
                                 raise NotImplementedError(
-                                    "Substitution only supports references which are on the LHS of a single assignement, for now."
+                                    "Substitution only supports references "
+                                    "which are on the LHS of a single "
+                                    "assignemnt, for now."
                                 )
                             non_arg_ref_values[new_ref.name] = values[0]
-                            # raise NotImplementedError("Recursive substitution is not implemented yet.")
-            for ref in refs_being_substituted:
-                non_argument_refs_in_length.remove(ref)
-            for ref in new_non_arg_refs:
-                non_argument_refs_in_length.append(ref)
 
-        print(f"Substitution yielded {length.debug_string()}")
+            # Build the list again, loop
+            non_argument_refs_in_length = [
+                ref
+                for ref in length.walk(Reference)
+                if ref.name not in calling_routine_arguments_names
+            ]
 
         return length
 
     def extend(self, tape, call):
         """Extends the tape with the recorded nodes of the 'tape' argument, \
         which must be of the same type.
+        This is used in split reversal schedule mode.
+        The recorded nodes of the 'tape' arguments are **not** actually added \
+        to the tape being extended. The 'call' node is added instead, with \
+        an associated multiplicity equal to the length of the new nodes.
 
         :param tape: tape to combine.
         :type tape: :py:class:`psyclone.autodiff.ADTape`, same as self.
@@ -1134,6 +1190,7 @@ class ADTape(object, metaclass=ABCMeta):
 
         :raises TypeError: if tape is of the wrong type.
         :raises TypeError: if the tape datatype is different.
+        :raises TypeError: if call is of the wrong type.
         """
         if not isinstance(tape, type(self)):
             raise TypeError(
@@ -1154,16 +1211,17 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(call).__name__}'."
             )
 
-        # length = self._substitute_non_argument_references_in_length(tape, call)
+        # Substitute the references which are not arguments of the calling
+        # routine so that the tape may be declared as a static array
+        length = self._substitute_non_argument_references_in_length(tape, call)
 
-        # self._recorded_nodes.extend(call)
-        # self._offset_mask.extend(True)
-        # self._multiplicities.extend(length)
+        # Add the call node, unmasked, with the length of the new nodes/tape
+        # as associated multiplicity
+        self._recorded_nodes.append(call)
+        self._offset_mask.append(True)
+        self._multiplicities.append(length)
 
-        self._recorded_nodes.extend(tape.recorded_nodes)
-        self._offset_mask.extend(tape.offset_mask)
-        self._multiplicities.extend(tape.multiplicities)
-        # TODO: property
+        # TODO: property?
         self._recordings.extend(tape._recordings)
         self._restorings.extend(tape._restorings)
 
@@ -1174,6 +1232,10 @@ class ADTape(object, metaclass=ABCMeta):
     def extend_and_slice(self, tape, call, do_loop=False):
         """Extends the tape by the 'tape' argument and return \
         the ArrayReference corresponding to the correct slice.
+        This is used in split reversal schedule mode.
+        The recorded nodes of the 'tape' arguments are **not** actually added \
+        to the tape being extended. The 'call' node is added instead, with \
+        an associated multiplicity equal to the length of the new nodes.
 
         :param tape: tape to extend with.
         :type tape: :py:class:`psyclone.autodiff.tapes.ADTape`
@@ -1182,11 +1244,14 @@ class ADTape(object, metaclass=ABCMeta):
         :param do_loop: whether currently transforming a do loop. \
                         Optional, defaults to False.
         :type do_loop: Optional[bool]
+        :param call: call to the routine that returned 'tape'.
+        :type call: :py:class:`psyclone.psyir.nodes.Call`
 
         :raises TypeError: if tape is not of the same type as self.
         :raises ValueError: if the datatype of tape is not the same as \
             the datatype of self. 
         :raises TypeError: if do_loop is of the wrong type.
+        :raises TypeError: if call is of the wrong type.
 
         :return: slice of the tape array that corresponds \
             to the tape it was extended with.
@@ -1231,16 +1296,27 @@ class ADTape(object, metaclass=ABCMeta):
         """Simplify the length expression of the Fortran tape using sympy.
         Takes a symbol table where all symbols in the length expression can be \
         found as argument, for the sympy reader. 
+        The length is modified in the shape attribute of the tape datatype \
+        itself.
 
         :param symbol_table: table where symbols in the length expression can \
                              be found.
         :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
+
+        :raises TypeError: if symbol_table is of the wrong type.
         """
         # Importing here to keep reliance on sympy entirely optional
-        #pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
         from psyclone.psyir.backend.sympy_writer import SymPyWriter
         from psyclone.psyir.frontend.sympy_reader import SymPyReader
         from sympy import simplify
+
+        if not isinstance(symbol_table, SymbolTable):
+            raise TypeError(
+                f"'symbol_table' argument should be of type "
+                f"'SymbolTable' but found "
+                f"'{type(symbol_table).__name__}'."
+            )
 
         sympywriter = SymPyWriter()
         sympyreader = SymPyReader(sympywriter)
@@ -1255,99 +1331,47 @@ class ADTape(object, metaclass=ABCMeta):
             self.symbol.datatype.datatype, [length]
         )
 
-    def simplify_assignments_with_sympy(self, symbol_table):
-        """Simplify the expressions in the recording and restoring assignments \
-        to and from the tape..
+    def simplify_expression_with_sympy(self, expression, symbol_table):
+        """Simplify the expression using sympy.
         Takes a symbol table where all symbols in the length expression can be \
         found as argument, for the sympy reader. 
 
+        :param expression: PSyIR expression to simplify.
+        :type expression: :py:class:`psyclone.psyir.nodes.DataNode`
         :param symbol_table: table where symbols in the length expression can \
                              be found.
         :type symbol_table: :py:class:`psyclone.psyir.symbols.SymbolTable`
+
+        :raises TypeError: if expression is of the wrong type.
+        :raises TypeError: if symbol_table is of the wrong type.
+
+        :return: simplified expression, as a copy of the argument.
+        :rtype: :py:class:`psyclone.psyir.nodes.DataNode`
         """
         # Importing here to keep reliance on sympy entirely optional
-        #pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
         from psyclone.psyir.backend.sympy_writer import SymPyWriter
         from psyclone.psyir.frontend.sympy_reader import SymPyReader
         from sympy import simplify
 
+        if not isinstance(expression, DataNode):
+            raise TypeError(
+                f"'expression' argument should be of type "
+                f"'DataNode' but found "
+                f"'{type(expression).__name__}'."
+            )
+        if not isinstance(symbol_table, SymbolTable):
+            raise TypeError(
+                f"'symbol_table' argument should be of type "
+                f"'SymbolTable' but found "
+                f"'{type(symbol_table).__name__}'."
+            )
+
         sympywriter = SymPyWriter()
         sympyreader = SymPyReader(sympywriter)
-        for assignment in self._recordings + self._restorings:
-            simplified_operations = []
-            for operation in assignment.walk(Operation):
-                # If the operation's ancestor was already simplified, there is
-                # no need to deal with it
-                if (
-                    operation.ancestor(Operation, include_self=False)
-                    not in simplified_operations
-                ):
-                    simplified_operations.append(operation)
 
-                    sympy_expr = sympywriter(operation)
-                    new_expr = sympyreader.psyir_from_expression(
-                        simplify(sympy_expr), symbol_table
-                    )
-                    operation.replace_with(new_expr)
-                else:
-                    simplified_operations.append(operation)
-
-    # def change_last_nodes_multiplicity(self, nodes, multiplicity):
-    #     """Change the multiplicity of the last recorded nodes, which should \
-    #     match the ones in 'nodes'.
-    #     Used after transforming a loop so that the tape offset is correct \
-    #     based on the number of iterations that were performed.
-
-    #     :param nodes: list of nodes whose multiplicities should be changed.
-    #     :type nodes: List[:py:class:`psyclone.psyir.nodes.Node`]
-    #     :param multiplicity: new multiplicity to be used, as a PSyIR node.
-    #     :type multiplicity: Union[:py:class:`psyclone.psyir.nodes.Literal`,\
-    #                            :py:class:`psyclone.psyir.nodes.Reference`,\
-    #                            :py:class:`psyclone.psyir.nodes.BinaryOperation`]
-
-    #     :raises TypeError: if nodes is of the wrong type.
-    #     :raises TypeError: if an element of nodes is of the wrong type.
-    #     :raises TypeError: if multiplicity is of the wrong type.
-    #     :raises ValueError: if a recorded node doesn't match the corresponding \
-    #                         one in 'nodes'.
-    #     :raises ValueError: if the recorded node already has multiplicity \
-    #                         different from 1.
-    #     """
-    #     if not isinstance(nodes, list):
-    #         raise TypeError(
-    #             f"'nodes' argument should be of type "
-    #             f"'list[Node]' but found '{type(nodes).__name__}'."
-    #         )
-    #     for node in nodes:
-    #         if not isinstance(node, Node):
-    #             raise TypeError(
-    #                 f"'nodes' argument should be of type "
-    #                 f"'list[Node]' but found an element of type "
-    #                 f"'{type(node).__name__}'."
-    #             )
-    #     if not isinstance(multiplicity, (Literal, Reference, BinaryOperation)):
-    #         raise TypeError(
-    #             f"'multiplicity' argument should be of type "
-    #             f"'Literal', 'Reference' or 'Binary Operation' but found "
-    #             f"'{type(multiplicity).__name__}'."
-    #         )
-
-    #     # Go through both the recorded nodes (end of the tape) and the nodes to
-    #     # edit, check they match, check the recorded nones don't have
-    #     # multiplicities different than 1 already, then update the multiplicity
-    #     for index, (
-    #         (recorded_node, recorded_multiplicity),
-    #         (node),
-    #     ) in enumerate(zip(self.recorded_nodes[-len(nodes) :], nodes)):
-    #         if recorded_node != node:
-    #             raise ValueError(
-    #                 f"'nodes' list contains a different node at index {index} "
-    #                 f"than the one recorded in the tape."
-    #             )
-    #         if recorded_multiplicity != one():
-    #             raise ValueError(
-    #                 f"The recorded node in the tape corresponding to the one "
-    #                 f"at index {index} in the 'nodes' list already has "
-    #                 f"multiplicity different from one."
-    #             )
-    #         self.recorded_nodes[-len(nodes) + index][1] = multiplicity
+        simplified_expression = expression.copy()
+        sympy_expr = sympywriter(simplified_expression)
+        return sympyreader.psyir_from_expression(
+            simplify(sympy_expr), symbol_table
+        )

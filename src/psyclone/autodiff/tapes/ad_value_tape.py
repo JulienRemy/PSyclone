@@ -37,8 +37,8 @@
 "taping" (storing and recovering) of function values.
 """
 
-from psyclone.psyir.nodes import (Assignment, Reference, IntrinsicCall, Literal,
-                                  ArrayReference, Operation)
+from psyclone.psyir.nodes import (Assignment, Reference, IntrinsicCall, Call, Literal,
+                                  ArrayReference, Operation, Routine)
 from psyclone.psyir.symbols import ScalarType, ArrayType, INTEGER_TYPE
 from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -68,7 +68,7 @@ class ADValueTape(ADTape):
     :raises TypeError: if is_dynamic_array is of the wrong type.
     """
 
-    _node_types = (Reference, Operation, IntrinsicCall)
+    _node_types = (Reference, Operation, Call)
     _tape_prefix = "value_tape_"
 
     def __init__(self, name, datatype, is_dynamic_array = False):
@@ -162,6 +162,13 @@ class ADValueTape(ADTape):
                                                 [reference.copy(), shape_array])
                 assignment = Assignment.create(value_tape_ref, reshaped)
 
+        # if self.simplify_using_sympy:
+        #     routine = reference.ancestor(Routine)
+        #     if routine is not None:
+        #         assignment = self.simplify_expression_with_sympy(
+        #             assignment, routine.symbol_table
+        #         )
+
         self._recordings[-1] = assignment
 
         return assignment
@@ -237,6 +244,13 @@ class ADValueTape(ADTape):
                 reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
                                                 [value_tape_ref, shape_array])
                 assignment = Assignment.create(reference.copy(), reshaped)
+
+        # if self.simplify_using_sympy:
+        #     routine = reference.ancestor(Routine)
+        #     if routine is not None:
+        #         assignment = self.simplify_expression_with_sympy(
+        #             assignment, routine.symbol_table
+        #         )
 
         self._restorings[-1] = assignment
 
