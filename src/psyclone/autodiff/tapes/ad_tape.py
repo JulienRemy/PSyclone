@@ -52,7 +52,7 @@ from psyclone.psyir.nodes import (
     Call,
     Routine,
     Assignment,
-    Loop
+    Loop,
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
@@ -296,7 +296,9 @@ class ADTape(object, metaclass=ABCMeta):
         """
         self._check_internal_lists_are_all_same_length()
 
-        return self._only_keep_useful_items(self._recorded_nodes)
+        # return self._only_keep_useful_items(self._recorded_nodes)
+
+        return self._recorded_nodes
 
     @property
     def offset_mask(self):
@@ -311,7 +313,9 @@ class ADTape(object, metaclass=ABCMeta):
         """
         self._check_internal_lists_are_all_same_length()
 
-        return self._only_keep_useful_items(self._offset_mask)
+        # return self._only_keep_useful_items(self._offset_mask)
+
+        return self._offset_mask
 
     @property
     def multiplicities(self):
@@ -326,7 +330,9 @@ class ADTape(object, metaclass=ABCMeta):
         """
         self._check_internal_lists_are_all_same_length()
 
-        return self._only_keep_useful_items(self._multiplicities)
+        # return self._only_keep_useful_items(self._multiplicities)
+
+        return self._multiplicities
 
     @property
     def recordings(self):
@@ -339,17 +345,9 @@ class ADTape(object, metaclass=ABCMeta):
         """
         self._check_internal_lists_are_all_same_length()
 
-        return self._only_keep_useful_items(self._recordings)
-    
-    @property
-    def usefully_recorded_flags(self):
-        """List of booleans indicating whether the node was usefully recorded \
-        or not. Used to filter the tape elements.
-        
-        :return: list of booleans indicating usefulness.
-        :rtype: List[bool]"""
+        # return self._only_keep_useful_items(self._recordings)
 
-        return self._usefully_recorded_flags
+        return self._recordings
 
     @property
     def restorings(self):
@@ -362,7 +360,19 @@ class ADTape(object, metaclass=ABCMeta):
         """
         self._check_internal_lists_are_all_same_length()
 
-        return self._only_keep_useful_items(self._restorings)
+        # return self._only_keep_useful_items(self._restorings)
+
+        return self._restorings
+
+    @property
+    def usefully_recorded_flags(self):
+        """List of booleans indicating whether the node was usefully recorded \
+        or not. Used to filter the tape elements.
+        
+        :return: list of booleans indicating usefulness.
+        :rtype: List[bool]"""
+
+        return self._usefully_recorded_flags
 
     @property
     def offset_symbol(self):
@@ -1454,7 +1464,7 @@ class ADTape(object, metaclass=ABCMeta):
         self._check_internal_lists_are_all_same_length()
 
         symbols_map = dict()
-        # recorded_symbols_names = [node.symbol.name for node in self._recorded_nodes]
+
         for recorded_node, restoring in zip(
             self._recorded_nodes, self._restorings
         ):
@@ -1464,6 +1474,9 @@ class ADTape(object, metaclass=ABCMeta):
                 symbols_map[recorded_node.symbol.name].append(restoring)
             else:
                 symbols_map[recorded_node.symbol.name] = [restoring]
+
+        for restorings in symbols_map.values():
+            restorings.sort(key=(lambda x: x.abs_position))
         return symbols_map
 
     def get_all_recorded_symbols_reads_in_routine(self, routine):
@@ -1568,7 +1581,27 @@ class ADTape(object, metaclass=ABCMeta):
                 self._usefully_recorded_flags[i] = False
 
     def get_useless_recordings(self):
-        return [recording for i, recording in enumerate(self._recordings) if self.usefully_recorded_flags[i] is False]
-    
+        """Get all useless recordings based on the usefully_recorded_flags list.
+        Used to detach them from the AST in post-processing TBR analysis.
+
+        :return: list of useless recording nodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        return [
+            recording
+            for i, recording in enumerate(self._recordings)
+            if self.usefully_recorded_flags[i] is False
+        ]
+
     def get_useless_restorings(self):
-        return [restoring for i, restoring in enumerate(self._restorings) if self.usefully_recorded_flags[i] is False]
+        """Get all useless restorings based on the usefully_recorded_flags list.
+        Used to detach them from the AST in post-processing TBR analysis.
+
+        :return: list of useless restorings nodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        return [
+            restoring
+            for i, restoring in enumerate(self._restorings)
+            if self.usefully_recorded_flags[i] is False
+        ]

@@ -651,11 +651,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Update the tapes usefully_recorded_flags lists
         for tape in (self.value_tape,):
             useful_restorings = self.get_all_useful_restorings(tape)
-            print(f"Useful restorings are: {[rest.debug_string() for rest in useful_restorings]}")
+            print(
+                f"Useful restorings are: {[rest.debug_string() for rest in useful_restorings]}"
+            )
             tape.update_usefully_recorded_flags(useful_restorings)
-            for useless in tape.get_useless_recordings() + tape.get_useless_restorings():
+            for useless in (
+                tape.get_useless_recordings() + tape.get_useless_restorings()
+            ):
                 print(f"Detaching {useless.debug_string()}")
-                # useless.detach()
+                useless.detach()
         ########################################################################
         ########################################################################
         # FIXME: this shouldn't be here, only here to keep the initial tape
@@ -1310,7 +1314,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """Add a tape as argument of both the transformed routines.
 
         :param tape: tape to be added.
-        :type tape: :py:class:`psyclone.autodiff.ADTape`]
+        :type tape: :py:class:`psyclone.autodiff.ADTape`
         :param options: a dictionary with options for transformations, \
             defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -1444,6 +1448,18 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.reversing.addchild(call_ret)
 
     def get_all_useful_restorings(self, tape):
+        """Goes through the returning routine, all restorings from tape and
+        all reads and returns a list of the ones that are actually useful.
+        Used for post-processing TBR (to be recorded) analysis.
+
+        :param tape: tape whose restorings to analyze.
+        :type tape: :py:class:`psyclone.autodiff.ADTape`
+
+        :raises TypeError: is tape is of the wrong type.
+
+        :return: list of useful restorings nodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
         if not isinstance(tape, ADTape):
             raise TypeError(
                 f"'tape' argument should be of type "
@@ -1455,7 +1471,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.returning
         )
 
-        print("Symbols are:", [sym_name for sym_name in restorings_map.keys()])
+        # print("Symbols are:", [sym_name for sym_name 
+        #                        in restorings_map.keys()])
 
         assert set(restorings_map.keys()) == set(reads_in_returning_map.keys())
 
@@ -1464,9 +1481,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             restorings = restorings_map[recorded_symbol_name]
             reads = reads_in_returning_map[recorded_symbol_name]
 
-            print(f"Sym: {recorded_symbol_name}")
-            print(f"restorings: {[restoring.debug_string() for restoring in restorings]}")
-            print(f"reads: {[read.debug_string() for read in reads]}")
+            # print(f"Sym: {recorded_symbol_name}")
+            # print(
+            #     f"restorings: {[restoring.debug_string() 
+            #                     for restoring in restorings]}"
+            # )
+            # print(f"reads: {[read.parent.debug_string() for read in reads]}")
 
             very_last_node = self.returning
             while len(very_last_node.children) != 0:
@@ -1475,8 +1495,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             for restoring, next_restoring in zip(
                 restorings, restorings[1:] + [very_last_node]
             ):
-                print(f"restoring : {restoring.debug_string()}")
-                print(f"next_restoring : {next_restoring.debug_string()}")
+                # print(f"restoring : {restoring.debug_string()}")
+                # print(f"next_restoring : {next_restoring.debug_string()}")
                 was_usefully_taped = False
                 # reads_between_restorings = []
 
@@ -1489,7 +1509,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                             and read.abs_position < next_restoring.abs_position
                         ):
                             was_usefully_taped = True
-                            print("Useful, case 1")
+                            # print("Useful, case 1")
                             break
                             # reads_between_restorings.append(read)
                 # Trickier, restoring is in a loop
@@ -1506,7 +1526,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                                 < next_restoring.abs_position
                             ):
                                 was_usefully_taped = True
-                                print("Useful, case 2")
+                                # print("Useful, case 2")
                                 break
                                 # reads_between_restorings.append(read)
                     # If next_restoring is not in the same (nested) loop(s),
@@ -1518,18 +1538,26 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                         # Get the uppermost ancestor that is not among
                         # next_restoring's Schedule ancestor (in case restoring
                         # is done without assignment)
-                        next_restoring_schedule_ancestors = [next_restoring.ancestor(Schedule)]
+                        next_restoring_schedule_ancestors = [
+                            next_restoring.ancestor(Schedule)
+                        ]
                         cursor = next_restoring.ancestor(Schedule)
                         while cursor.ancestor(Schedule) is not None:
-                            next_restoring_schedule_ancestors.append(cursor.ancestor(Schedule))
+                            next_restoring_schedule_ancestors.append(
+                                cursor.ancestor(Schedule)
+                            )
                             cursor = cursor.ancestor(Schedule)
                         restoring_ancestor = restoring
                         while (
                             restoring_ancestor.parent
                             not in next_restoring_schedule_ancestors
                         ):
-                            if (restoring_ancestor.parent is None):
-                                print(f"Was dealing with {recorded_symbol_name} and got restoring_ancestor {restoring_ancestor.debug_string()}")
+                            # if restoring_ancestor.parent is None:
+                            #     print(
+                            #         f"Was dealing with {recorded_symbol_name} "
+                            #         f"and got restoring_ancestor "
+                            #         f"{restoring_ancestor.debug_string()}"
+                            #     )
                             restoring_ancestor = restoring_ancestor.parent
 
                         for read in reads:
@@ -1547,17 +1575,27 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 if was_usefully_taped:
                     useful_restorings.append(restoring)
 
-                    print(f"{recorded_symbol_name} was usefully restored as {restoring.debug_string()}")
+                #     print(
+                #         f"{recorded_symbol_name} was usefully restored "
+                #         f"as {restoring.debug_string()}"
+                #     )
 
-                else:
-                    print(f"!!{restoring.debug_string()} is useless")
+                # else:
+                #     print(f"!!{restoring.debug_string()} is useless")
+
+            # The last value of an intent([in]out) or unknown intent argument
+            # is possibly returned so keep the last restoring
+            out_args_names = [
+                sym.name
+                for sym in self.returning_table.argument_list
+                if sym.interface.access is not ArgumentInterface.Access.READ
+            ]
+
+            if (
+                recorded_symbol_name in out_args_names
+                and len(restorings) != 0
+                and restorings[-1] not in useful_restorings
+            ):
+                useful_restorings.append(restorings[-1])
 
         return useful_restorings
-
-        usefully_recorded_nodes = []
-        for useful_restoring in useful_restorings:
-            recorded_node = tape.recorded_nodes[tape._restorings.index(useful_restoring)]
-            usefully_recorded_nodes.append(recorded_node)
-
-
-        return usefully_recorded_nodes
