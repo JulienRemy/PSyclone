@@ -44,17 +44,11 @@ from psyclone.psyir.nodes import (
     Operation,
     UnaryOperation,
     BinaryOperation,
-    Call
+    Call,
 )
 from psyclone.psyir.symbols import ScalarType
 
 from psyclone.autodiff.tapes import ADTape
-
-###################################
-###################################
-# TODO: this should also accept Call nodes with return_symbol of boolean type
-###################################
-###################################
 
 
 class ADControlTape(ADTape):
@@ -83,7 +77,7 @@ class ADControlTape(ADTape):
     _node_types = (Reference, Operation, Literal, Call)
     _tape_prefix = "ctrl_tape_"
 
-    def __init__(self, name, datatype, is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array=False):
         # if not isinstance(name, str):
         #    raise TypeError(f"'name' argument should be of type "
         #                    f"'str' but found '{type(name).__name__}'.")
@@ -102,7 +96,7 @@ class ADControlTape(ADTape):
 
         super().__init__(name, datatype, is_dynamic_array)
 
-    def record(self, node, do_loop = False):
+    def record(self, node, do_loop=False):
         """Add the boolean reference or operation result as last element of \
         the tape and return the Assignment node to record it to the tape.
 
@@ -165,7 +159,7 @@ class ADControlTape(ADTape):
                     f"if it is of type Operation but found "
                     f"'{node.operator}'."
                 )
-        
+
         if not isinstance(do_loop, bool):
             raise TypeError(
                 f"'bool' argument should be of type "
@@ -178,7 +172,7 @@ class ADControlTape(ADTape):
 
         return assignment
 
-    def restore(self, node, do_loop = False):
+    def restore(self, node, do_loop=False):
         """Restore the boolean reference or operation result  from the tape.
 
         :param node: node whose value should be restored from the control tape.
@@ -199,7 +193,7 @@ class ADControlTape(ADTape):
                 f"'Reference', 'Operation' or 'Literal' but found "
                 f"'{type(node).__name__}'."
             )
-        
+
         if not isinstance(do_loop, bool):
             raise TypeError(
                 f"'bool' argument should be of type "

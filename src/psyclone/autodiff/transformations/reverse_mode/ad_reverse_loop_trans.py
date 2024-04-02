@@ -811,6 +811,8 @@ class ADReverseLoopTrans(ADLoopTrans):
         # Get the symbols of all nested loops
         # nested_loops_vars = self.nested_loops_variables(loop)
 
+        # return []
+
         all_calls = loop.walk(Call)
         all_calls = [
             call for call in all_calls if type(call) is not IntrinsicCall

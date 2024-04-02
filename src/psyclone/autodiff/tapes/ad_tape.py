@@ -52,13 +52,14 @@ from psyclone.psyir.nodes import (
     Call,
     Routine,
     Assignment,
+    Loop
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
     INTEGER_TYPE,
     ScalarType,
     ArrayType,
-    SymbolTable
+    SymbolTable,
 )
 from psyclone.autodiff import (
     one,
@@ -146,7 +147,7 @@ class ADTape(object, metaclass=ABCMeta):
         # the offset
         self._offset_mask = []
 
-        # List of multiplicities for the recorded nodes
+        # Internal list of multiplicities for the recorded nodes
         self._multiplicities = []
 
         # Offset value to be used, after exiting a (nested) loop(s) body
@@ -155,9 +156,11 @@ class ADTape(object, metaclass=ABCMeta):
         # Internal list of recorded nodes
         self._recorded_nodes = []
 
-        # Lists of recording/restorings to/from the the tape
+        # Internsal ists of recording/restorings to/from the the tape
         self._recordings = []
         self._restorings = []
+
+        self._usefully_recorded_flags = []
 
     @property
     def node_type_names(self):
@@ -242,79 +245,124 @@ class ADTape(object, metaclass=ABCMeta):
     #    tape_type = ArrayType(self.datatype, [self.length(do_loop)])
     #    self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
 
+    def _check_internal_lists_are_all_same_length(self):
+        for name, lst in (
+            ("_multiplicities", self._multiplicities),
+            ("_offset_mask", self._offset_mask),
+            ("_recordings", self._recordings),
+            ("_restorings", self._restorings),
+            ("_usefully_recorded_flags", self._usefully_recorded_flags),
+        ):
+            if len(lst) != len(self._recorded_nodes):
+                raise ValueError(
+                    f"The length of the {name} list should "
+                    f"always be equal to that of the _recorded_nodes "
+                    f"list but found respectively {len(lst)} "
+                    f"and {len(self._recorded_nodes)}"
+                )
+
+    def _only_keep_useful_items(self, internal_list):
+        if internal_list not in (
+            self._recorded_nodes,
+            self._offset_mask,
+            self._multiplicities,
+            self._recordings,
+            self._restorings,
+        ):
+            raise ValueError(
+                "'internal_list' should be one of "
+                "'_recorded_nodes', '_offset_mask', "
+                "'_multiplicities', '_recordings' or '_restorings'"
+                " but is not."
+            )
+        self._check_internal_lists_are_all_same_length()
+
+        useful_items = [
+            item
+            for i, item in enumerate(internal_list)
+            if self.usefully_recorded_flags[i] is True
+        ]
+
+        return useful_items
+
     @property
     def recorded_nodes(self):
-        """List of recorded PSyIR nodes.
+        """List of recorded PSyIR nodes. 
+        This is filtered according to the usefully_recorded_flags list. \
+        For an unfiltered version, access _recorded_nodes instead.
 
         :return: list of nodes.
         :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
         """
-        if len(self._offset_mask) != len(self._recorded_nodes):
-            raise ValueError(
-                f"The length of the offset_mask list should "
-                f"always be equal to that of the recorded_nodes "
-                f"list but found {len(self._offset_mask)} "
-                f"and {len(self._recorded_nodes)}"
-            )
-        if len(self._multiplicities) != len(self._recorded_nodes):
-            raise ValueError(
-                f"The length of the multiplicities list should "
-                f"always be equal to that of the recorded_nodes "
-                f"list but found {len(self._multiplicities)} "
-                f"and {len(self._recorded_nodes)}"
-            )
-        # if len(self._recordings) != len(self._recorded_nodes):
-        #     raise ValueError(
-        #         f"The length of the recordings list should "
-        #         f"always be equal to that of the recorded_nodes "
-        #         f"list but found {len(self._recordings)} "
-        #         f"and {len(self._recorded_nodes)}"
-        #     )
-        # if len(self._restorings) != len(self._recorded_nodes):
-        #     raise ValueError(
-        #         f"The length of the restorings list should "
-        #         f"always be equal to that of the recorded_nodes "
-        #         f"list but found {len(self._restorings)} "
-        #         f"and {len(self._recorded_nodes)}"
-        #     )
+        self._check_internal_lists_are_all_same_length()
 
-        return self._recorded_nodes
+        return self._only_keep_useful_items(self._recorded_nodes)
 
     @property
     def offset_mask(self):
         """List of booleans, indicating whether the length of the associated \
         recorded node should be taken into account in the length or not. \
         True means not masked (use the element length), False means masked.
+        This is filtered according to the usefully_recorded_flags list. \
+        For an unfiltered version, access _offset_mask instead.
 
         :return: list of booleans.
         :rtype: List[bool]
         """
-        if len(self._offset_mask) != len(self._recorded_nodes):
-            raise ValueError(
-                f"The length of the offset_mask list should "
-                f"always be equal to that of the recorded_nodes "
-                f"list but found {len(self._offset_mask)} "
-                f"and {len(self._recorded_nodes)}"
-            )
-        return self._offset_mask
+        self._check_internal_lists_are_all_same_length()
+
+        return self._only_keep_useful_items(self._offset_mask)
 
     @property
     def multiplicities(self):
         """List of datanodes, indicating the multiplicities of the recorded \
         nodes. Used for nodes that are recorded in a loop body, after the loop \
         is exited and for computing the total length of the static array.
+        This is filtered according to the usefully_recorded_flags list. \
+        For an unfiltered version, access _multiplicities instead.
 
         :return: list of multiplicities as PSyIR datanodes.
         :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]
         """
-        if len(self._multiplicities) != len(self._recorded_nodes):
-            raise ValueError(
-                f"The length of the multiplicities list should "
-                f"always be equal to that of the recorded_nodes "
-                f"list but found {len(self._multiplicities)} "
-                f"and {len(self._recorded_nodes)}"
-            )
-        return self._multiplicities
+        self._check_internal_lists_are_all_same_length()
+
+        return self._only_keep_useful_items(self._multiplicities)
+
+    @property
+    def recordings(self):
+        """List of recordings to the tape, found in the recording routine.
+        This is filtered according to the usefully_recorded_flags list. \
+        For an unfiltered version, access _recordings instead.
+
+        :return: list of recordings as PSyIR nodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        self._check_internal_lists_are_all_same_length()
+
+        return self._only_keep_useful_items(self._recordings)
+    
+    @property
+    def usefully_recorded_flags(self):
+        """List of booleans indicating whether the node was usefully recorded \
+        or not. Used to filter the tape elements.
+        
+        :return: list of booleans indicating usefulness.
+        :rtype: List[bool]"""
+
+        return self._usefully_recorded_flags
+
+    @property
+    def restorings(self):
+        """List of restorings from the tape, found in the restoring routine.
+        This is filtered according to the usefully_recorded_flags list. \
+        For an unfiltered version, access _restorings instead.
+
+        :return: list of restorings as PSyIR nodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Node`]
+        """
+        self._check_internal_lists_are_all_same_length()
+
+        return self._only_keep_useful_items(self._restorings)
 
     @property
     def offset_symbol(self):
@@ -566,9 +614,9 @@ class ADTape(object, metaclass=ABCMeta):
         for node in nodes:
             # Special case for split reversal schedule tape extension,
             # the nodes taped inside the called routine are replaced with a
-            # Call node in the tape, with associated multiplicity equal to
+            # None item in the tape, with associated multiplicity equal to
             # the called subroutine tape length.
-            if isinstance(node, Call):
+            if node is None:
                 lengths.append(one())
             elif isinstance(node.datatype, ScalarType):
                 lengths.append(one())
@@ -873,14 +921,14 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(node).__name__}'."
             )
 
-        if isinstance(self.recorded_nodes[-1], IntrinsicCall):
-            if self.recorded_nodes[-1].children[0] != node:
+        if isinstance(self._recorded_nodes[-1], IntrinsicCall):
+            if self._recorded_nodes[-1].children[0] != node:
                 raise ValueError(
                     f"node argument named {node.name} was not "
                     f"stored as last element of the value_tape."
                 )
         else:
-            if self.recorded_nodes[-1] != node:
+            if self._recorded_nodes[-1] != node:
                 raise ValueError(
                     f"node argument named {node.name} was not "
                     f"stored as last element of the value_tape."
@@ -921,6 +969,9 @@ class ADTape(object, metaclass=ABCMeta):
         self._recorded_nodes.append(node)
         self._offset_mask.append(True)
         self._multiplicities.append(one())
+        self._usefully_recorded_flags.append(True)
+        self._recordings.append(None)
+        self._restorings.append(None)
 
         # If static array, reshape to take the new length into account
         if not self.is_dynamic_array:
@@ -940,7 +991,7 @@ class ADTape(object, metaclass=ABCMeta):
             )
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
-        self._recordings.append(tape_ref)
+        self._recordings[-1] = tape_ref
 
         return tape_ref
 
@@ -988,7 +1039,7 @@ class ADTape(object, metaclass=ABCMeta):
             )
             tape_ref = ArrayReference.create(self.symbol, [tape_range])
 
-        self._restorings.append(tape_ref)
+        self._restorings[-1] = tape_ref
 
         return tape_ref
 
@@ -1215,15 +1266,15 @@ class ADTape(object, metaclass=ABCMeta):
         # routine so that the tape may be declared as a static array
         length = self._substitute_non_argument_references_in_length(tape, call)
 
-        # Add the call node, unmasked, with the length of the new nodes/tape
+        # Add None, unmasked, with the length of the new nodes/tape
         # as associated multiplicity
-        self._recorded_nodes.append(call)
+        self._recorded_nodes.append(None)
         self._offset_mask.append(True)
         self._multiplicities.append(length)
 
         # TODO: property?
-        self._recordings.extend(tape._recordings)
-        self._restorings.extend(tape._restorings)
+        self._recordings.append(None)
+        self._restorings.append(None)
 
         # If static array, reshape to take the new length into account
         if not self.is_dynamic_array:
@@ -1375,3 +1426,149 @@ class ADTape(object, metaclass=ABCMeta):
         return sympyreader.psyir_from_expression(
             simplify(sympy_expr), symbol_table
         )
+
+    def get_all_recorded_symbols_names(self):
+        """Returns a list of unique symbols names that were recorded to the \
+        tape.
+
+        :return: list of unique symbols names in the tape.
+        :rtype: List[str]
+        """
+        recorded_symbols = []
+        for recorded_node in self._recorded_nodes:
+            # Special case: None for tape extension in split mode
+            if recorded_node is None:
+                continue
+            if recorded_node.symbol.name not in recorded_symbols:
+                recorded_symbols.append(recorded_node.symbol.name)
+        return recorded_symbols
+
+    def get_recorded_symbols_to_restorings_map(self):
+        """Returns a dictionnary with recorded symbol names as keys and lists \
+        of restorings as values.
+
+        :return: {symbol_name : [restoring, restoring, ...]}
+        :rtype: Dict[str,
+                     List[:py:class:`psyclone.psyir.nodes.Node`]]
+        """
+        self._check_internal_lists_are_all_same_length()
+
+        symbols_map = dict()
+        # recorded_symbols_names = [node.symbol.name for node in self._recorded_nodes]
+        for recorded_node, restoring in zip(
+            self._recorded_nodes, self._restorings
+        ):
+            if recorded_node is None:
+                continue
+            if recorded_node.symbol.name in symbols_map:
+                symbols_map[recorded_node.symbol.name].append(restoring)
+            else:
+                symbols_map[recorded_node.symbol.name] = [restoring]
+        return symbols_map
+
+    def get_all_recorded_symbols_reads_in_routine(self, routine):
+        """Returns a dictionnary with recorded symbol names as keys and lists \
+        of read References to these symbols in the routine argument as values.
+        Looks in the rhs of assignments, the indices of array references on \
+        the lhs of assignments and the call arguments.
+
+        :param routine: routine to look in.
+        :type routine: :py:class:`psyclone.psyir.nodes.Routine`
+
+        :raises TypeError: if routine is of the wrong type.
+
+        :return: {symbol_name : [read, read, ...]}
+        :rtype: Dict[str,
+                     List[:py:class:`psyclone.psyir.nodes.Reference`]]
+        """
+        if not isinstance(routine, Routine):
+            raise TypeError(
+                f"'routine' argument should be of type "
+                f"'Routine' but found "
+                f"'{type(routine).__name__}'."
+            )
+        recorded_symbols_names = self.get_all_recorded_symbols_names()
+        recorded_symbols_reads = dict()
+
+        # Look in the rhs of assignments, the arguments of calls, the indices
+        # on the lhs of assignments, the bounds of loops
+        all_assignments = routine.walk(Assignment)
+        all_assignments_rhs = [assignment.rhs for assignment in all_assignments]
+        all_assignments_lhs_indices = []
+        for assignment in all_assignments:
+            if isinstance(assignment.lhs, ArrayReference):
+                all_assignments_lhs_indices.extend(assignment.lhs.indices)
+        all_call_arguments = []
+        for call in routine.walk(Call):
+            all_call_arguments.extend(call.children)
+        all_loop_bounds = []
+        for loop in routine.walk(Loop):
+            all_loop_bounds.extend(loop.children)
+
+        # For all recorded symbols, get references to them and add to the dict
+        for recorded_symbol_name in recorded_symbols_names:
+            all_reads = []
+            for expr in (
+                all_assignments_rhs
+                + all_assignments_lhs_indices
+                + all_call_arguments
+                + all_loop_bounds
+            ):
+                refs_to_this_symbol = [
+                    ref
+                    for ref in expr.walk(Reference)
+                    if ref.symbol.name == recorded_symbol_name
+                ]
+                all_reads.extend(refs_to_this_symbol)
+            recorded_symbols_reads[recorded_symbol_name] = all_reads
+
+        return recorded_symbols_reads
+
+    def update_usefully_recorded_flags(self, useful_restorings):
+        """Update the usefully_recorded_flags list based on a list of useful 
+        restorings.
+
+        :param useful_restorings: list of useful restorings, corresponding to \
+                                  nodes that should be kept unmasked.
+        :type useful_restorings: List[:py:class:`psyclone.psyir.nodes.Node`]
+
+        :raises TypeError: if useful_restorings is of the wrong type.
+        :raises TypeError: if an element of useful_restorings is of the wrong \
+                           type.
+        :raises ValueError: if an element of useful_restorings is not found in \
+                            the internal _restorings list.
+        """
+        if not isinstance(useful_restorings, list):
+            raise TypeError(
+                f"'useful_restorings' argument should be of type "
+                f"'list' but found "
+                f"'{type(useful_restorings).__name__}'."
+            )
+        for restoring in useful_restorings:
+            if not isinstance(restoring, Node):
+                raise TypeError(
+                    f"'useful_restorings' argument should be a list of items "
+                    f"of type 'Node' but found "
+                    f"'{type(restoring).__name__}'."
+                )
+            if restoring not in self._restorings:
+                raise ValueError(
+                    f"The items of 'useful_restorings' should be "
+                    f"restorings but found "
+                    f"{restoring.debug_string()} which is not in "
+                    f"_restorings."
+                )
+
+        self._check_internal_lists_are_all_same_length()
+
+        for i, restoring in enumerate(self._restorings):
+            if restoring in useful_restorings:
+                self._usefully_recorded_flags[i] = True
+            else:
+                self._usefully_recorded_flags[i] = False
+
+    def get_useless_recordings(self):
+        return [recording for i, recording in enumerate(self._recordings) if self.usefully_recorded_flags[i] is False]
+    
+    def get_useless_restorings(self):
+        return [restoring for i, restoring in enumerate(self._restorings) if self.usefully_recorded_flags[i] is False]

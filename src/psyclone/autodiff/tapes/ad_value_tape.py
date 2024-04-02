@@ -37,8 +37,16 @@
 "taping" (storing and recovering) of function values.
 """
 
-from psyclone.psyir.nodes import (Assignment, Reference, IntrinsicCall, Call, Literal,
-                                  ArrayReference, Operation, Routine)
+from psyclone.psyir.nodes import (
+    Assignment,
+    Reference,
+    IntrinsicCall,
+    Call,
+    Literal,
+    ArrayReference,
+    Operation,
+    Routine,
+)
 from psyclone.psyir.symbols import ScalarType, ArrayType, INTEGER_TYPE
 from psyclone.psyir.backend.fortran import FortranWriter
 
@@ -71,7 +79,7 @@ class ADValueTape(ADTape):
     _node_types = (Reference, Operation, Call)
     _tape_prefix = "value_tape_"
 
-    def __init__(self, name, datatype, is_dynamic_array = False):
+    def __init__(self, name, datatype, is_dynamic_array=False):
         if not isinstance(datatype, (ScalarType)):
             raise TypeError(
                 f"'datatype' argument should be of type "
@@ -81,7 +89,7 @@ class ADValueTape(ADTape):
 
         super().__init__(name, datatype, is_dynamic_array)
 
-    def record(self, reference, do_loop = False):
+    def record(self, reference, do_loop=False):
         """Add the reference as last element of the value_tape and return the \
         Assignment node to record the prevalue to the tape.
 
@@ -104,27 +112,16 @@ class ADValueTape(ADTape):
         # pylint: disable=arguments-renamed
 
         if not isinstance(reference, Reference):
-            raise TypeError(f"'reference' argument should be of type "
-                           f"'Reference' but found "
-                           f"'{type(reference).__name__}'.")
+            raise TypeError(
+                f"'reference' argument should be of type "
+                f"'Reference' but found "
+                f"'{type(reference).__name__}'."
+            )
 
         if isinstance(reference.datatype, ScalarType):
             scalar_type = reference.datatype
         else:
             scalar_type = reference.datatype.datatype
-
-        if scalar_type.intrinsic != self.datatype.intrinsic:
-            # FIXME: this is a dirty hack to tape some integers...
-            if (scalar_type.intrinsic is ScalarType.Intrinsic.INTEGER and
-                self.datatype.intrinsic is ScalarType.Intrinsic.REAL):
-                reference = IntrinsicCall.create(IntrinsicCall.Intrinsic.REAL,
-                                                 [reference.copy()])
-            else:
-                raise TypeError(
-                    f"The intrinsic datatype of the 'reference' argument "
-                    f"should be {self.datatype.intrinsic} but found "
-                    f"{scalar_type.intrinsic}."
-                )
 
         if not isinstance(do_loop, bool):
             raise TypeError(
@@ -132,48 +129,61 @@ class ADValueTape(ADTape):
                 f"'bool' but found '{type(do_loop).__name__}'."
             )
 
+        # Record the primal reference
         value_tape_ref = super().record(reference, do_loop)
 
-        # if (isinstance(reference, ArrayReference)
-        #     or isinstance(reference.datatype, ScalarType)):
-        #if isinstance(reference.datatype, ScalarType):
+        if scalar_type.intrinsic != self.datatype.intrinsic:
+            # FIXME: this is a dirty hack to tape some integers...
+            if (
+                scalar_type.intrinsic is ScalarType.Intrinsic.INTEGER
+                and self.datatype.intrinsic is ScalarType.Intrinsic.REAL
+            ):
+                reference = IntrinsicCall.create(
+                    IntrinsicCall.Intrinsic.REAL, [reference.copy()]
+                )
+            else:
+                raise TypeError(
+                    f"The intrinsic datatype of the 'reference' argument "
+                    f"should be {self.datatype.intrinsic} but found "
+                    f"{scalar_type.intrinsic}."
+                )
+
         # This is a Reference to a scalar
         if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(value_tape_ref, reference.copy())
 
         # This is an ArrayReference
         else:
+            # to a vector
             if len(reference.datatype.shape) == 1:
                 index = [i.copy() for i in reference.indices]
-                assignment = Assignment.create(value_tape_ref,
-                                            ArrayReference.create(
-                                                reference.symbol,
-                                                index))
+                assignment = Assignment.create(
+                    value_tape_ref,
+                    ArrayReference.create(reference.symbol, index),
+                )
 
+            # to a >1D array, RESHAPE
             else:
-                # Create an IntrinsicCall to RESHAPE to reshape the reference array
-                # to 1D vector
+                # Create an IntrinsicCall to RESHAPE to reshape the reference 
+                # array to a 1D vector
                 fortran_writer = FortranWriter()
                 size = self._array_size(reference)
                 size_str = fortran_writer(size)
-                shape_array = Literal(f"(/ {size_str} /)",
-                                    ArrayType(INTEGER_TYPE, [1]))
-                reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                                [reference.copy(), shape_array])
+                shape_array = Literal(
+                    f"(/ {size_str} /)", ArrayType(INTEGER_TYPE, [1])
+                )
+                reshaped = IntrinsicCall.create(
+                    IntrinsicCall.Intrinsic.RESHAPE,
+                    [reference.copy(), shape_array],
+                )
                 assignment = Assignment.create(value_tape_ref, reshaped)
 
-        # if self.simplify_using_sympy:
-        #     routine = reference.ancestor(Routine)
-        #     if routine is not None:
-        #         assignment = self.simplify_expression_with_sympy(
-        #             assignment, routine.symbol_table
-        #         )
-
+        # Replace the recording by the actual recording assignment
         self._recordings[-1] = assignment
 
         return assignment
 
-    def restore(self, reference, do_loop = False):
+    def restore(self, reference, do_loop=False):
         """Restore the last element of the value_tape if it is the symbol \
         argument and return the Assignment node to restore the prevalue to the \
         variable.
@@ -210,48 +220,47 @@ class ADValueTape(ADTape):
         value_tape_ref = super().restore(reference, do_loop)
 
         # FIXME: this is a dirty hack to tape some integers...
-        if (isinstance(reference.datatype, ScalarType) and 
-            reference.datatype.intrinsic is ScalarType.Intrinsic.INTEGER and
-            self.datatype.intrinsic is ScalarType.Intrinsic.REAL):
-            value_tape_ref = IntrinsicCall.create(IntrinsicCall.Intrinsic.INT,
-                                                  [value_tape_ref])
+        if (
+            isinstance(reference.datatype, ScalarType)
+            and reference.datatype.intrinsic is ScalarType.Intrinsic.INTEGER
+            and self.datatype.intrinsic is ScalarType.Intrinsic.REAL
+        ):
+            value_tape_ref = IntrinsicCall.create(
+                IntrinsicCall.Intrinsic.INT, [value_tape_ref]
+            )
 
-        # if (isinstance(reference, ArrayReference)
-        #     or isinstance(reference.datatype, ScalarType)):
         # This is a Reference to a scalar
         if isinstance(reference.datatype, ScalarType):
-        #if isinstance(reference.datatype, ScalarType):
+            # if isinstance(reference.datatype, ScalarType):
             assignment = Assignment.create(reference.copy(), value_tape_ref)
 
         # This is an ArrayReference
         else:
+            # to a vector
             if len(reference.datatype.shape) == 1:
                 index = [i.copy() for i in reference.indices]
-                assignment = Assignment.create(ArrayReference.create(
-                                                    reference.symbol,
-                                                    index),
-                                            value_tape_ref)
+                assignment = Assignment.create(
+                    ArrayReference.create(reference.symbol, index),
+                    value_tape_ref,
+                )
 
+            # to a >1D array
             else:
-                # Create an IntrinsicCall to RESHAPE to reshape the value_tape_ref
-                # slice to the dimensions of the reference array
+                # Create an IntrinsicCall to RESHAPE to reshape the 
+                # value_tape_ref slice to the dimensions of the reference array
                 fortran_writer = FortranWriter()
                 dimensions = self._array_dimensions(reference)
                 str_dimensions = [fortran_writer(dim) for dim in dimensions]
                 shape_str = "(/ " + ", ".join(str_dimensions) + " /)"
                 shape_datatype = ArrayType(INTEGER_TYPE, [len(dimensions)])
                 shape_array = Literal(shape_str, shape_datatype)
-                reshaped = IntrinsicCall.create(IntrinsicCall.Intrinsic.RESHAPE,
-                                                [value_tape_ref, shape_array])
+                reshaped = IntrinsicCall.create(
+                    IntrinsicCall.Intrinsic.RESHAPE,
+                    [value_tape_ref, shape_array],
+                )
                 assignment = Assignment.create(reference.copy(), reshaped)
 
-        # if self.simplify_using_sympy:
-        #     routine = reference.ancestor(Routine)
-        #     if routine is not None:
-        #         assignment = self.simplify_expression_with_sympy(
-        #             assignment, routine.symbol_table
-        #         )
-
+        # Replace the restoring by the actual restoring assignment
         self._restorings[-1] = assignment
 
         return assignment

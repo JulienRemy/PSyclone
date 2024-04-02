@@ -48,7 +48,7 @@ from psyclone.psyir.nodes import (
     IntrinsicCall,
     IfBlock,
     Loop,
-    Range,
+    Schedule,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -615,41 +615,19 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # the returning routine
         self.add_differentials_zero_assignments(self.returning, options)
 
-        # FIXME: tried postprocessing taping to remove useless ones but this isn't the correct way
-        # all_returning_refs = self.returning.walk(Reference)
-        # for node in self.value_tape.recorded_nodes:
-        #     recordings = []
-        #     restorings = []
-        #     tape_indices = []
-        #     for tape_index, (rec_node, record, restore) in enumerate(zip(self.value_tape.recorded_nodes,
-        #                                          self.value_tape._recordings,
-        #                                          self.value_tape._restorings)):
-        #         if node == rec_node:
-        #             recordings.append(record)
-        #             restorings.append(restore)
-        #             tape_indices.append(tape_index)
-        #     if isinstance(node, IntrinsicCall):
-        #         node = node.children[0]
-
-        #     assert isinstance(node, Reference)
-
-        #     same_refs = [ref for ref in all_returning_refs if ref == node]
-        #     # restorings_positions = [restore.abs_position for restore in restorings]
-
-        #     for tape_index, recording, restoring, next_restoring in zip(tape_indices, recordings, restorings, restorings[1:]):
-        #         # if restoring.ancestor(Loop) is not next_restoring.ancestor(Loop):
-        #         #     continue
-
-        #         same_refs_between_restorings = [ref.abs_position for ref in same_refs if (ref.abs_position > restoring.abs_position and ref.abs_position < next_restoring.abs_position) ]
-        #         if len(same_refs_between_restorings) == 0:
-        #             print(f"Found useless taping of {node.debug_string()}")
-        #             recording.detach()
-        #             restoring.detach()
-        #             self.value_tape._recorded_nodes.pop(tape_index)
-        #             self.value_tape._multiplicities.pop(tape_index)
-        #             self.value_tape._offset_mask.pop(tape_index)
-        #             self.value_tape._recordings.pop(tape_index)
-        #             self.value_tape._restorings.pop(tape_index)
+        # ########################################################################
+        # ########################################################################
+        # # TODO: make this optional!
+        # ########################################################################
+        # ########################################################################
+        # # Update the tapes usefully_recorded_flags lists
+        # for tape in (self.value_tape,):
+        #     useful_restorings = self.get_all_useful_restorings(tape)
+        #     print(f"Useful restorings are: {[rest.debug_string() for rest in useful_restorings]}")
+        #     tape.update_usefully_recorded_flags(useful_restorings)
+        #     for useless in tape.get_useless_recordings() + tape.get_useless_restorings():
+        #         print(f"Detaching {useless.debug_string()}")
+        #         useless.detach()
 
         # Add the value_tape as argument of both routines iff it's actually used
         # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
@@ -663,6 +641,27 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # a dynamic array
         if self.control_tape is not None:
             self.add_tape_argument(self.control_tape, options)
+
+        ########################################################################
+        ########################################################################
+        # FIXME: this shouldn't be here, only here to keep the initial tape
+        # length for now
+        ########################################################################
+        ########################################################################
+        # Update the tapes usefully_recorded_flags lists
+        for tape in (self.value_tape,):
+            useful_restorings = self.get_all_useful_restorings(tape)
+            print(f"Useful restorings are: {[rest.debug_string() for rest in useful_restorings]}")
+            tape.update_usefully_recorded_flags(useful_restorings)
+            for useless in tape.get_useless_recordings() + tape.get_useless_restorings():
+                print(f"Detaching {useless.debug_string()}")
+                # useless.detach()
+        ########################################################################
+        ########################################################################
+        # FIXME: this shouldn't be here, only here to keep the initial tape
+        # length for now
+        ########################################################################
+        ########################################################################
 
         # Postprocess (simplify, substitute operation adjoints) the recording
         # and returning routines
@@ -1391,7 +1390,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if use_sympy:
             for ref in self.recording.walk(ArrayReference):
                 if ref.name == tape.name:
-                    print(f"Simplifying {ref.name}")
                     ref.replace_with(
                         tape.simplify_expression_with_sympy(
                             ref, self.recording_table
@@ -1444,3 +1442,122 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         )
         self.reversing.addchild(call_rec)
         self.reversing.addchild(call_ret)
+
+    def get_all_useful_restorings(self, tape):
+        if not isinstance(tape, ADTape):
+            raise TypeError(
+                f"'tape' argument should be of type "
+                f"'ADTape' but found "
+                f"'{type(tape).__name__}'."
+            )
+        restorings_map = tape.get_recorded_symbols_to_restorings_map()
+        reads_in_returning_map = tape.get_all_recorded_symbols_reads_in_routine(
+            self.returning
+        )
+
+        print("Symbols are:", [sym_name for sym_name in restorings_map.keys()])
+
+        assert set(restorings_map.keys()) == set(reads_in_returning_map.keys())
+
+        useful_restorings = []
+        for recorded_symbol_name in restorings_map.keys():
+            restorings = restorings_map[recorded_symbol_name]
+            reads = reads_in_returning_map[recorded_symbol_name]
+
+            print(f"Sym: {recorded_symbol_name}")
+            print(f"restorings: {[restoring.debug_string() for restoring in restorings]}")
+            print(f"reads: {[read.debug_string() for read in reads]}")
+
+            very_last_node = self.returning
+            while len(very_last_node.children) != 0:
+                very_last_node = very_last_node.children[-1]
+
+            for restoring, next_restoring in zip(
+                restorings, restorings[1:] + [very_last_node]
+            ):
+                print(f"restoring : {restoring.debug_string()}")
+                print(f"next_restoring : {next_restoring.debug_string()}")
+                was_usefully_taped = False
+                # reads_between_restorings = []
+
+                # Easy case, restoring is not in a loop, look at reads between
+                # it and the next_restoring (which may be in a loop itself)
+                if restoring.ancestor(Loop) is None:
+                    for read in reads:
+                        if (
+                            read.abs_position > restoring.abs_position
+                            and read.abs_position < next_restoring.abs_position
+                        ):
+                            was_usefully_taped = True
+                            print("Useful, case 1")
+                            break
+                            # reads_between_restorings.append(read)
+                # Trickier, restoring is in a loop
+                else:
+                    # If restoring and next_restoring are in the same loop,
+                    # we only need to look at reads between them
+                    if restoring.ancestor(Loop) is next_restoring.ancestor(
+                        Loop
+                    ):
+                        for read in reads:
+                            if (
+                                read.abs_position > restoring.abs_position
+                                and read.abs_position
+                                < next_restoring.abs_position
+                            ):
+                                was_usefully_taped = True
+                                print("Useful, case 2")
+                                break
+                                # reads_between_restorings.append(read)
+                    # If next_restoring is not in the same (nested) loop(s),
+                    # then we need to look at all reads in the whole loops and
+                    # outside of them, before next_restoring
+                    # ie. we look between the position of the enclosing loop
+                    # of restoring and that of next_restoring
+                    else:
+                        # Get the uppermost ancestor that is not among
+                        # next_restoring's Schedule ancestor (in case restoring
+                        # is done without assignment)
+                        next_restoring_schedule_ancestors = [next_restoring.ancestor(Schedule)]
+                        cursor = next_restoring.ancestor(Schedule)
+                        while cursor.ancestor(Schedule) is not None:
+                            next_restoring_schedule_ancestors.append(cursor.ancestor(Schedule))
+                            cursor = cursor.ancestor(Schedule)
+                        restoring_ancestor = restoring
+                        while (
+                            restoring_ancestor.parent
+                            not in next_restoring_schedule_ancestors
+                        ):
+                            if (restoring_ancestor.parent is None):
+                                print(f"Was dealing with {recorded_symbol_name} and got restoring_ancestor {restoring_ancestor.debug_string()}")
+                            restoring_ancestor = restoring_ancestor.parent
+
+                        for read in reads:
+                            if (
+                                read.abs_position
+                                > restoring_ancestor.abs_position
+                                and read.abs_position
+                                < next_restoring.abs_position
+                            ):
+                                was_usefully_taped = True
+                                print("Useful, case 3")
+                                break
+                                # reads_between_restorings.append(read)
+
+                if was_usefully_taped:
+                    useful_restorings.append(restoring)
+
+                    print(f"{recorded_symbol_name} was usefully restored as {restoring.debug_string()}")
+
+                else:
+                    print(f"!!{restoring.debug_string()} is useless")
+
+        return useful_restorings
+
+        usefully_recorded_nodes = []
+        for useful_restoring in useful_restorings:
+            recorded_node = tape.recorded_nodes[tape._restorings.index(useful_restoring)]
+            usefully_recorded_nodes.append(recorded_node)
+
+
+        return usefully_recorded_nodes
