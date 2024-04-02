@@ -651,14 +651,15 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Update the tapes usefully_recorded_flags lists
         for tape in (self.value_tape,):
             useful_restorings = self.get_all_useful_restorings(tape)
-            print(
-                f"Useful restorings are: {[rest.debug_string() for rest in useful_restorings]}"
-            )
+            # print(
+            #     f"Useful restorings are: {[rest.debug_string()
+            #                                for rest in useful_restorings]}"
+            # )
             tape.update_usefully_recorded_flags(useful_restorings)
             for useless in (
                 tape.get_useless_recordings() + tape.get_useless_restorings()
             ):
-                print(f"Detaching {useless.debug_string()}")
+                # print(f"Detaching {useless.debug_string()}")
                 useless.detach()
         ########################################################################
         ########################################################################
@@ -1471,7 +1472,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.returning
         )
 
-        # print("Symbols are:", [sym_name for sym_name 
+        # print("Symbols are:", [sym_name for sym_name
         #                        in restorings_map.keys()])
 
         assert set(restorings_map.keys()) == set(reads_in_returning_map.keys())
@@ -1483,7 +1484,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
             # print(f"Sym: {recorded_symbol_name}")
             # print(
-            #     f"restorings: {[restoring.debug_string() 
+            #     f"restorings: {[restoring.debug_string()
             #                     for restoring in restorings]}"
             # )
             # print(f"reads: {[read.parent.debug_string() for read in reads]}")
@@ -1568,7 +1569,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                                 < next_restoring.abs_position
                             ):
                                 was_usefully_taped = True
-                                print("Useful, case 3")
+                                # print("Useful, case 3")
                                 break
                                 # reads_between_restorings.append(read)
 
