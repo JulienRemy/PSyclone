@@ -626,7 +626,7 @@ class ADTape(object, metaclass=ABCMeta):
             # the nodes taped inside the called routine are replaced with a
             # None item in the tape, with associated multiplicity equal to
             # the called subroutine tape length.
-            if node is None:
+            if isinstance(node, Call):
                 lengths.append(one())
             elif isinstance(node.datatype, ScalarType):
                 lengths.append(one())
@@ -1276,11 +1276,12 @@ class ADTape(object, metaclass=ABCMeta):
         # routine so that the tape may be declared as a static array
         length = self._substitute_non_argument_references_in_length(tape, call)
 
-        # Add None, unmasked, with the length of the new nodes/tape
+        # Add the call, unmasked, with the length of the new nodes/tape
         # as associated multiplicity
-        self._recorded_nodes.append(None)
+        self._recorded_nodes.append(call)
         self._offset_mask.append(True)
         self._multiplicities.append(length)
+        self._usefully_recorded_flags.append(True)
 
         # TODO: property?
         self._recordings.append(None)
@@ -1446,8 +1447,8 @@ class ADTape(object, metaclass=ABCMeta):
         """
         recorded_symbols = []
         for recorded_node in self._recorded_nodes:
-            # Special case: None for tape extension in split mode
-            if recorded_node is None:
+            # Special case for split schedule tape extension (see .extend)
+            if isinstance(recorded_node, Call):
                 continue
             if recorded_node.symbol.name not in recorded_symbols:
                 recorded_symbols.append(recorded_node.symbol.name)
@@ -1468,13 +1469,17 @@ class ADTape(object, metaclass=ABCMeta):
         for recorded_node, restoring in zip(
             self._recorded_nodes, self._restorings
         ):
-            if recorded_node is None:
+            # Special case for split schedule tape extension (see .extend)
+            if isinstance(recorded_node, Call):
                 continue
             if recorded_node.symbol.name in symbols_map:
                 symbols_map[recorded_node.symbol.name].append(restoring)
             else:
                 symbols_map[recorded_node.symbol.name] = [restoring]
 
+        # Sort the restoring by depth-first position in the returning AST
+        # so that they can be considered sequentially (as in the returning
+        # routine)
         for restorings in symbols_map.values():
             restorings.sort(key=(lambda x: x.abs_position))
         return symbols_map
@@ -1574,8 +1579,10 @@ class ADTape(object, metaclass=ABCMeta):
 
         self._check_internal_lists_are_all_same_length()
 
-        for i, restoring in enumerate(self._restorings):
-            if restoring in useful_restorings:
+        for i, (node, restoring) in enumerate(zip(self._recorded_nodes,
+                                                  self._restorings)):
+            # Special case for tape extension in split reversal
+            if restoring in useful_restorings or isinstance(node, Call):
                 self._usefully_recorded_flags[i] = True
             else:
                 self._usefully_recorded_flags[i] = False
