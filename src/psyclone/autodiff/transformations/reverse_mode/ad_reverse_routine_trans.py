@@ -657,11 +657,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 useful_restorings = self.get_all_useful_restorings(tape)
                 # print(
                 #     f"Useful restorings are: {[rest.debug_string()
-                #                                for rest in useful_restorings]}"
+                #                              for rest in useful_restorings]}"
                 # )
                 tape.update_usefully_recorded_flags(useful_restorings)
                 for useless in (
-                    tape.get_useless_recordings() + tape.get_useless_restorings()
+                    tape.get_useless_recordings()
+                    + tape.get_useless_restorings()
                 ):
                     # print(f"Detaching {useless.debug_string()}")
                     useless.detach()
