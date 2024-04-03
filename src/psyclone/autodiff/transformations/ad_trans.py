@@ -56,6 +56,7 @@ class ADTrans(Transformation, metaclass=ABCMeta):
         "inline_operation_adjoints": True,
         "use_sympy": True,
         "tape_outside_loops": True,
+        "post_process_tbr": False,
     }
 
     @property

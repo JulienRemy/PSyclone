@@ -648,19 +648,23 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # length for now
         ########################################################################
         ########################################################################
-        # Update the tapes usefully_recorded_flags lists
-        for tape in (self.value_tape,):
-            useful_restorings = self.get_all_useful_restorings(tape)
-            # print(
-            #     f"Useful restorings are: {[rest.debug_string()
-            #                                for rest in useful_restorings]}"
-            # )
-            tape.update_usefully_recorded_flags(useful_restorings)
-            for useless in (
-                tape.get_useless_recordings() + tape.get_useless_restorings()
-            ):
-                # print(f"Detaching {useless.debug_string()}")
-                useless.detach()
+        post_process_tbr = self.unpack_option("post_process_tbr", options)
+
+        if post_process_tbr:
+            # Some arrays can be taped outside under some
+            # Update the tapes usefully_recorded_flags lists
+            for tape in (self.value_tape,):
+                useful_restorings = self.get_all_useful_restorings(tape)
+                # print(
+                #     f"Useful restorings are: {[rest.debug_string()
+                #                                for rest in useful_restorings]}"
+                # )
+                tape.update_usefully_recorded_flags(useful_restorings)
+                for useless in (
+                    tape.get_useless_recordings() + tape.get_useless_restorings()
+                ):
+                    # print(f"Detaching {useless.debug_string()}")
+                    useless.detach()
         ########################################################################
         ########################################################################
         # FIXME: this shouldn't be here, only here to keep the initial tape
