@@ -1395,6 +1395,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if use_sympy:
             for ref in self.recording.walk(ArrayReference):
                 if ref.name == tape.name:
+                    # print(f"Simplifying {ref.name}")
                     ref.replace_with(
                         tape.simplify_expression_with_sympy(
                             ref, self.recording_table

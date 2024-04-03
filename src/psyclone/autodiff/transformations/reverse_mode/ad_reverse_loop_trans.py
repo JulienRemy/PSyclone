@@ -187,8 +187,12 @@ class ADReverseLoopTrans(ADLoopTrans):
         #################
         # Taping some arrays outside of the nested loop (under some conditions)
         #################
-        # Some arrays can be taped outside under some
-        arrays_to_tape_outside = self._list_arrays_to_tape_outside(loop)
+        tape_outside_loops = self.unpack_option("tape_outside_loops", options)
+
+        if tape_outside_loops:
+            arrays_to_tape_outside = self._list_arrays_to_tape_outside(loop)
+        else:
+            arrays_to_tape_outside = []
 
         # Get all nested loops variables and bounds
         loops_vars_and_bounds = self.nested_loops_variables_and_bounds(loop)
@@ -687,115 +691,6 @@ class ADReverseLoopTrans(ADLoopTrans):
                 if len(nested_loop.loop_body.children) != 1:
                     return False
         return True
-
-    # def _all_lhs_of_assignments_are_array_references(self, loop):
-    #     """Check if the LHS of assignment nodes are all ArrayReferences.
-
-    #     :param loop: loop to be checked.
-    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
-    #     :return: whether all LHS of assignment nodes verify this property.
-    #     :rtype: bool
-    #     """
-    #     # Get all the LHS of assignements and check them
-    #     for assignment in loop.walk(Assignment):
-    #         if not isinstance(assignment.lhs, ArrayReference):
-    #             return False
-    #     return True
-
-    # def _all_arrays_are_indexed_on_lhs_without_offsets(self, loop):
-    #     """Check if the arrays are indexed using the exact loop(s) variable(s) \
-    #     on the LHS of assignements ie. without offsets, eg. `array(i,j) = ...` \
-    #     is fine but `array(i+1, j) = ...` is not).
-
-    #     :param loop: loop to be checked.
-    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
-    #     :return: whether all arrays verify this property.
-    #     :rtype: bool
-    #     """
-    #     # Get the symbols of all nested loops
-    #     nested_loops_vars = self.nested_loops_variables(loop)
-    #     # Get all the LHS of assignements
-    #     for assignment in loop.walk(Assignment):
-    #         # If an ArrayReference, make sure that indexing uses exactly the
-    #         # same set of symbols as the nested loops
-    #         if isinstance(assignment.lhs, ArrayReference):
-    #             indices_symbols = [
-    #                 index.symbol for index in assignment.lhs.children
-    #             ]
-    #             if set(nested_loops_vars) != set(indices_symbols):
-    #                 return False
-    #                 # raise NotImplementedError(
-    #                 #     "For now, only nested loops "
-    #                 #     "which write to an array at "
-    #                 #     "indices which are exactly "
-    #                 #     "the loop variables are "
-    #                 #     "supported."
-    #                 # )
-    #     return True
-
-    # def _all_arrays_can_be_taped_outside_the_loops(self, loop):
-    #     """Check if the arrays are all written to or incremented *once* and \
-    #     *before* being read from. If so, only their post-values are used in \
-    #     adjoint computations, which means that their pre-values can be \
-    #     restored from the tape after exiting the loop(s) body.
-
-    #     :param loop: loop to be checked.
-    #     :type loop: :py:class:`psyclone.psyir.nodes.Loop`
-    #     :return: whether all arrays verify this property.
-    #     :rtype: bool
-    #     """
-    #     all_assignments = loop.walk(Assignment)
-    #     # Get all the LHS of assignments
-    #     lhs_of_assignments = []
-    #     for assignment in all_assignments:
-    #         lhs_of_assignments.append(assignment.lhs)
-
-    #     # Check for all LHS, for all assignments up to this one
-    #     for i, lhs in enumerate(lhs_of_assignments):
-    #         # only for LHS which are array elements
-    #         if isinstance(lhs_of_assignments, ArrayReference):
-    #             assignments_up_to_this_one = all_assignments[: i + 1]
-    #             rhs_of_assignments = [
-    #                 assignment.rhs for assignment in assignments_up_to_this_one
-    #             ]
-    #             # For these RHS, only increments are allowed. Check that the path
-    #             # from the lhs to the rhs is only made of BinaryOperation nodes
-    #             # with '+' operator.
-    #             # NOTE: b(i) = b(i) + a(i)**2 + w
-    #             # parses as b(i) = (b(i) + a(i)**2) + w, hence the path
-    #             for rhs in rhs_of_assignments:
-    #                 rhs_array_refs = rhs.walk(ArrayReference)
-    #                 if lhs in rhs_array_refs:
-    #                     for ref in rhs_array_refs:
-    #                         if ref == lhs:
-    #                             indices = ref.path_from(lhs.parent)
-    #                             cursor = lhs.parent
-    #                             for index in indices[:-1]:
-    #                                 cursor = cursor.children[index]
-    #                                 # print(cursor.view())
-    #                                 if not isinstance(cursor, BinaryOperation):
-    #                                     return False
-    #                                 if (
-    #                                     cursor.operator
-    #                                     is not BinaryOperation.Operator.ADD
-    #                                 ):
-    #                                     return False
-    #                     # return False
-    #                     # raise NotImplementedError("For now only loops were "
-    #                     #                         "references "
-    #                     #                         "that are written to are written "
-    #                     #                         "BEFORE they are read are "
-    #                     #                         "supported "
-    #                     #                         "due to tape restores being made "
-    #                     #                         "after the loop.")
-
-    #             # Also ensure that this is on LHS only once
-    #             if lhs_of_assignments.count(lhs) != 1:
-    #                 return False
-    #                 # raise NotImplementedError("For now only one write to every "
-    #                 #                           "reference per loop body is "
-    #                 #                           "supported.")
-    #     return True
 
     def _list_arrays_to_tape_outside(self, loop):
         """List all arrays that use the nested loop variables as \
