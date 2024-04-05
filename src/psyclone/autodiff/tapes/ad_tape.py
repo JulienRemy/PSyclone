@@ -60,6 +60,7 @@ from psyclone.psyir.symbols import (
     ScalarType,
     ArrayType,
     SymbolTable,
+    RoutineSymbol
 )
 from psyclone.autodiff import (
     one,
@@ -189,6 +190,23 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(datatype).__name__}'."
             )
         self._datatype = datatype
+
+    @property
+    def datatype_fortran_string(self):
+        """Fortran string statement corresponding to the datatype of the tape \
+        elements (eg. 'real', 'logical', etc).
+
+        :return: string for the datatype of the tape elements.
+        :rtype: String
+        """
+        if self.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+            return "real"
+        if self.datatype.intrinsic is ScalarType.Intrinsic.INTEGER:
+            return "integer"
+        if self.datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
+            return "logical"
+        
+        return "character"
 
     @property
     def is_dynamic_array(self):
@@ -1579,8 +1597,9 @@ class ADTape(object, metaclass=ABCMeta):
 
         self._check_internal_lists_are_all_same_length()
 
-        for i, (node, restoring) in enumerate(zip(self._recorded_nodes,
-                                                  self._restorings)):
+        for i, (node, restoring) in enumerate(
+            zip(self._recorded_nodes, self._restorings)
+        ):
             # Special case for tape extension in split reversal
             if restoring in useful_restorings or isinstance(node, Call):
                 self._usefully_recorded_flags[i] = True
@@ -1612,3 +1631,158 @@ class ADTape(object, metaclass=ABCMeta):
             for i, restoring in enumerate(self._restorings)
             if self.usefully_recorded_flags[i] is False
         ]
+
+    @property
+    def subroutines_source(self):
+        datatype = self.datatype_fortran_string
+
+        return f"""subroutine record_{datatype}_scalar(tape, index, scalar)
+    implicit none
+    {datatype}, dimension(:), intent(inout) :: tape
+    {datatype}, intent(in) :: scalar
+    integer, intent(in) :: index
+
+    tape(index) = scalar
+
+end subroutine record_{datatype}_scalar
+
+subroutine restore_{datatype}_scalar(tape, index, scalar)
+    implicit none
+    {datatype}, dimension(:), intent(in) :: tape ! in?
+    {datatype}, intent(out) :: scalar
+    integer, intent(in) :: index
+
+    scalar = tape(index)
+
+end subroutine restore_{datatype}_scalar
+
+subroutine restore_{datatype}_scalar_as_pointer(tape, index, ptr)
+    implicit none
+    {datatype}, dimension(:), target, intent(in) :: tape
+    {datatype}, intent(inout), pointer :: ptr
+    integer, intent(in) :: index
+
+    ptr => tape(index)
+
+end subroutine restore_{datatype}_scalar_as_pointer
+
+subroutine record_{datatype}_vector(tape, first, vector)
+    implicit none
+    {datatype}, dimension(:), intent(inout) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:), intent(in) :: vector
+
+    tape(first:first + size(vector) - 1) = vector(:)
+
+end subroutine record_{datatype}_vector
+
+subroutine restore_{datatype}_vector(tape, first, vector)
+    implicit none
+    {datatype}, dimension(:), intent(in) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:), intent(out) :: vector
+
+    vector(1:size(vector)) = tape(first:first + size(vector) - 1)
+
+end subroutine restore_{datatype}_vector
+
+subroutine restore_{datatype}_vector_as_pointer(tape, first, ptr)
+    implicit none
+    {datatype}, dimension(:), target, intent(in) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:), pointer, intent(out) :: ptr
+
+    ptr(1:size(ptr)) => tape(first:first + size(ptr) - 1)
+
+end subroutine restore_{datatype}_vector_as_pointer
+
+subroutine record_{datatype}_matrix(tape, first, matrix)
+    implicit none
+    {datatype}, dimension(:), intent(inout) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:, :), intent(in) :: matrix
+
+    integer :: i, j
+
+    do j = lbound(matrix, 2), ubound(matrix, 2)
+        do i = lbound(matrix, 1), ubound(matrix, 1)
+            tape(first + (j - 1) * size(matrix, 1) + i - 1) = matrix(i, j)
+        end do
+    end do
+
+end subroutine record_{datatype}_matrix
+
+subroutine restore_{datatype}_matrix(tape, first, matrix)
+    implicit none
+    {datatype}, dimension(:), intent(in) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:, :), intent(out) :: matrix
+
+    integer :: i, j 
+
+    do j = lbound(matrix, 2), ubound(matrix, 2)
+        do i = lbound(matrix, 1), ubound(matrix, 1)
+            matrix(i, j) = tape(first + (j - 1) * size(matrix, 1) + i - 1)
+        end do
+    end do
+
+end subroutine restore_{datatype}_matrix
+
+subroutine restore_{datatype}_matrix_as_pointer(tape, first, ptr)
+    implicit none
+    {datatype}, dimension(:), target, intent(in) :: tape
+    integer, intent(in) :: first
+    {datatype}, dimension(:, :), pointer, intent(out) :: ptr
+
+    ptr(lbound(ptr, 1):ubound(ptr, 1), lbound(ptr, 2):ubound(ptr, 2)) => tape(first : first + size(ptr) - 1)
+
+end subroutine restore_{datatype}_matrix_as_pointer"""
+
+    def subroutines_nodes(self):
+        from psyclone.psyir.frontend.fortran import FortranReader
+        freader = FortranReader()
+        return freader.psyir_from_source(self.subroutines_source).children
+
+    def create_record_call(self, datanode, first_index):
+        datatype = self.datatype_fortran_string
+
+        if datanode.datatype is ScalarType:
+            dim = "scalar"
+        elif datanode.datatype is ArrayType:
+            if len(datanode.datatype.shape) == 1:
+                dim = "vector"
+            elif len(datanode.datatype.shape) == 2:
+                dim = "matrix"
+            else:
+                raise NotImplementedError("Only vectors and matrices are "
+                                          "implemented.")
+        else:
+            raise NotImplementedError("Only ScalarType and ArrayType are "
+                                      "implemented.")
+        
+        routine_name = f"record_{datatype}_{dim}"
+        routine_symbol = RoutineSymbol(routine_name)
+
+        return Call.create(routine_symbol, [Reference(self.symbol), first_index, datanode.copy()])
+    
+    def create_restore_call(self, datanode, first_index):
+        datatype = self.datatype_fortran_string
+
+        if datanode.datatype is ScalarType:
+            dim = "scalar"
+        elif datanode.datatype is ArrayType:
+            if len(datanode.datatype.shape) == 1:
+                dim = "vector"
+            elif len(datanode.datatype.shape) == 2:
+                dim = "matrix"
+            else:
+                raise NotImplementedError("Only vectors and matrices are "
+                                          "implemented.")
+        else:
+            raise NotImplementedError("Only ScalarType and ArrayType are "
+                                      "implemented.")
+        
+        routine_name = f"restore_{datatype}_{dim}"
+        routine_symbol = RoutineSymbol(routine_name)
+
+        return Call.create(routine_symbol, [Reference(self.symbol), first_index, datanode.copy()])

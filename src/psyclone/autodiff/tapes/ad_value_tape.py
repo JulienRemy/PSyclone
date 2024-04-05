@@ -164,7 +164,7 @@ class ADValueTape(ADTape):
 
             # to a >1D array, RESHAPE
             else:
-                # Create an IntrinsicCall to RESHAPE to reshape the reference 
+                # Create an IntrinsicCall to RESHAPE to reshape the reference
                 # array to a 1D vector
                 fortran_writer = FortranWriter()
                 size = self._array_size(reference)
@@ -246,7 +246,7 @@ class ADValueTape(ADTape):
 
             # to a >1D array
             else:
-                # Create an IntrinsicCall to RESHAPE to reshape the 
+                # Create an IntrinsicCall to RESHAPE to reshape the
                 # value_tape_ref slice to the dimensions of the reference array
                 fortran_writer = FortranWriter()
                 dimensions = self._array_dimensions(reference)
