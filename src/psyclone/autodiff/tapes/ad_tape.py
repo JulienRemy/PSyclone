@@ -37,7 +37,7 @@
 automatic differentiation "taping" (storing and recovering) of different values.
 """
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from types import NoneType
 
 from psyclone.psyir.nodes import (
@@ -60,7 +60,7 @@ from psyclone.psyir.symbols import (
     ScalarType,
     ArrayType,
     SymbolTable,
-    RoutineSymbol
+    RoutineSymbol,
 )
 from psyclone.autodiff import (
     one,
@@ -131,17 +131,21 @@ class ADTape(object, metaclass=ABCMeta):
             # is a static array, shape will me modified on the go as needed
             tape_type = ArrayType(datatype, [0])
 
+        tape_name = (
+            self._tape_prefix + datatype.intrinsic.name.lower() + "_" + name
+        )
+
         # Symbols of the tape
-        self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
+        self.symbol = DataSymbol(tape_name, datatype=tape_type)
 
         # Symbol of the do loop offset (iteration dependent)
         self.do_offset_symbol = DataSymbol(
-            self._tape_prefix + name + "_do_offset", datatype=INTEGER_TYPE
+            tape_name + "_do_offset", datatype=INTEGER_TYPE
         )
 
         # Symbol of the tape offset
         self.offset_symbol = DataSymbol(
-            self._tape_prefix + name + "_offset", datatype=INTEGER_TYPE
+            tape_name + "_offset", datatype=INTEGER_TYPE
         )
 
         # Mask not to count element lengths if already taken into account in
@@ -157,11 +161,19 @@ class ADTape(object, metaclass=ABCMeta):
         # Internal list of recorded nodes
         self._recorded_nodes = []
 
-        # Internsal ists of recording/restorings to/from the the tape
+        # Internal lists of recording/restorings to/from the the tape
         self._recordings = []
         self._restorings = []
 
+        # Boolean flags for post-processing TBR (to be recorded) analysis
         self._usefully_recorded_flags = []
+
+        # Boolean flags used to determine whether the recording and restoring
+        # subroutines for scalars, vectors and matrices should be added to the
+        # module or not
+        self.taped_at_least_one_scalar = False
+        self.taped_at_least_one_vector = False
+        self.taped_at_least_one_matrix = False
 
     @property
     def node_type_names(self):
@@ -205,7 +217,7 @@ class ADTape(object, metaclass=ABCMeta):
             return "integer"
         if self.datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
             return "logical"
-        
+
         return "character"
 
     @property
@@ -962,6 +974,7 @@ class ADTape(object, metaclass=ABCMeta):
                     f"stored as last element of the value_tape."
                 )
 
+    @abstractmethod
     def record(self, node, do_loop=False):
         """Add the node as last element of the tape and return the \
         ArrayReference node of the tape.
@@ -994,35 +1007,9 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'bool' but found '{type(do_loop).__name__}'."
             )
 
-        self._recorded_nodes.append(node)
-        self._offset_mask.append(True)
-        self._multiplicities.append(one())
-        self._usefully_recorded_flags.append(True)
-        self._recordings.append(None)
-        self._restorings.append(None)
+        pass
 
-        # If static array, reshape to take the new length into account
-        if not self.is_dynamic_array:
-            self.reshape()
-
-        # Nodes of ScalarType correspond to one index of the tape
-        if isinstance(node.datatype, ScalarType):
-            # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(
-                self.symbol, [self.length(do_loop)]
-            )
-        # Nodes of ArrayType correspond to a range
-        else:
-            # If static array, reshape to take the new length into account
-            tape_range = Range.create(
-                self.first_index_of_last_element(do_loop), self.length(do_loop)
-            )
-            tape_ref = ArrayReference.create(self.symbol, [tape_range])
-
-        self._recordings[-1] = tape_ref
-
-        return tape_ref
-
+    @abstractmethod
     def restore(self, node, do_loop=False):
         """Check that node is the last element of the tape and return an \
         ArrayReference to it in the tape.
@@ -1051,25 +1038,7 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'bool' but found '{type(do_loop).__name__}'."
             )
 
-        self._has_last(node)
-
-        # Nodes of ScalarType correspond to one index of the tape
-        if isinstance(node.datatype, ScalarType):
-            # This is the Fortran index, starting at 1
-            tape_ref = ArrayReference.create(
-                self.symbol, [self.length(do_loop)]
-            )
-
-        # Nodes of ArrayType correspond to a range
-        else:
-            tape_range = Range.create(
-                self.first_index_of_last_element(do_loop), self.length(do_loop)
-            )
-            tape_ref = ArrayReference.create(self.symbol, [tape_range])
-
-        self._restorings[-1] = tape_ref
-
-        return tape_ref
+        pass
 
     def reshape(self, do_loop=False):
         """Change the static length of the tape array in its datatype.
@@ -1632,157 +1601,3 @@ class ADTape(object, metaclass=ABCMeta):
             if self.usefully_recorded_flags[i] is False
         ]
 
-    @property
-    def subroutines_source(self):
-        datatype = self.datatype_fortran_string
-
-        return f"""subroutine record_{datatype}_scalar(tape, index, scalar)
-    implicit none
-    {datatype}, dimension(:), intent(inout) :: tape
-    {datatype}, intent(in) :: scalar
-    integer, intent(in) :: index
-
-    tape(index) = scalar
-
-end subroutine record_{datatype}_scalar
-
-subroutine restore_{datatype}_scalar(tape, index, scalar)
-    implicit none
-    {datatype}, dimension(:), intent(in) :: tape ! in?
-    {datatype}, intent(out) :: scalar
-    integer, intent(in) :: index
-
-    scalar = tape(index)
-
-end subroutine restore_{datatype}_scalar
-
-subroutine restore_{datatype}_scalar_as_pointer(tape, index, ptr)
-    implicit none
-    {datatype}, dimension(:), target, intent(in) :: tape
-    {datatype}, intent(inout), pointer :: ptr
-    integer, intent(in) :: index
-
-    ptr => tape(index)
-
-end subroutine restore_{datatype}_scalar_as_pointer
-
-subroutine record_{datatype}_vector(tape, first, vector)
-    implicit none
-    {datatype}, dimension(:), intent(inout) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:), intent(in) :: vector
-
-    tape(first:first + size(vector) - 1) = vector(:)
-
-end subroutine record_{datatype}_vector
-
-subroutine restore_{datatype}_vector(tape, first, vector)
-    implicit none
-    {datatype}, dimension(:), intent(in) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:), intent(out) :: vector
-
-    vector(1:size(vector)) = tape(first:first + size(vector) - 1)
-
-end subroutine restore_{datatype}_vector
-
-subroutine restore_{datatype}_vector_as_pointer(tape, first, ptr)
-    implicit none
-    {datatype}, dimension(:), target, intent(in) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:), pointer, intent(out) :: ptr
-
-    ptr(1:size(ptr)) => tape(first:first + size(ptr) - 1)
-
-end subroutine restore_{datatype}_vector_as_pointer
-
-subroutine record_{datatype}_matrix(tape, first, matrix)
-    implicit none
-    {datatype}, dimension(:), intent(inout) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:, :), intent(in) :: matrix
-
-    integer :: i, j
-
-    do j = lbound(matrix, 2), ubound(matrix, 2)
-        do i = lbound(matrix, 1), ubound(matrix, 1)
-            tape(first + (j - 1) * size(matrix, 1) + i - 1) = matrix(i, j)
-        end do
-    end do
-
-end subroutine record_{datatype}_matrix
-
-subroutine restore_{datatype}_matrix(tape, first, matrix)
-    implicit none
-    {datatype}, dimension(:), intent(in) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:, :), intent(out) :: matrix
-
-    integer :: i, j 
-
-    do j = lbound(matrix, 2), ubound(matrix, 2)
-        do i = lbound(matrix, 1), ubound(matrix, 1)
-            matrix(i, j) = tape(first + (j - 1) * size(matrix, 1) + i - 1)
-        end do
-    end do
-
-end subroutine restore_{datatype}_matrix
-
-subroutine restore_{datatype}_matrix_as_pointer(tape, first, ptr)
-    implicit none
-    {datatype}, dimension(:), target, intent(in) :: tape
-    integer, intent(in) :: first
-    {datatype}, dimension(:, :), pointer, intent(out) :: ptr
-
-    ptr(lbound(ptr, 1):ubound(ptr, 1), lbound(ptr, 2):ubound(ptr, 2)) => tape(first : first + size(ptr) - 1)
-
-end subroutine restore_{datatype}_matrix_as_pointer"""
-
-    def subroutines_nodes(self):
-        from psyclone.psyir.frontend.fortran import FortranReader
-        freader = FortranReader()
-        return freader.psyir_from_source(self.subroutines_source).children
-
-    def create_record_call(self, datanode, first_index):
-        datatype = self.datatype_fortran_string
-
-        if datanode.datatype is ScalarType:
-            dim = "scalar"
-        elif datanode.datatype is ArrayType:
-            if len(datanode.datatype.shape) == 1:
-                dim = "vector"
-            elif len(datanode.datatype.shape) == 2:
-                dim = "matrix"
-            else:
-                raise NotImplementedError("Only vectors and matrices are "
-                                          "implemented.")
-        else:
-            raise NotImplementedError("Only ScalarType and ArrayType are "
-                                      "implemented.")
-        
-        routine_name = f"record_{datatype}_{dim}"
-        routine_symbol = RoutineSymbol(routine_name)
-
-        return Call.create(routine_symbol, [Reference(self.symbol), first_index, datanode.copy()])
-    
-    def create_restore_call(self, datanode, first_index):
-        datatype = self.datatype_fortran_string
-
-        if datanode.datatype is ScalarType:
-            dim = "scalar"
-        elif datanode.datatype is ArrayType:
-            if len(datanode.datatype.shape) == 1:
-                dim = "vector"
-            elif len(datanode.datatype.shape) == 2:
-                dim = "matrix"
-            else:
-                raise NotImplementedError("Only vectors and matrices are "
-                                          "implemented.")
-        else:
-            raise NotImplementedError("Only ScalarType and ArrayType are "
-                                      "implemented.")
-        
-        routine_name = f"restore_{datatype}_{dim}"
-        routine_symbol = RoutineSymbol(routine_name)
-
-        return Call.create(routine_symbol, [Reference(self.symbol), first_index, datanode.copy()])

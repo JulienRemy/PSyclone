@@ -45,10 +45,13 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Call,
+    ArrayReference,
+    Range
 )
 from psyclone.psyir.symbols import ScalarType
 
 from psyclone.autodiff.tapes import ADTape
+from psyclone.autodiff import one
 
 
 class ADControlTape(ADTape):
@@ -165,9 +168,35 @@ class ADControlTape(ADTape):
                 f"'bool' argument should be of type "
                 f"'bool' but found '{type(do_loop).__name__}'."
             )
+        
+        self._recorded_nodes.append(node)
+        self._offset_mask.append(True)
+        self._multiplicities.append(one())
+        self._usefully_recorded_flags.append(True)
+        self._recordings.append(None)
+        self._restorings.append(None)
 
-        control_tape_ref = super().record(node, do_loop)
-        assignment = Assignment.create(control_tape_ref, node.copy())
+        # If static array, reshape to take the new length into account
+        if not self.is_dynamic_array:
+            self.reshape()
+
+        # Nodes of ScalarType correspond to one index of the tape
+        if isinstance(node.datatype, ScalarType):
+            # This is the Fortran index, starting at 1
+            tape_ref = ArrayReference.create(
+                self.symbol, [self.length(do_loop)]
+            )
+        # Nodes of ArrayType correspond to a range
+        else:
+            # If static array, reshape to take the new length into account
+            tape_range = Range.create(
+                self.first_index_of_last_element(do_loop), self.length(do_loop)
+            )
+            tape_ref = ArrayReference.create(self.symbol, [tape_range])
+
+        self._recordings[-1] = tape_ref
+
+        assignment = Assignment.create(tape_ref, node.copy())
         # self._recordings[-1] = assignment
 
         return assignment
@@ -199,5 +228,23 @@ class ADControlTape(ADTape):
                 f"'bool' argument should be of type "
                 f"'bool' but found '{type(do_loop).__name__}'."
             )
+        
+        self._has_last(node)
 
-        return super().restore(node, do_loop)
+                # Nodes of ScalarType correspond to one index of the tape
+        if isinstance(node.datatype, ScalarType):
+            # This is the Fortran index, starting at 1
+            tape_ref = ArrayReference.create(
+                self.symbol, [self.length(do_loop)]
+            )
+
+        # Nodes of ArrayType correspond to a range
+        else:
+            tape_range = Range.create(
+                self.first_index_of_last_element(do_loop), self.length(do_loop)
+            )
+            tape_ref = ArrayReference.create(self.symbol, [tape_range])
+
+        self._restorings[-1] = tape_ref
+
+        return tape_ref

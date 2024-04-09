@@ -338,6 +338,9 @@ class ScalarType(DataType):
         return (self.precision == other.precision and
                 self.intrinsic == other.intrinsic)
 
+    def __hash__(self):
+        return hash((self.intrinsic, self.precision))
+
 
 class ArrayType(DataType):
     '''Describes an array datatype. Can be an array of intrinsic types (e.g.

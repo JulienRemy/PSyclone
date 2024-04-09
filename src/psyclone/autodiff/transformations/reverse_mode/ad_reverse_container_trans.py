@@ -57,11 +57,6 @@ class ADReverseContainerTrans(ADContainerTrans):
         # pylint: disable=use-dict-literal
         super().__init__()
 
-        # These store {RoutineSymbol: ADTape}
-        # TODO: loop tape
-        self._value_tape_map = dict()
-        self._control_tape_map = dict()
-
     def add_routine_trans(self, routine_trans):
         """Add a new routine transformations to the list.
 
@@ -128,79 +123,79 @@ class ADReverseContainerTrans(ADContainerTrans):
 
         self._routine_map[original_symbol] = transformed_symbols
 
-    @property
-    def value_tape_map(self):
-        """Returns the map between original routine symbols and value tapes.
+    # @property
+    # def value_tape_map(self):
+    #     """Returns the map between original routine symbols and value tapes.
 
-        :return: dictionnary with the original routine symbols as keys \
-                 and the value_tape as value.
-        :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
-                     :py:class:`psyclone.autodiff.ADValueTape`]
-        """
-        return self._value_tape_map
+    #     :return: dictionnary with the original routine symbols as keys \
+    #              and the value_tape as value.
+    #     :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+    #                  :py:class:`psyclone.autodiff.ADValueTape`]
+    #     """
+    #     return self._value_tape_map
 
-    @property
-    def control_tape_map(self):
-        """Returns the map between original routine symbols and control tapes.
+    # @property
+    # def control_tape_map(self):
+    #     """Returns the map between original routine symbols and control tapes.
 
-        :return: dictionnary with the original routine symbols as keys \
-                 and the control tape or None as value.
-        :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
-                     Union[:py:class:`psyclone.autodiff.ADValueTape`, NoneType]]
-        """
-        return self._control_tape_map
+    #     :return: dictionnary with the original routine symbols as keys \
+    #              and the control tape or None as value.
+    #     :rtype: Dict[:py:class:`psyclone.psyir.symbols.RoutineSymbol`, \
+    #                  Union[:py:class:`psyclone.autodiff.ADValueTape`, NoneType]]
+    #     """
+    #     return self._control_tape_map
 
-    def add_value_tape(self, routine_symbol, value_tape):
-        """Add a new value_tape to the map.
+    # def add_value_tape(self, routine_symbol, value_tape):
+    #     """Add a new value_tape to the map.
 
-        :param routine_symbol: routine symbol of the original.
-        :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
-        :param value_tape: value_tape used by the transformed routines.
-        :type value_tape: :py:class:`psyclone.autodiff.ADValueTape`
+    #     :param routine_symbol: routine symbol of the original.
+    #     :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
+    #     :param value_tape: value_tape used by the transformed routines.
+    #     :type value_tape: :py:class:`psyclone.autodiff.ADValueTape`
 
-        :raises TypeError: if routine_symbol is of the wrong type.
-        :raises TypeError: if value_tape is of the wrong type.
-        """
-        if not isinstance(routine_symbol, RoutineSymbol):
-            raise TypeError(
-                f"'routine_symbol' argument should be of "
-                f"type 'RoutineSymbol' but found"
-                f"'{type(routine_symbol).__name__}'."
-            )
-        if not isinstance(value_tape, ADValueTape):
-            raise TypeError(
-                f"'value_tape' argument should be of "
-                f"type 'ADValueTape' but found"
-                f"'{type(value_tape).__name__}'."
-            )
-        self._value_tape_map[routine_symbol] = value_tape
+    #     :raises TypeError: if routine_symbol is of the wrong type.
+    #     :raises TypeError: if value_tape is of the wrong type.
+    #     """
+    #     if not isinstance(routine_symbol, RoutineSymbol):
+    #         raise TypeError(
+    #             f"'routine_symbol' argument should be of "
+    #             f"type 'RoutineSymbol' but found"
+    #             f"'{type(routine_symbol).__name__}'."
+    #         )
+    #     if not isinstance(value_tape, ADValueTape):
+    #         raise TypeError(
+    #             f"'value_tape' argument should be of "
+    #             f"type 'ADValueTape' but found"
+    #             f"'{type(value_tape).__name__}'."
+    #         )
+    #     self._value_tape_map[routine_symbol] = value_tape
 
-    def add_control_tape(self, routine_symbol, control_tape):
-        """Add a new control tape to the map.
+    # def add_control_tape(self, routine_symbol, control_tape):
+    #     """Add a new control tape to the map.
 
-        :param routine_symbol: routine symbol of the original.
-        :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
-        :param control_tape: control tape used by the transformed routines, or \
-                             None if none is used.
-        :type control_tape: Union[:py:class:`psyclone.autodiff.ADControlTape`,
-                                  NoneType]
+    #     :param routine_symbol: routine symbol of the original.
+    #     :type routine_symbol: :py:class:`psyclone.psyir.symbols.RoutineSymbol`
+    #     :param control_tape: control tape used by the transformed routines, or \
+    #                          None if none is used.
+    #     :type control_tape: Union[:py:class:`psyclone.autodiff.ADControlTape`,
+    #                               NoneType]
 
-        :raises TypeError: if routine_symbol is of the wrong type.
-        :raises TypeError: if control_tape is of the wrong type.
-        """
-        if not isinstance(routine_symbol, RoutineSymbol):
-            raise TypeError(
-                f"'routine_symbol' argument should be of "
-                f"type 'RoutineSymbol' but found "
-                f"'{type(routine_symbol).__name__}'."
-            )
-        if not isinstance(control_tape, (ADControlTape, NoneType)):
-            raise TypeError(
-                f"'control_tape' argument should be of "
-                f"type 'ADValueTape' or 'NoneType' but found"
-                f"'{type(control_tape).__name__}'."
-            )
-        self._control_tape_map[routine_symbol] = control_tape
+    #     :raises TypeError: if routine_symbol is of the wrong type.
+    #     :raises TypeError: if control_tape is of the wrong type.
+    #     """
+    #     if not isinstance(routine_symbol, RoutineSymbol):
+    #         raise TypeError(
+    #             f"'routine_symbol' argument should be of "
+    #             f"type 'RoutineSymbol' but found "
+    #             f"'{type(routine_symbol).__name__}'."
+    #         )
+    #     if not isinstance(control_tape, (ADControlTape, NoneType)):
+    #         raise TypeError(
+    #             f"'control_tape' argument should be of "
+    #             f"type 'ADValueTape' or 'NoneType' but found"
+    #             f"'{type(control_tape).__name__}'."
+    #         )
+    #     self._control_tape_map[routine_symbol] = control_tape
 
     @property
     def reversal_schedule(self):
@@ -364,10 +359,22 @@ class ADReverseContainerTrans(ADContainerTrans):
             routine,
             dependent_vars,
             independent_vars,
-            value_tape=None,
+            value_tapes=None,
             control_tape=None,
             options=options,
         )
         # This adds all necessary entries to self.container and to the maps
+
+        taping_subroutines = []
+        for trans in self.routine_transformations:
+            for tape in trans.value_tapes.values():
+                for taping_subroutine in tape.subroutines_nodes:
+                    if taping_subroutine.name not in [
+                        subroutine.name
+                        for subroutine in taping_subroutines
+                    ]:
+                        taping_subroutines.append(taping_subroutine)
+        for taping_subroutine in taping_subroutines:
+            self.container.children.append(taping_subroutine)
 
         return self.container

@@ -49,6 +49,7 @@ from psyclone.psyir.nodes import (
     IfBlock,
     Loop,
     Schedule,
+    DataNode
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -108,7 +109,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
     # _call_adjoint_name = "call_adj"
 
     # TODO: correct datatype
-    _default_value_tape_datatype = REAL_TYPE
+    # _default_value_tape_datatype = REAL_TYPE
     _default_control_tape_datatype = BOOLEAN_TYPE
 
     def __init__(self, container_trans):
@@ -369,23 +370,73 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         return own_routine_symbol(self.reversing)
 
     @property
-    def value_tape(self):
-        """Returns the value_tape used by the transformation.
+    def value_tapes(self):
+        """Returns the value tapes used by the transformation, as a \
+        dictionnary containing ScalarType as a key and ADValueTape as a value.
 
-        :return: value_tape.
+        :return: value tapes dictionnary.
+        :rtype: Dict[:py:class:`psyclone.psyir.symbols.ScalarType`, \
+                     :py:class:`psyclone.autodiff.ADValueTape`]
+        """
+        return self._value_tapes
+
+    @value_tapes.setter
+    def value_tapes(self, value_tapes):
+        if not isinstance(value_tapes, dict):
+            raise TypeError(
+                f"'value_tapes' argument should be of "
+                f"type 'dict' but found "
+                f"'{type(value_tapes).__name__}'."
+            )
+        for key, value in value_tapes.items():
+            if not isinstance(key, ScalarType):
+                raise TypeError(
+                    f"'value_tape' argument should be of "
+                    f"a dict with keys of type 'ScalarType' but found "
+                    f"'{type(key).__name__}'."
+                )
+            if not isinstance(value, ADValueTape):
+                raise TypeError(
+                    f"'value_tape' argument should be of "
+                    f"a dict with values of type 'ADValueTape' but found "
+                    f"'{type(key).__name__}'."
+                )
+        self._value_tapes = value_tapes
+
+    def get_value_tape_for(self, datanode):
+        """Returns the value tape associated with the datanode datatype.
+
+        :param datanode: datanode whose associated value tape to get.
+        :type datanode: :py:class:`psyclone.psyir.nodes.DataNode`
+
+        :raises TypeError: if datanode is of the wrong type.
+        :raises NotImplementedError: if the datatype of datanode is neither \
+                                     ScalarType nor ArrayType.
+
+        :return: the correct value tape to use for datanode.
         :rtype: :py:class:`psyclone.autodiff.ADValueTape`
         """
-        return self._value_tape
-
-    @value_tape.setter
-    def value_tape(self, value_tape):
-        if not isinstance(value_tape, ADValueTape):
+        if not isinstance(datanode, DataNode):
             raise TypeError(
-                f"'value_tape' argument should be of "
-                f"type 'ADValueTape' but found "
-                f"'{type(value_tape).__name__}'."
+                f"'datanode' argument should be of "
+                f"type 'DataNode' but found "
+                f"'{type(datanode).__name__}'."
             )
-        self._value_tape = value_tape
+        datatype = datanode.datatype
+        while isinstance(datatype, ArrayType):
+            datatype = datatype.datatype
+        # if isinstance(datanode.datatype, ScalarType):
+        #     datatype = datanode.datatype
+        # elif isinstance(datanode.datatype, ArrayType):
+        #     datatype = datanode.datatype.datatype
+        # else:
+        #     raise NotImplementedError(
+        #         "Only ScalarType and ArrayType datanodes "
+        #         "taping are implemented but found "
+        #         f"{datanode.datatype.__name__}."
+        #     )
+
+        return self.value_tapes[datatype]
 
     @property
     def control_tape(self):
@@ -426,7 +477,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         routine,
         dependent_vars,
         independent_vars,
-        value_tape=None,
+        value_tapes=None,
         control_tape=None,
         options=None,
     ):
@@ -440,8 +491,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :param independent_vars: list of independent variables names to \
                                  differentiate with respect to.
         :type independent_vars: `List[Str]`
-        :param value_tape: value tape to use to transform the routine.
-        :type value_tape: Optional[Union[NoneType, ADValueTape]]
+        :param value_tapes: value tapes to use to transform the routine \
+                                 as a dictionnary, with stored element \
+                                 ScalarType as key and ADTape as value.
+        :type value_tapes: Optional[\
+                            Union[NoneType,  \
+                              Dict[
+                                :py:class:`psyclone.psyir.symbols.ScalarType`, \
+                                :py:class:`psyclone.autodiff.ADValueTape`]]]
         :param control_tape: control tape to use to transform the routine.
         :type control_tape: Optional[Union[NoneType, ADControlTape]]
         :param options: a dictionary with options for transformations, \
@@ -455,13 +512,28 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         super().validate(routine, dependent_vars, independent_vars, options)
 
-        if not isinstance(value_tape, (ADValueTape, type(None))):
+        if not isinstance(value_tapes, (dict, NoneType)):
             raise TypeError(
-                f"'value_tape' argument should be of "
-                f"type 'ADValueTape' or 'NoneType' but found an element of "
-                f"type '{type(value_tape).__name__}'."
+                f"'value_tapes' argument should be of "
+                f"type 'dict' but found "
+                f"'{type(value_tapes).__name__}'."
             )
-        if not isinstance(control_tape, (ADControlTape, type(None))):
+        if isinstance(value_tapes, dict):
+            for key, value in value_tapes.items():
+                if not isinstance(key, ScalarType):
+                    raise TypeError(
+                        f"'value_tape' argument should be of "
+                        f"a dict with keys of type 'ScalarType' but found "
+                        f"'{type(key).__name__}'."
+                    )
+                if not isinstance(value, ADValueTape):
+                    raise TypeError(
+                        f"'value_tape' argument should be of "
+                        f"a dict with values of type 'ADValueTape' but found "
+                        f"'{type(key).__name__}'."
+                    )
+
+        if not isinstance(control_tape, (ADControlTape, NoneType)):
             raise TypeError(
                 f"'control_tape' argument should be of "
                 f"type 'ADControlTape' or 'NoneType' but found an element of "
@@ -473,7 +545,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         routine,
         dependent_vars,
         independent_vars,
-        value_tape=None,
+        value_tapes=None,
         control_tape=None,
         options=None,
     ):
@@ -501,11 +573,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         :param independent_vars: list of independent variables names to \
                                  differentiate with respect to.
         :type independent_vars: `List[Str]`
-        :param value_tape: value tape to use to transform the routine.
-        :type value_tape: Optional[\
-                            Union[NoneType, 
-                                  :py:class:`psyclone.autodiff.ADValueTape`]\
-                          ]
+        :param value_tapes: value tapes to use to transform the routine \
+                                 as a dictionnary, with stored element \
+                                 ScalarType as key and ADValueTape as value.
+        :type value_tapes: Optional[\
+                            Union[NoneType,  \
+                              Dict[
+                                :py:class:`psyclone.psyir.symbols.ScalarType`, \
+                                :py:class:`psyclone.autodiff.ADValueTape`]]]
         :param control_tape: control tape to use to transform the routine.
         :type control_tape: Optional[Union[NoneType, ADControlTape]]
         :param options: a dictionary with options for transformations, \
@@ -527,7 +602,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             routine,
             dependent_vars,
             independent_vars,
-            value_tape,
+            value_tapes,
             control_tape,
             options,
         )
@@ -544,15 +619,19 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.variables_info = VariablesAccessInfo(routine)
 
         # Value tape for the transformation
-        # - none provided, create one
-        if value_tape is None:
-            name = routine.name
-            self.value_tape = ADValueTape(
-                name, self._default_value_tape_datatype
-            )
-        # - use the provided one
-        else:
-            self.value_tape = value_tape
+        # create one for each datatype, unless it was provided as an argument
+        # of the transformation
+        self.value_tapes = value_tapes if value_tapes else dict()
+        name = routine.name
+        scalar_datatypes = []
+        for datasymbol in routine.symbol_table.datasymbols:
+            if isinstance(datasymbol.datatype, ScalarType):
+                scalar_datatypes.append(datasymbol.datatype)
+            elif isinstance(datasymbol.datatype, ArrayType):
+                scalar_datatypes.append(datasymbol.datatype.datatype)
+        for datatype in set(scalar_datatypes):
+            if datatype not in self.value_tapes:
+                self.value_tapes[datatype] = ADValueTape(name, datatype)
 
         # Control tape for the transformation
         # - none provided, create one
@@ -588,15 +667,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # routine/scope
         self.value_tape_non_written_values(options)
 
-        # Add the value tape to the container_trans map
-        self.container_trans.add_value_tape(
-            self.routine_symbol, self.value_tape
-        )
+        # # Add the value tapes to the container_trans map
+        # NoneTypeue_tapes:
+        #     self.container_trans.add_value_tape(self.routine_symbol, value_tape)
 
-        # Add the control tape to the container_trans map
-        self.container_trans.add_control_tape(
-            self.routine_symbol, self.control_tape
-        )
+        # # Add the control tape to the container_trans map
+        # self.container_trans.add_control_tape(
+        #     self.routine_symbol, self.control_tape
+        # )
 
         # All dependent and independent variables names
         # list(set(...)) to avoid duplicates
@@ -632,8 +710,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Add the value_tape as argument of both routines iff it's actually used
         # and also ALLOCATE and DEALLOCATE it in the reversing routine if it's
         # a dynamic array
-        if len(self.value_tape.recorded_nodes) != 0:
-            self.add_tape_argument(self.value_tape, options)
+        for value_tape in self.value_tapes.values():
+            if len(value_tape.recorded_nodes) != 0:
+                self.add_tape_argument(value_tape, options)
 
         # Add the control_tape as argument of both routines iff it's actually
         # used
@@ -653,7 +732,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         if post_process_tbr:
             # Some arrays can be taped outside under some
             # Update the tapes usefully_recorded_flags lists
-            for tape in (self.value_tape,):
+            for tape in self.value_tapes.values():
                 useful_restorings = self.get_all_useful_restorings(tape)
                 # print(
                 #     f"Useful restorings are: {[rest.debug_string()
@@ -847,10 +926,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Tape record and restore first
         if overwriting:
-            value_tape_record = self.value_tape.record(assignment.lhs)
+            value_tape = self.get_value_tape_for(assignment.lhs)
+
+            value_tape_record = value_tape.record(assignment.lhs)
             recording.append(value_tape_record)
 
-            value_tape_restore = self.value_tape.restore(assignment.lhs)
+            value_tape_restore = value_tape.restore(assignment.lhs)
             returning.append(value_tape_restore)
 
             # verbose_comment += ", overwrite"
@@ -920,12 +1001,13 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 ):
                     # Symbol wasn't value_taped yet
                     if call_arg.symbol not in value_taped_symbols:
+                        value_tape = self.get_value_tape_for(call_arg)
                         # Tape record in the recording routine
-                        value_tape_record = self.value_tape.record(call_arg)
+                        value_tape_record = value_tape.record(call_arg)
                         recording.append(value_tape_record)
 
                         # Associated value_tape restore in the returning routine
-                        value_tape_restore = self.value_tape.restore(call_arg)
+                        value_tape_restore = value_tape.restore(call_arg)
                         value_tape_restores.append(value_tape_restore)
 
                         # Don't value_tape the same symbol again in this call
@@ -1205,28 +1287,24 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Values that are not written back to the calling routine
         # are all non-arguments variables of REAL type.
-        # NOTE: Arguments with intent(in) are not written back but cannot
-        # be modified.
         for var in self.recording_table.datasymbols:
-            if (
-                var
-                not in self.recording_table.argument_list
-                # FIXME: dirty hack to tape ints
-                # and var.datatype.intrinsic is ScalarType.Intrinsic.REAL
-            ):
+            if var not in self.recording_table.argument_list:
                 # "fake" reference to value_tape the last value
                 # Either the whole array or the scalar variable
                 if isinstance(var.datatype, ArrayType):
                     ref = ArrayReference.create(
                         var, [":"] * len(var.datatype.shape)
                     )
+                    datatype = var.datatype.datatype
                 else:
                     ref = Reference(var)
+                    datatype = var.datatype
 
-                # Record and restore
-                value_tape_record = self.value_tape.record(ref)
+                # Record and restore in the right tape
+                tape = self.value_tapes[datatype]
+                value_tape_record = tape.record(ref)
                 self.recording.addchild(value_tape_record)
-                value_tape_restore = self.value_tape.restore(ref)
+                value_tape_restore = tape.restore(ref)
                 self.returning.addchild(value_tape_restore, index=0)
 
     def set_argument_accesses(self, options):
