@@ -111,26 +111,27 @@ class ADReverseIfBlockTrans(ADIfBlockTrans):
         self.validate(if_block, control_tape_ref, options)
 
         # Transform the if body to get both motions
-        (recording_if_block,
-         returning_if_block) = self.transform_body(if_block.if_body, options)
+        (recording_if_block, returning_if_block) = self.transform_body(
+            if_block.if_body, options
+        )
         returning_if_block.reverse()
 
         # If it exists, transform the else body to get both motions
         if if_block.else_body is not None:
-            (recording_else_block,
-             returning_else_block) = self.transform_body(if_block.else_body, 
-                                                         options)
+            (recording_else_block, returning_else_block) = self.transform_body(
+                if_block.else_body, options
+            )
             returning_else_block.reverse()
         else:
             recording_else_block = returning_else_block = None
 
-        recording = IfBlock.create(control_tape_ref.copy(),
-                                   recording_if_block,
-                                   recording_else_block)
+        recording = IfBlock.create(
+            control_tape_ref.copy(), recording_if_block, recording_else_block
+        )
 
-        returning = IfBlock.create(control_tape_ref.copy(),
-                                   returning_if_block,
-                                   returning_else_block)
+        returning = IfBlock.create(
+            control_tape_ref.copy(), returning_if_block, returning_else_block
+        )
 
         return recording, returning
 
@@ -155,22 +156,35 @@ class ADReverseIfBlockTrans(ADIfBlockTrans):
         for child in body.children:
             # Transform the child, get lists of nodes for both motions
             if isinstance(child, Assignment):
-                (recording,
-                 returning) = self.routine_trans.transform_assignment(child,
-                                                                      options)
+                (recording, returning) = (
+                    self.routine_trans.transform_assignment(child, options)
+                )
             elif isinstance(child, Call):
-                (recording,
-                 returning) = self.routine_trans.transform_call(child,
-                                                                options)
+                (recording, returning) = self.routine_trans.transform_call(
+                    child, options
+                )
             elif isinstance(child, IfBlock):
-                (recording,
-                 returning) = self.routine_trans.transform_if_block(child,
-                                                                    options)
+                # Tape record the condition value first
+                control_tape_record = self.routine_trans.control_tape.record(
+                    child.condition
+                )
+                recording = [control_tape_record]
+
+                # Get the ArrayReference of the control tape element
+                control_tape_ref = self.routine_trans.control_tape.restore(
+                    child.condition
+                )
+                (rec, returning) = self.routine_trans.transform_if_block(
+                    child, control_tape_ref, options
+                )
+                recording.extend(rec)
             else:
-                raise NotImplementedError(f"Transformations for "
-                                          f"'{type(child).__name__}' found in "
-                                          f"IfBlock body were not implemented "
-                                          f"yet.")
+                raise NotImplementedError(
+                    f"Transformations for "
+                    f"'{type(child).__name__}' found in "
+                    f"IfBlock body were not implemented "
+                    f"yet."
+                )
 
             # Add to recording motion in same order
             recording_body.extend(recording)

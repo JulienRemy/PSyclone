@@ -51,6 +51,9 @@ from psyclone.autodiff.transformations.ad_operation_trans import (
 from psyclone.autodiff.transformations.ad_call_trans import ADCallTrans
 from psyclone.autodiff.transformations.ad_if_block_trans import ADIfBlockTrans
 from psyclone.autodiff.transformations.ad_loop_trans import ADLoopTrans
+from psyclone.autodiff.transformations.ad_omp_region_directive_trans import (
+    ADOMPRegionDirectiveTrans,
+)
 
 from psyclone.autodiff.transformations.reverse_mode.ad_reverse_container_trans import (
     ADReverseContainerTrans,
@@ -72,6 +75,9 @@ from psyclone.autodiff.transformations.reverse_mode.ad_reverse_if_block_trans im
 )
 from psyclone.autodiff.transformations.reverse_mode.ad_reverse_loop_trans import (
     ADReverseLoopTrans,
+)
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_omp_region_directive_trans import (
+    ADReverseOMPRegionDirectiveTrans,
 )
 
 from psyclone.autodiff.transformations.forward_mode.ad_forward_container_trans import (
@@ -95,6 +101,9 @@ from psyclone.autodiff.transformations.forward_mode.ad_forward_if_block_trans im
 from psyclone.autodiff.transformations.forward_mode.ad_forward_loop_trans import (
     ADForwardLoopTrans,
 )
+from psyclone.autodiff.transformations.forward_mode.ad_forward_omp_region_directive_trans import (
+    ADForwardOMPRegionDirectiveTrans,
+)
 
 # The entities in the __all__ list are made available to import directly from
 # this package e.g. 'from psyclone.autodiff.transformations import ADContainerTrans'
@@ -109,7 +118,7 @@ __all__ = [
     "ADCallTrans",
     "ADIfBlockTrans",
     "ADLoopTrans",
-
+    "ADOMPRegionDirectiveTrans",
     # Reverse-mode transformations
     "ADReverseContainerTrans",
     "ADReverseRoutineTrans",
@@ -118,7 +127,7 @@ __all__ = [
     "ADReverseCallTrans",
     "ADReverseIfBlockTrans",
     "ADReverseLoopTrans",
-
+    "ADReverseOMPRegionDirectiveTrans",
     # Forward-mode transformations
     "ADForwardContainerTrans",
     "ADForwardRoutineTrans",
@@ -126,5 +135,6 @@ __all__ = [
     "ADForwardOperationTrans",
     "ADForwardCallTrans",
     "ADForwardIfBlockTrans",
-    "ADForwardLoopTrans"
+    "ADForwardLoopTrans",
+    "ADForwardOMPRegionDirectiveTrans",
 ]
