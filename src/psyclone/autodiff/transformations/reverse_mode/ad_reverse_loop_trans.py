@@ -34,7 +34,7 @@
 # Author: J. Remy, Université Grenoble Alpes, Inria
 
 """This module provides a Transformation for reverse-mode automatic 
-differentiation of PSyIR Assignment nodes."""
+differentiation of PSyIR Loop nodes."""
 
 from psyclone.psyir.nodes import (
     Assignment,
@@ -49,7 +49,7 @@ from psyclone.psyir.nodes import (
     Routine,
     IntrinsicCall,
 )
-from psyclone.psyir.symbols.interfaces import ArgumentInterface
+from psyclone.psyir.symbols import ArgumentInterface, ArrayType
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADLoopTrans
@@ -180,9 +180,10 @@ class ADReverseLoopTrans(ADLoopTrans):
         returning = []
 
         # First make sure the offset is assigned
-        value_tape_offset_assignment_before = (
-            self.routine_trans.value_tape.offset_assignment
-        )
+        value_tape_offset_assignments_before = {
+            value_tape.datatype: value_tape.offset_assignment
+            for value_tape in self.routine_trans.value_tapes.values()
+        }
 
         #################
         # Taping some arrays outside of the nested loop (under some conditions)
@@ -197,7 +198,7 @@ class ADReverseLoopTrans(ADLoopTrans):
         # Get all nested loops variables and bounds
         loops_vars_and_bounds = self.nested_loops_variables_and_bounds(loop)
         loops_vars = self.nested_loops_variables(loop)
-        nodes_taped_outside = []
+        nodes_taped_outside = dict()
         # For all LHS arrays in assignments
         for written_array_ref in arrays_to_tape_outside:
             # TODO: TBR analysis
@@ -233,21 +234,27 @@ class ADReverseLoopTrans(ADLoopTrans):
 
                 # Add the tape records and restores operations to the correct
                 # motions
-                recording.append(
-                    self.routine_trans.value_tape.record(tbr_array_ref)
-                )
-                returning.insert(
-                    0, self.routine_trans.value_tape.restore(tbr_array_ref)
-                )
+                datatype = tbr_array_ref.datatype
+                while isinstance(datatype, ArrayType):
+                    datatype = datatype.datatype
+                value_tape = self.routine_trans.value_tapes[datatype]
+                recording.append(value_tape.record(tbr_array_ref))
+                returning.insert(0, value_tape.restore(tbr_array_ref))
 
                 # Keep track of the nodes that were taped outside
-                nodes_taped_outside.append(tbr_array_ref)
+                if datatype in nodes_taped_outside:
+                    nodes_taped_outside[datatype].append(tbr_array_ref)
+                else:
+                    nodes_taped_outside[datatype] = [tbr_array_ref]
 
         # If some nodes are taped outside, make sure the offset from *before*
         # they are taped is inserted *before* the tape records in the returning
         # motion
         if len(nodes_taped_outside) != 0:
-            returning.insert(0, value_tape_offset_assignment_before)
+            for (
+                offset_assignment
+            ) in value_tape_offset_assignments_before.values():
+                returning.insert(0, offset_assignment)
 
         ##########################################
         # Now deal with the loop body itself (and its internal taping)
@@ -256,31 +263,34 @@ class ADReverseLoopTrans(ADLoopTrans):
 
         # If some nodes were taped outside, the offset changed and should be
         # defined *before* the loop body in *both* motions
-        if len(nodes_taped_outside) != 0:
-            # Update the tape offset and tape mask
-            value_tape_offset_assignment = (
-                self.routine_trans.value_tape.update_offset_and_mask(
-                    one(),
-                    nodes_taped_outside,
-                    [one()] * len(nodes_taped_outside),
+        for datatype, nodes in nodes_taped_outside.items():
+            if len(nodes) != 0:
+                # Update the tape offset and tape mask
+                value_tape = self.routine_trans.value_tapes[datatype]
+                value_tape_offset_assignment = (
+                    value_tape.update_offset_and_mask(
+                        one(),
+                        nodes,
+                        [one()] * len(nodes),
+                    )
                 )
-            )
-            recording_offsets_and_loop.append(value_tape_offset_assignment)
-            returning_offsets_and_loop.append(
-                value_tape_offset_assignment.copy()
-            )
-        else:
-            returning_offsets_and_loop.append(
-                value_tape_offset_assignment_before
-            )
+                recording_offsets_and_loop.append(value_tape_offset_assignment)
+                returning_offsets_and_loop.append(
+                    value_tape_offset_assignment.copy()
+                )
+            else:
+                returning_offsets_and_loop.append(
+                    value_tape_offset_assignments_before[datatype]
+                )
         #################
         # Transform the loop body and create loops for both motions
         #################
         # Get the nodes that were recorded to the tapes before this loop
         # or outside of it
-        number_of_previously_taped_nodes = len(
-            self.routine_trans.value_tape.recorded_nodes
-        )
+        number_of_previously_taped_nodes = {
+            value_tape.datatype: len(value_tape.recorded_nodes)
+            for value_tape in self.routine_trans.value_tapes.values()
+        }
 
         # Transform the statements found in the for loop body (Schedule)
         # This creates tape record/restore statements and extends the tapes
@@ -334,51 +344,60 @@ class ADReverseLoopTrans(ADLoopTrans):
         # need to be taken into account for offsetting the indices
         #################
         # Get the newly recorded nodes
-        nodes_taped_inside = self.routine_trans.value_tape.recorded_nodes[
-            number_of_previously_taped_nodes:
-        ]
-        new_multiplicities = self.routine_trans.value_tape.multiplicities[
-            number_of_previously_taped_nodes:
-        ]
+        nodes_taped_inside = {
+            value_tape.datatype: value_tape.recorded_nodes[
+                number_of_previously_taped_nodes[value_tape.datatype] :
+            ]
+            for value_tape in self.routine_trans.value_tapes.values()
+        }
+        new_multiplicities = {
+            value_tape.datatype: value_tape.multiplicities[
+                number_of_previously_taped_nodes[value_tape.datatype] :
+            ]
+            for value_tape in self.routine_trans.value_tapes.values()
+        }
 
         # If some taping went on inside the loop body, then the offset needs
         # to be updated
-        if len(nodes_taped_inside) != 0:
-            # Update the tape offset and tape mask
-            value_tape_offset_assignment = (
-                self.routine_trans.value_tape.update_offset_and_mask(
-                    self.number_of_iterations(loop),
-                    nodes_taped_inside,
-                    new_multiplicities,
+        for datatype, nodes in nodes_taped_inside.items():
+            if len(nodes) != 0:
+                # Update the tape offset and tape mask
+                value_tape = self.routine_trans.value_tapes[datatype]
+                multiplicities = new_multiplicities[datatype]
+                value_tape_offset_assignment = (
+                    value_tape.update_offset_and_mask(
+                        self.number_of_iterations(loop),
+                        nodes,
+                        multiplicities,
+                    )
                 )
-            )
-            recording_offsets_and_loop.append(value_tape_offset_assignment)
+                recording_offsets_and_loop.append(value_tape_offset_assignment)
 
-            ######
-            # The do offset (used within the loop, dependent on the loops vars)
-            # needs to be computed and defined at the start of each iteration
+                ######
+                # The do offset (used within the loop, dependent on the loops vars)
+                # needs to be computed and defined at the start of each iteration
 
-            # Multiply the iteration counter by the length of all
-            # recorded nodes
-            product = mul(
-                self.iteration_counter_within_innermost_nested_loop(loop),
-                self.routine_trans.value_tape.length_of_nodes_with_multiplicities(
-                    nodes_taped_inside, new_multiplicities
-                ),
-            )
-            symbol = self.routine_trans.value_tape.do_offset_symbol
-            value_do_offset_assignment = assign(symbol, product)
+                # Multiply the iteration counter by the length of all
+                # recorded nodes
+                product = mul(
+                    self.iteration_counter_within_innermost_nested_loop(loop),
+                    value_tape.length_of_nodes_with_multiplicities(
+                        nodes, multiplicities
+                    ),
+                )
+                symbol = value_tape.do_offset_symbol
+                value_do_offset_assignment = assign(symbol, product)
 
-            # For nested loop, the assignment goes in the innermost loop
-            # body so walk and get last
-            innermost_recording_loop = recording_loop.walk(Loop)[-1]
-            innermost_recording_loop.loop_body.addchild(
-                value_do_offset_assignment, 0
-            )
-            innermost_returning_loop = returning_loop.walk(Loop)[-1]
-            innermost_returning_loop.loop_body.addchild(
-                value_do_offset_assignment.copy(), 0
-            )
+                # For nested loop, the assignment goes in the innermost loop
+                # body so walk and get last
+                innermost_recording_loop = recording_loop.walk(Loop)[-1]
+                innermost_recording_loop.loop_body.addchild(
+                    value_do_offset_assignment, 0
+                )
+                innermost_returning_loop = returning_loop.walk(Loop)[-1]
+                innermost_returning_loop.loop_body.addchild(
+                    value_do_offset_assignment.copy(), 0
+                )
 
         recording.extend(recording_offsets_and_loop)
         returning = returning_offsets_and_loop + returning
@@ -394,7 +413,7 @@ class ADReverseLoopTrans(ADLoopTrans):
         :param loop: original (primal) loop.
         :type loop: :py:class:`psyclone.psyir.nodes.Loop`
         """
-        #pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
         from psyclone.psyir.backend.fortran import FortranWriter
 
         fwriter = FortranWriter()
@@ -970,18 +989,17 @@ class ADReverseLoopTrans(ADLoopTrans):
         if assignment.lhs.symbol not in [
             array_ref.symbol for array_ref in arrays_to_tape_outside
         ]:
+            value_tape = self.routine_trans.get_value_tape_for(assignment.lhs)
 
             # TODO: if NOT overwriting this should NOT tape at first iteration
             # Should extract the first iteration rather than using a conditional
             # branch?
 
             # Tape record and restore first
-            value_tape_record = self.routine_trans.value_tape.record(
-                assignment.lhs, do_loop=True
-            )
+            value_tape_record = value_tape.record(assignment.lhs, do_loop=True)
             recording.append(value_tape_record)
 
-            value_tape_restore = self.routine_trans.value_tape.restore(
+            value_tape_restore = value_tape.restore(
                 assignment.lhs, do_loop=True
             )
             returning.append(value_tape_restore)
@@ -1051,19 +1069,18 @@ class ADReverseLoopTrans(ADLoopTrans):
                 ):
                     # Symbol wasn't value_taped yet
                     if call_arg.symbol not in value_taped_symbols:
+                        value_tape = self.routine_trans.get_value_tape_for(
+                            call_arg
+                        )
                         # Tape record in the recording routine
-                        value_tape_record = (
-                            self.routine_trans.value_tape.record(
-                                call_arg, do_loop=True
-                            )
+                        value_tape_record = value_tape.record(
+                            call_arg, do_loop=True
                         )
                         recording.append(value_tape_record)
 
                         # Associated value_tape restore in the returning routine
-                        value_tape_restore = (
-                            self.routine_trans.value_tape.restore(
-                                call_arg, do_loop=True
-                            )
+                        value_tape_restore = value_tape.restore(
+                            call_arg, do_loop=True
                         )
                         value_tape_restores.append(value_tape_restore)
 

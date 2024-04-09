@@ -133,20 +133,11 @@ class ADValueTape(ADTape):
         value_tape_ref = super().record(reference, do_loop)
 
         if scalar_type.intrinsic != self.datatype.intrinsic:
-            # FIXME: this is a dirty hack to tape some integers...
-            if (
-                scalar_type.intrinsic is ScalarType.Intrinsic.INTEGER
-                and self.datatype.intrinsic is ScalarType.Intrinsic.REAL
-            ):
-                reference = IntrinsicCall.create(
-                    IntrinsicCall.Intrinsic.REAL, [reference.copy()]
-                )
-            else:
-                raise TypeError(
-                    f"The intrinsic datatype of the 'reference' argument "
-                    f"should be {self.datatype.intrinsic} but found "
-                    f"{scalar_type.intrinsic}."
-                )
+            raise TypeError(
+                f"The intrinsic datatype of the 'reference' argument "
+                f"should be {self.datatype.intrinsic} but found "
+                f"{scalar_type.intrinsic}."
+            )
 
         # This is a Reference to a scalar
         if isinstance(reference.datatype, ScalarType):
@@ -218,16 +209,6 @@ class ADValueTape(ADTape):
             )
 
         value_tape_ref = super().restore(reference, do_loop)
-
-        # FIXME: this is a dirty hack to tape some integers...
-        if (
-            isinstance(reference.datatype, ScalarType)
-            and reference.datatype.intrinsic is ScalarType.Intrinsic.INTEGER
-            and self.datatype.intrinsic is ScalarType.Intrinsic.REAL
-        ):
-            value_tape_ref = IntrinsicCall.create(
-                IntrinsicCall.Intrinsic.INT, [value_tape_ref]
-            )
 
         # This is a Reference to a scalar
         if isinstance(reference.datatype, ScalarType):

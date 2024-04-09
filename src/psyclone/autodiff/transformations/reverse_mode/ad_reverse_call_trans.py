@@ -44,7 +44,7 @@ from psyclone.psyir.nodes import (
     Literal,
     Loop,
     Assignment,
-    ArrayReference
+    ArrayReference,
 )
 from psyclone.psyir.symbols import DataSymbol, ArrayType
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
@@ -68,14 +68,17 @@ class ADReverseCallTrans(ADCallTrans):
     # TODO: this only works for subroutines call for now
 
     @property
-    def value_tape(self):
-        """Value tape used by the transformation of the called routine.
+    def value_tapes(self):
+        """Returns the value tapes used by the transformation of the called \
+        routine, as a dictionnary containing ScalarType as a key and \
+        ADValueTape as a value.
 
-        :return: value tape.
-        :rtype: :py:class:`psyclone.autodiff.tapes.ADValueTape`
+        :return: value tapes dictionnary.
+        :rtype: Dict[:py:class:`psyclone.psyir.symbols.ScalarType`, \
+                     :py:class:`psyclone.autodiff.ADValueTape`]
         """
-        return self.called_routine_trans.value_tape
-    
+        return self.called_routine_trans.value_tapes
+
     @property
     def control_tape(self):
         """Control tape used by the transformation of the called routine.
@@ -192,7 +195,7 @@ class ADReverseCallTrans(ADCallTrans):
         )
         self.routine = routine
 
-        # check if the link between the parent and called routines 
+        # check if the link between the parent and called routines
         # is strong or weak
         # - strong => split reversal
         # - weak => joint reversal
@@ -256,124 +259,24 @@ class ADReverseCallTrans(ADCallTrans):
             else:
                 do_loop = False
 
-            # If the value_tape has null length, it's unused
-            if len(self.value_tape.recorded_nodes) != 0:
+            for value_tape in self.value_tapes:
+                # If the value_tape has null length, it's unused
+                if len(value_tape.recorded_nodes) != 0:
 
-                # calling_routine = self.routine_trans.routine
-                # print(f"Adding tape {self.value_tape.name} to calling routine {calling_routine.name}")
-                # parent_arguments_names = [sym.name for sym in calling_routine.symbol_table.argument_list]
-                # all_assignments = calling_routine.walk(Assignment)
-                # all_lhs_names = [assignment.lhs.name for assignment in all_assignments]
-                # subst_map = dict()
+                    calling_routine_tape = self.routine_trans.value_tapes[
+                        value_tape.datatype
+                    ]
 
-                # for ref in self.value_tape.total_length.walk(Reference):
-                #     name = ref.name
-                #     if name not in parent_arguments_names:
-                #         print(f"Found {name} which is not in the arguments of {calling_routine.name}")
-                #         if name in subst_map:
-                #             value = subst_map[name]
-                #         else:
-                #             if all_lhs_names.count(name) != 1:
-                #                 raise NotImplementedError(name)
-                        
-                #             assignment_index = all_lhs_names.index(name)
-                #             value = all_assignments[assignment_index].rhs
-                #             subst_map[name] = value.copy()
-                
-                # self.routine_trans.substitution_map = subst_map | self.called_routine_trans.substitution_map
-
-
-                # for index, multiplicity in enumerate(self.value_tape.multiplicities):
-                #     for ref in multiplicity.walk(Reference):
-                #         name = ref.name
-                #         if name not in parent_arguments_names:
-                #             print(f"Found {name} which is not in the arguments of {calling_routine.name}")
-                #             if name in subst_map:
-                #                 value = subst_map[name]
-                #             else:
-                #                 if all_lhs_names.count(name) != 1:
-                #                     raise NotImplementedError(name)
-                            
-                #                 assignment_index = all_lhs_names.index(name)
-                #                 value = all_assignments[assignment_index].rhs
-                #                 subst_map[name] = value
-
-                #             print(f"Substituting {name} => {(value)}")
-
-                #             if ref == multiplicity:
-                #                 self.value_tape.multiplicities[index] = value.copy()
-                #             else:
-                #                 ref.replace_with(value.copy())
-
-                # for index, node in enumerate(self.value_tape.recorded_nodes):
-                #     for array_ref in node.walk(Reference):
-                #         if isinstance(array_ref, ArrayReference) or isinstance(array_ref.datatype, ArrayType):
-                #             for dim in array_ref.datatype.shape:
-                #                 if isinstance(dim, ArrayType.ArrayBounds):
-                #                     bounds = list(dim)
-                #                     for i, bound in enumerate(bounds):
-                #                         for ref in bound.walk(Reference):
-                #                             name = ref.name
-                #                             if name not in parent_arguments_names:
-                #                                 print(f"Found {name} which is not in the arguments of {calling_routine.name}")
-                #                                 if name in subst_map:
-                #                                     value = subst_map[name]
-                #                                 else:
-                #                                     if all_lhs_names.count(name) != 1:
-                #                                         raise NotImplementedError(f"{name}")
-                                                
-                #                                     assignment_index = all_lhs_names.index(name)
-                #                                     value = all_assignments[assignment_index].rhs
-                #                                     subst_map[name] = value
-
-                #                                 print(f"Substituting {name} => {(value)}")
-
-                #                                 if ref == bound:
-                #                                     bounds[i] = value.copy()
-                #                                 else:
-                #                                     ref.replace_with(value.copy())
-
-                #                     dim = ArrayType.ArrayBounds(*bounds)
-
-
-
-                #             indices_refs = []
-                #             for child in array_ref.children:
-                #                 indices_refs.extend(child.walk(Reference))
-                #             true_refs = []
-                #             for index_ref in indices_refs:
-                #                 if index_ref.name != array_ref.name:
-                #                     true_refs.append(index_ref)
-                #             for ref in true_refs:
-                #                 name = ref.name
-                #                 if name not in parent_arguments_names:
-                #                     print(f"Found {name} which is not in the arguments of {calling_routine.name}")
-                #                     if name in subst_map:
-                #                         value = subst_map[name]
-                #                     else:
-                #                         if all_lhs_names.count(name) != 1:
-                #                             raise NotImplementedError(f"{array_ref} with indices refs {[ref.name for ref in true_refs]} and current ref {name}")
-                                    
-                #                         assignment_index = all_lhs_names.index(name)
-                #                         value = all_assignments[assignment_index].rhs
-                #                         subst_map[name] = value
-
-                #                     print(f"Substituting {name} => {(value)}")
-
-                #                     ref.replace_with(value.copy())
-
-                # Extend the calling routine value tape by the called routine
-                # one and get the corresponding slice of the first
-                value_tape_slice = (
-                    self.routine_trans.value_tape.extend_and_slice(
-                        self.value_tape, call, do_loop
+                    # Extend the calling routine value tape by the called routine
+                    # one and get the corresponding slice of the first
+                    value_tape_slice = calling_routine_tape.extend_and_slice(
+                        value_tape, call, do_loop
                     )
-                )
 
-                # Will be used as last argument of the recording and
-                # returning calls
-                recording_args.append(value_tape_slice)
-                returning_args.append(value_tape_slice.copy())
+                    # Will be used as last argument of the recording and
+                    # returning calls
+                    recording_args.append(value_tape_slice)
+                    returning_args.append(value_tape_slice.copy())
 
             # If the control tape is None, it's unused
             if self.control_tape is not None:
@@ -723,16 +626,16 @@ class ADReverseCallTrans(ADCallTrans):
             routine,
             dependent_args_names,
             independent_args_names,
-            value_tape=None,
+            value_tapes=None,
             control_tape=None,
             options=options,
         )
 
         # Get the value and control tapes
-        value_tape = self.called_routine_trans.value_tape
+        value_tapes = self.called_routine_trans.value_tapes
         control_tape = self.called_routine_trans.control_tape
 
         # Get the routines symbols
         transformed_symbols = self.called_routine_trans.transformed_symbols
 
-        return *transformed_symbols, value_tape, control_tape
+        return *transformed_symbols, value_tapes, control_tape

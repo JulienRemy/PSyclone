@@ -37,7 +37,7 @@
 automatic differentiation "taping" (storing and recovering) of different values.
 """
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from types import NoneType
 
 from psyclone.psyir.nodes import (
@@ -60,6 +60,7 @@ from psyclone.psyir.symbols import (
     ScalarType,
     ArrayType,
     SymbolTable,
+    RoutineSymbol,
 )
 from psyclone.autodiff import (
     one,
@@ -130,17 +131,21 @@ class ADTape(object, metaclass=ABCMeta):
             # is a static array, shape will me modified on the go as needed
             tape_type = ArrayType(datatype, [0])
 
+        tape_name = (
+            self._tape_prefix + datatype.intrinsic.name.lower() + "_" + name
+        )
+
         # Symbols of the tape
-        self.symbol = DataSymbol(self._tape_prefix + name, datatype=tape_type)
+        self.symbol = DataSymbol(tape_name, datatype=tape_type)
 
         # Symbol of the do loop offset (iteration dependent)
         self.do_offset_symbol = DataSymbol(
-            self._tape_prefix + name + "_do_offset", datatype=INTEGER_TYPE
+            tape_name + "_do_offset", datatype=INTEGER_TYPE
         )
 
         # Symbol of the tape offset
         self.offset_symbol = DataSymbol(
-            self._tape_prefix + name + "_offset", datatype=INTEGER_TYPE
+            tape_name + "_offset", datatype=INTEGER_TYPE
         )
 
         # Mask not to count element lengths if already taken into account in
@@ -156,10 +161,11 @@ class ADTape(object, metaclass=ABCMeta):
         # Internal list of recorded nodes
         self._recorded_nodes = []
 
-        # Internsal ists of recording/restorings to/from the the tape
+        # Internal lists of recording/restorings to/from the the tape
         self._recordings = []
         self._restorings = []
 
+        # Boolean flags for post-processing TBR (to be recorded) analysis
         self._usefully_recorded_flags = []
 
     @property
@@ -189,6 +195,23 @@ class ADTape(object, metaclass=ABCMeta):
                 f"'{type(datatype).__name__}'."
             )
         self._datatype = datatype
+
+    @property
+    def datatype_fortran_string(self):
+        """Fortran string statement corresponding to the datatype of the tape \
+        elements (eg. 'real', 'logical', etc).
+
+        :return: string for the datatype of the tape elements.
+        :rtype: String
+        """
+        if self.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+            return "real"
+        if self.datatype.intrinsic is ScalarType.Intrinsic.INTEGER:
+            return "integer"
+        if self.datatype.intrinsic is ScalarType.Intrinsic.BOOLEAN:
+            return "logical"
+
+        return "character"
 
     @property
     def is_dynamic_array(self):
@@ -1579,8 +1602,9 @@ class ADTape(object, metaclass=ABCMeta):
 
         self._check_internal_lists_are_all_same_length()
 
-        for i, (node, restoring) in enumerate(zip(self._recorded_nodes,
-                                                  self._restorings)):
+        for i, (node, restoring) in enumerate(
+            zip(self._recorded_nodes, self._restorings)
+        ):
             # Special case for tape extension in split reversal
             if restoring in useful_restorings or isinstance(node, Call):
                 self._usefully_recorded_flags[i] = True
@@ -1612,3 +1636,4 @@ class ADTape(object, metaclass=ABCMeta):
             for i, restoring in enumerate(self._restorings)
             if self.usefully_recorded_flags[i] is False
         ]
+
