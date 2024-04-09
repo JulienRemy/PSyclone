@@ -142,7 +142,7 @@ class ADValueTape(ADTape):
             node, self.first_index_of_last_element(do_loop)
         )
 
-        self._recordings[-1] = record
+        self._recordings[-1] = record.children[-1]
 
         return record
 
@@ -180,7 +180,7 @@ class ADValueTape(ADTape):
             node, self.first_index_of_last_element(do_loop)
         )
 
-        self.restorings[-1] = restore
+        self.restorings[-1] = restore.children[-1]
 
         return restore
 

@@ -49,7 +49,7 @@ from psyclone.psyir.nodes import (
     IfBlock,
     Loop,
     Schedule,
-    DataNode
+    DataNode,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -743,8 +743,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                     tape.get_useless_recordings()
                     + tape.get_useless_restorings()
                 ):
-                    # print(f"Detaching {useless.debug_string()}")
-                    useless.detach()
+                    assert isinstance(useless.parent, Call)
+                    assert "record_" in useless.parent.routine.name or "restore_" in useless.parent.routine.name
+                    # print(f"Detaching {useless.parent.debug_string()}")
+                    useless.parent.detach()
         ########################################################################
         ########################################################################
         # FIXME: this shouldn't be here, only here to keep the initial tape
@@ -1476,21 +1478,42 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # - the expressions assigned to the tape offsets
         # in both the recording and returning routines
         if use_sympy:
-            for ref in self.recording.walk(ArrayReference):
-                if ref.name == tape.name:
-                    # print(f"Simplifying {ref.name}")
-                    ref.replace_with(
-                        tape.simplify_expression_with_sympy(
-                            ref, self.recording_table
+            if isinstance(tape, ADControlTape):
+                for ref in self.recording.walk(ArrayReference):
+                    if ref.name == tape.name:
+                        # print(f"Simplifying {ref.name}")
+                        ref.replace_with(
+                            tape.simplify_expression_with_sympy(
+                                ref, self.recording_table
+                            )
                         )
-                    )
-            for ref in self.returning.walk(ArrayReference):
-                if ref.name == tape.name:
-                    ref.replace_with(
-                        tape.simplify_expression_with_sympy(
-                            ref, self.returning_table
+                for ref in self.returning.walk(ArrayReference):
+                    if ref.name == tape.name:
+                        ref.replace_with(
+                            tape.simplify_expression_with_sympy(
+                                ref, self.returning_table
+                            )
                         )
-                    )
+            elif isinstance(tape, ADValueTape):
+                for call in self.recording.walk(Call):
+                    if call.routine.name in [
+                        routine.name for routine in tape.subroutines_nodes
+                    ]:
+                        # print(f"Simplifying {ref.name}")
+                        call.children[1].replace_with(
+                            tape.simplify_expression_with_sympy(
+                                call.children[1], self.recording_table
+                            )
+                        )
+                for call in self.returning.walk(Call):
+                    if call.routine.name in [
+                        routine.name for routine in tape.subroutines_nodes
+                    ]:
+                        call.children[1].replace_with(
+                            tape.simplify_expression_with_sympy(
+                                call.children[1], self.returning_table
+                            )
+                        )
             for assignment in self.recording.walk(Assignment):
                 if assignment.lhs.name in (
                     tape.do_offset_symbol.name,
