@@ -36,8 +36,17 @@
 """This module provides a Transformation for forward-mode automatic 
 differentiation of PSyIR IfBlock nodes."""
 
-from psyclone.psyir.nodes import (IfBlock, Assignment, Call, Loop, Literal,
-                                  Reference, Operation, IntrinsicCall)
+from psyclone.psyir.nodes import (
+    IfBlock,
+    Assignment,
+    Call,
+    Loop,
+    Literal,
+    Reference,
+    Operation,
+    IntrinsicCall,
+    OMPRegionDirective
+)
 
 from psyclone.autodiff.transformations import ADLoopTrans
 from psyclone.autodiff import assign, increment
@@ -73,17 +82,17 @@ class ADForwardLoopTrans(ADLoopTrans):
         """
         self.validate(loop, options)
 
-        #result = []
+        # result = []
 
         ## First consider the start of the loop
         ## If it's a literal, the loop variable has null derivative, proceed
-        #if isinstance(loop.start_expr, Literal):
+        # if isinstance(loop.start_expr, Literal):
         #    pass
         ## If it's a reference, operation or intrinsic call, the loop variable
         ## does have a derivative.
         ## Fake a "loop_var = start" assignement, transform it and put the
         ## transformed statements before the transformed loop body
-        #elif isinstance(loop.start_expr, (Reference, Operation, IntrinsicCall)):
+        # elif isinstance(loop.start_expr, (Reference, Operation, IntrinsicCall)):
         #    fake_assignement = assign(loop.variable,
         #                              loop.start_expr.copy())
         #    trans = self.routine_trans.assignment_trans.apply(fake_assignement)
@@ -94,7 +103,7 @@ class ADForwardLoopTrans(ADLoopTrans):
         #
         #    # Exclude the fake assignment itself from what's added
         #    result.extend(trans[:-1])
-        #else:
+        # else:
         #    raise NotImplementedError(f"Found a "
         #                              f"'{type(loop.start_expr).__name__}' "
         #                              f"node as start variable of a Loop node, "
@@ -105,14 +114,14 @@ class ADForwardLoopTrans(ADLoopTrans):
 
         ## First consider the step of the loop
         ## If it's a literal, the loop variable has null derivative, proceed
-        #if isinstance(loop.step_expr, Literal):
+        # if isinstance(loop.step_expr, Literal):
         #    pass
         ## If it's a reference, operation or intrinsic call, the loop variable
         ## does have a derivative.
         ## Fake a "loop_var = loop_var + step" assignement, transform it and
         ## put the transformed statements at the start of the transformed loop
         ## body
-        #elif isinstance(loop.step_expr, (Reference, Operation, IntrinsicCall)):
+        # elif isinstance(loop.step_expr, (Reference, Operation, IntrinsicCall)):
         #    fake_increment = increment(loop.variable, loop.step_expr.copy())
         #    trans = self.routine_trans.assignment_trans.apply(fake_increment)
         #
@@ -122,7 +131,7 @@ class ADForwardLoopTrans(ADLoopTrans):
         #
         #    # Exclude the fake increment itself from what's added
         #    transformed_body.extend(trans[:-1])
-        #else:
+        # else:
         #    raise NotImplementedError(f"Found a "
         #                              f"'{type(loop.start_expr).__name__}' "
         #                              f"node as step variable of a Loop node, "
@@ -132,32 +141,40 @@ class ADForwardLoopTrans(ADLoopTrans):
             if isinstance(node, Assignment):
                 transformed_body.extend(
                     self.routine_trans.assignment_trans.apply(node, options)
-                    )
+                )
             elif isinstance(node, Call):
                 transformed_body.append(
                     self.routine_trans.call_trans.apply(node, options)
-                    )
+                )
             elif isinstance(node, IfBlock):
                 transformed_body.append(
                     self.routine_trans.if_block_trans.apply(node, options)
-                    )
+                )
             elif isinstance(node, Loop):
                 transformed_body.append(self.apply(node, options))
+            elif isinstance(node, OMPRegionDirective):
+                transformed_body.append(
+                    self.routine_trans.omp_region_trans.apply(node, options)
+                )
             else:
-                raise NotImplementedError(f"Transformations for "
-                                          f"'{type(node).__name__}' found in "
-                                          f"Loop body were not implemented "
-                                          f"yet.")
+                raise NotImplementedError(
+                    f"Transformations for "
+                    f"'{type(node).__name__}' found in "
+                    f"Loop body were not implemented "
+                    f"yet."
+                )
 
         ## Now extend the list of nodes with the transformed loop and return
-        #result.append(Loop.create(loop.variable,
+        # result.append(Loop.create(loop.variable,
         #                          loop.start_expr.copy(),
         #                          loop.stop_expr.copy(),
         #                          loop.step_expr.copy(),
         #                          transformed_body))
 
-        return Loop.create(loop.variable,
-                                  loop.start_expr.copy(),
-                                  loop.stop_expr.copy(),
-                                  loop.step_expr.copy(),
-                                  transformed_body)
+        return Loop.create(
+            loop.variable,
+            loop.start_expr.copy(),
+            loop.stop_expr.copy(),
+            loop.step_expr.copy(),
+            transformed_body,
+        )

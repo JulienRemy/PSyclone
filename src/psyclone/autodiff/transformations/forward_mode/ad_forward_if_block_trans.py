@@ -36,7 +36,13 @@
 """This module provides a Transformation for forward-mode automatic 
 differentiation of PSyIR IfBlock nodes."""
 
-from psyclone.psyir.nodes import IfBlock, Assignment, Call, Loop
+from psyclone.psyir.nodes import (
+    IfBlock,
+    Assignment,
+    Call,
+    Loop,
+    OMPRegionDirective,
+)
 
 from psyclone.autodiff.transformations import ADIfBlockTrans
 
@@ -71,14 +77,17 @@ class ADForwardIfBlockTrans(ADIfBlockTrans):
 
         transformed_if_body = self.transform_body(if_block.if_body, options)
         if if_block.else_body is not None:
-            transformed_else_body = self.transform_body(if_block.else_body,
-                                                        options)
+            transformed_else_body = self.transform_body(
+                if_block.else_body, options
+            )
         else:
             transformed_else_body = None
 
-        return IfBlock.create(if_block.condition.copy(),
-                              transformed_if_body,
-                              transformed_else_body)
+        return IfBlock.create(
+            if_block.condition.copy(),
+            transformed_if_body,
+            transformed_else_body,
+        )
 
     def transform_body(self, body, options=None):
         """Transforms all statements found in an if/else body.
@@ -98,21 +107,27 @@ class ADForwardIfBlockTrans(ADIfBlockTrans):
             if isinstance(node, Assignment):
                 transformed_body.extend(
                     self.routine_trans.assignment_trans.apply(node, options)
-                    )
+                )
             elif isinstance(node, Call):
                 transformed_body.extend(
                     self.routine_trans.call_trans.apply(node, options)
-                    )
+                )
             elif isinstance(node, IfBlock):
                 transformed_body.append(self.apply(node, options))
             elif isinstance(node, Loop):
                 transformed_body.append(
                     self.routine_trans.loop_trans.apply(node, options)
-                    )
+                )
+            elif isinstance(node, OMPRegionDirective):
+                transformed_body.append(
+                    self.routine_trans.omp_region_trans.apply(node, options)
+                )
             else:
-                raise NotImplementedError(f"Transformations for "
-                                          f"'{type(node).__name__}' found in "
-                                          f"IfBlock body were not implemented "
-                                          f"yet.")
+                raise NotImplementedError(
+                    f"Transformations for "
+                    f"'{type(node).__name__}' found in "
+                    f"IfBlock body were not implemented "
+                    f"yet."
+                )
 
         return transformed_body

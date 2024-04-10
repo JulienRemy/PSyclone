@@ -39,6 +39,7 @@ differentiation of PSyIR OMPRegionDirective nodes."""
 from psyclone.psyir.nodes import (
     OMPRegionDirective,
     OMPParallelDirective,
+    OMPParallelDoDirective,
     OMPDoDirective,
     Assignment,
     Call,
@@ -90,20 +91,25 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         body = omp_region.dir_body
         transformed_body = self.transform_body(body, options)
 
-        children = transformed_body + transformed_clauses
 
         # This is either an OMPDoDirective or OMPParallelDoDirective
-        if isinstance(omp_region, OMPDoDirective):
-            return type(omp_region)(
-                children=children,
+        if isinstance(omp_region, (OMPDoDirective, OMPParallelDoDirective)):
+            transformed = type(omp_region)(
+                children=transformed_body,
                 omp_schedule=omp_region.omp_schedule,
                 collapse=omp_region.collapse,
                 reprod=omp_region.reprod,
             )
+            for i, clause in enumerate(transformed_clauses):
+                transformed.children[i+1] = (clause)
+            return transformed
 
         # or an OMPParallelDirective
         # if isinstance(omp_region, OMPParallelDirective):
-        return OMPParallelDirective(children=children)
+        transformed = OMPParallelDirective(children=transformed_body)
+        for i, clause in enumerate(transformed_clauses):
+            transformed.children[i+1] = (clause)
+        return transformed
 
     def transform_clauses(self, clauses, options=None):
         """Transforms all OpenMP clauses of this OMPRegionDirective.

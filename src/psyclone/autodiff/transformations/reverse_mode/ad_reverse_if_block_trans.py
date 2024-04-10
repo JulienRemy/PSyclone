@@ -36,7 +36,13 @@
 """This module provides a Transformation for reverse-mode automatic 
 differentiation of PSyIR IfBlock nodes."""
 
-from psyclone.psyir.nodes import Assignment, Call, ArrayReference, IfBlock
+from psyclone.psyir.nodes import (
+    Assignment,
+    Call,
+    ArrayReference,
+    IfBlock,
+    OMPRegionDirective,
+)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADIfBlockTrans
@@ -162,6 +168,10 @@ class ADReverseIfBlockTrans(ADIfBlockTrans):
             elif isinstance(child, Call):
                 (recording, returning) = self.routine_trans.transform_call(
                     child, options
+                )
+            elif isinstance(child, OMPRegionDirective):
+                (recording, returning) = (
+                    self.routine_trans.omp_region_trans.apply(child, options)
                 )
             elif isinstance(child, IfBlock):
                 # Tape record the condition value first

@@ -48,6 +48,8 @@ from psyclone.psyir.nodes import (
     BinaryOperation,
     Routine,
     IntrinsicCall,
+    OMPRegionDirective,
+    OMPParallelDirective,
 )
 from psyclone.psyir.symbols import ArgumentInterface, ArrayType
 from psyclone.psyir.transformations import TransformationError
@@ -173,8 +175,22 @@ class ADReverseLoopTrans(ADLoopTrans):
                 List[:py:class:`psyclone.psyir.nodes.Loop`,
                      :py:class:`psyclone.psyir.nodes.Assignment`]
         """
-        # pylint: disable=arguments-renamed
+        # pylint: disable=arguments-renamed, import-outside-toplevel
         self.validate(loop, options)
+
+        # If this loop is within an OpenMP parallel region, the transformation
+        # to use is an instance of the derived ADReverseParallelLoopTrans class
+        if loop.ancestor(OMPParallelDirective) is not None:
+            # Import here to avoid circular dependency
+            from psyclone.autodiff.transformations import (
+                ADReverseParallelLoopTrans,
+            )
+
+            if not isinstance(self, ADReverseParallelLoopTrans):
+                parallel_loop_trans = ADReverseParallelLoopTrans(
+                    self.routine_trans
+                )
+                return parallel_loop_trans.apply(loop, options)
 
         recording = []
         returning = []
@@ -298,6 +314,11 @@ class ADReverseLoopTrans(ADLoopTrans):
             loop, arrays_to_tape_outside, options
         )
         returning_body.reverse()
+
+        if isinstance(self, ADReverseParallelLoopTrans):
+            returning_body = self.make_all_adjoint_increments_atomic(
+                loop, returning_body, options
+            )
 
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
@@ -874,6 +895,10 @@ class ADReverseLoopTrans(ADLoopTrans):
                     )
                 else:
                     (recording, returning) = self.apply(child, options)
+            elif isinstance(child, OMPRegionDirective):
+                (recording, returning) = (
+                    self.routine_trans.omp_region_trans.apply(child, options)
+                )
             else:
                 raise NotImplementedError(
                     f"Transformations for "

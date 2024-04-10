@@ -41,7 +41,8 @@ from psyclone.psyir.nodes import (
     Call,
     Assignment,
     IfBlock,
-    Loop
+    Loop,
+    OMPRegionDirective
 )
 
 from psyclone.autodiff.transformations import ADRoutineTrans
@@ -88,7 +89,8 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             ADForwardAssignmentTrans,
             ADForwardCallTrans,
             ADForwardIfBlockTrans,
-            ADForwardLoopTrans
+            ADForwardLoopTrans,
+            ADForwardOMPRegionDirectiveTrans
         )
 
         # Initialize the sub transformations
@@ -97,6 +99,7 @@ class ADForwardRoutineTrans(ADRoutineTrans):
         self.call_trans = ADForwardCallTrans(self)
         self.if_block_trans = ADForwardIfBlockTrans(self)
         self.loop_trans = ADForwardLoopTrans(self)
+        self.omp_region_trans = ADForwardOMPRegionDirectiveTrans(self)
 
     @property
     def container_trans(self):
@@ -239,6 +242,29 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             )
 
         self._loop_trans = loop_trans
+
+    @property
+    def omp_region_trans(self):
+        """Returns the ADForwardOMPRegionDirectiveTrans this instance uses.
+
+        :return: omp_region transformation, forward-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADForwardOMPRegionDirectiveTrans`
+        """
+        return self._omp_region_trans
+
+    @omp_region_trans.setter
+    def omp_region_trans(self, omp_region_trans):
+        # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
+        from psyclone.autodiff.transformations import ADForwardOMPRegionDirectiveTrans
+
+        if not isinstance(omp_region_trans, ADForwardOMPRegionDirectiveTrans):
+            raise TypeError(
+                f"Argument should be an 'ADForwardOMPRegionDirectiveTrans' "
+                f"but found '{type(omp_region_trans)}.__name__'."
+            )
+
+        self._omp_region_trans = omp_region_trans
 
     def apply(self, routine, dependent_vars, independent_vars, options=None):
         """Applies the transformation, generating the transformed routine \
@@ -440,6 +466,8 @@ class ADForwardRoutineTrans(ADRoutineTrans):
                 result = [self.if_block_trans.apply(child, options)]
             elif isinstance(child, Loop):
                 result = [self.loop_trans.apply(child, options)]
+            elif isinstance(child, OMPRegionDirective):
+                result = [self.omp_region_trans.apply(child, options)]
             else:
                 raise NotImplementedError(
                     f"Transforming a Routine child of "

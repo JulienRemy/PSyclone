@@ -39,6 +39,7 @@ differentiation of PSyIR OMPRegionDirective nodes."""
 from psyclone.psyir.nodes import (
     OMPRegionDirective,
     OMPParallelDirective,
+    OMPParallelDoDirective,
     OMPDoDirective,
     Assignment,
     Call,
@@ -55,6 +56,7 @@ from psyclone.psyir.nodes import (
 from psyclone.autodiff.transformations import ADOMPRegionDirectiveTrans
 
 # TODO: FirstPrivate, Reduction, Atomic, Barrier, etc.
+
 
 class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
     """A class for automatic differentation transformations of \
@@ -79,8 +81,8 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
 
         :return: couple composed of the recording and returning motions \
                  that correspond to the transformation of this OMP region.
-        :rtype: :py:class:`psyclone.psyir.nodes.OMPRegionDirective`, \
-                :py:class:`psyclone.psyir.nodes.OMPRegionDirective`
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Statement`], \
+                List[:py:class:`psyclone.psyir.nodes.Statement`]
         """
         self.validate(omp_region, options)
 
@@ -90,35 +92,68 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
 
         body = omp_region.dir_body
         # Transform the if body to get both motions
-        (recording_body, returning_body) = self.transform_body(
-            body, options
-        )
+        (recording_body, returning_body) = self.transform_body(body, options)
         returning_body.reverse()
 
-        recording_children = recording_body + recording_clauses
-        returning_children = returning_body + returning_clauses
-
         # This is either an OMPDoDirective or OMPParallelDoDirective
-        if isinstance(omp_region, OMPDoDirective):
-            recording = type(omp_region)(
-                children=recording_children,
+        if isinstance(omp_region, (OMPDoDirective, OMPParallelDoDirective)):
+            # In this case the directive body is only made of the loop and all
+            # offset and taping assignments need to be moved outside of it
+            for i, node in enumerate(recording_body):
+                if isinstance(node, Loop):
+                    recording_loop_index = i
+                    recording_loop = node
+                    break
+            recording_pre_loop = recording_body[:recording_loop_index]
+            if len(recording_body) >= recording_loop_index:
+                recording_post_loop = recording_body[recording_loop_index + 1 :]
+            else:
+                recording_post_loop = []
+            recording_region = type(omp_region)(
+                children=[recording_loop],
                 omp_schedule=omp_region.omp_schedule,
                 collapse=omp_region.collapse,
                 reprod=omp_region.reprod,
             )
-            returning = type(omp_region)(
-                children=returning_children,
+            for i, clause in enumerate(recording_clauses):
+                recording_region.children[i + 1] = clause
+            recording = (
+                recording_pre_loop + [recording_region] + recording_post_loop
+            )
+
+            for i, node in enumerate(returning_body):
+                if isinstance(node, Loop):
+                    returning_loop_index = i
+                    returning_loop = node
+                    break
+            returning_pre_loop = returning_body[:returning_loop_index]
+            if len(returning_body) >= returning_loop_index:
+                returning_post_loop = returning_body[returning_loop_index + 1 :]
+            else:
+                returning_post_loop = []
+            returning_region = type(omp_region)(
+                children=[returning_loop],
                 omp_schedule=omp_region.omp_schedule,
                 collapse=omp_region.collapse,
                 reprod=omp_region.reprod,
             )
+            for i, clause in enumerate(returning_clauses):
+                returning_region.children[i + 1] = clause
+            returning = (
+                returning_pre_loop + [returning_region] + returning_post_loop
+            )
+
             return recording, returning
 
         # or an OMPParallelDirective
         # if type(omp_region) is OMPParallelDirective:
-        recording = OMPParallelDirective(children=recording_children)
-        returning = OMPParallelDirective(children=returning_children)
-        return recording, returning
+        recording = OMPParallelDirective(children=returning_body)
+        returning = OMPParallelDirective(children=recording_body)
+        for i, clause in enumerate(recording_clauses):
+            recording.children[i + 1] = clause
+        for i, clause in enumerate(returning_clauses):
+            returning.children[i + 1] = clause
+        return [recording], [returning]
 
     def transform_clauses(self, clauses, options=None):
         """Transforms all OpenMP clauses of this OMPRegionDirective.
@@ -128,6 +163,7 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         :param clauses: list of OpenMP clauses.
         :type clauses: List[ \
                 Union[:py:class:`psyclone.psyir.nodes.OMPPrivateClause`, \
+                      :py:class:`psyclone.psyir.nodes.OMPFirstPrivateClause`, \
                       :py:class:`psyclone.psyir.nodes.OMPSharedClause`, \
                       :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]]
         :param options: a dictionary with options for transformations, \
@@ -141,6 +177,7 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         :return: list of transformed clauses.
         :rtype: List[Union[\
                         :py:class:`psyclone.psyir.nodes.OMPPrivateClause`,\
+                        :py:class:`psyclone.psyir.nodes.OMPFirstPrivateClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPSharedClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]]
         """
@@ -154,7 +191,7 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 clause,
                 (
                     OMPPrivateClause,
-                    #OMPFirstprivateClause,
+                    OMPFirstprivateClause,
                     OMPSharedClause,
                     OMPDefaultClause,
                 ),
@@ -190,6 +227,15 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 transformed_clauses.append(transformed_clause)
             elif isinstance(clause, OMPDefaultClause):
                 transformed_clauses.append(clause.copy())
+            elif isinstance(clause, OMPFirstprivateClause):
+                if len(clause.children) == 0:
+                    transformed_clauses.append(clause.copy())
+                else:
+                    raise NotImplementedError(
+                        "OMPFirstprivateClause with actual "
+                        "variables declared as such is not "
+                        "implemented yet."
+                    )
             else:
                 raise NotImplementedError(
                     "Only OMPPrivateClause, "
@@ -251,6 +297,10 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                     child, control_tape_ref, options
                 )
                 recording.extend(rec)
+            elif isinstance(child, Loop):
+                (recording, returning) = self.routine_trans.transform_loop(
+                    child, options
+                )
             else:
                 raise NotImplementedError(
                     f"Transformations for "

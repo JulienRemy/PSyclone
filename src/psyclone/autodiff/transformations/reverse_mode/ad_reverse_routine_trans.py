@@ -49,7 +49,8 @@ from psyclone.psyir.nodes import (
     IfBlock,
     Loop,
     Schedule,
-    DataNode
+    DataNode,
+    OMPRegionDirective,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -137,6 +138,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             ADReverseCallTrans,
             ADReverseIfBlockTrans,
             ADReverseLoopTrans,
+            ADReverseOMPRegionDirectiveTrans,
         )
 
         # Initialize the sub transformations
@@ -145,6 +147,7 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         self.call_trans = ADReverseCallTrans(self)
         self.if_block_trans = ADReverseIfBlockTrans(self)
         self.loop_trans = ADReverseLoopTrans(self)
+        self.omp_region_trans = ADReverseOMPRegionDirectiveTrans(self)
 
     @property
     def container_trans(self):
@@ -287,6 +290,31 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             )
 
         self._loop_trans = loop_trans
+
+    @property
+    def omp_region_trans(self):
+        """Returns the ADReverseOMPRegionDirectiveTrans this instance uses.
+
+        :return: omp_region transformation, reverse-mode.
+        :rtype: :py:class:`psyclone.autodiff.transformations.ADReverseOMPRegionDirectiveTrans`
+        """
+        return self._omp_region_trans
+
+    @omp_region_trans.setter
+    def omp_region_trans(self, omp_region_trans):
+        # Import here to avoid circular dependencies
+        # pylint: disable=import-outside-toplevel
+        from psyclone.autodiff.transformations import (
+            ADReverseOMPRegionDirectiveTrans,
+        )
+
+        if not isinstance(omp_region_trans, ADReverseOMPRegionDirectiveTrans):
+            raise TypeError(
+                f"Argument should be an 'ADReverseOMPRegionDirectiveTrans' "
+                f"but found '{type(omp_region_trans)}.__name__'."
+            )
+
+        self._omp_region_trans = omp_region_trans
 
     @property
     def recording(self):
@@ -1121,6 +1149,10 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 (recording, returning) = self.transform_if_block(child, options)
             elif isinstance(child, Loop):
                 (recording, returning) = self.transform_loop(child, options)
+            elif isinstance(child, OMPRegionDirective):
+                (recording, returning) = self.omp_region_trans.apply(
+                    child, options
+                )
             else:
                 raise NotImplementedError(
                     f"Transforming a Routine child of "
