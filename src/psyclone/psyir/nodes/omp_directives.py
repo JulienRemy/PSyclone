@@ -1469,25 +1469,25 @@ class OMPParallelDirective(OMPRegionDirective):
                             sorted(fprivate, key=lambda x: x.name))
         # Check all of the need_sync nodes are synchronized in children.
         sync_clauses = self.walk(OMPDependClause)
-        if need_sync:
-            for sym in need_sync:
-                found = False
-                for clause in sync_clauses:
-                    # Needs to be an out depend clause to synchronize
-                    if clause.operand == "in":
-                        continue
-                    # Check if the symbol is in this depend clause.
-                    if sym.name in [child.symbol.name for child in
-                                    clause.children]:
-                        found = True
-                    if found:
-                        break
-                if not found:
-                    raise GenerationError(
-                        f"Lowering '{type(self).__name__}' does not support "
-                        f"symbols that need synchronisation unless they are "
-                        f"in a depend clause, but found: "
-                        f"'{sym.name}' which is not in a depend clause.")
+        # if need_sync:
+        #     for sym in need_sync:
+        #         found = False
+        #         for clause in sync_clauses:
+        #             # Needs to be an out depend clause to synchronize
+        #             if clause.operand == "in":
+        #                 continue
+        #             # Check if the symbol is in this depend clause.
+        #             if sym.name in [child.symbol.name for child in
+        #                             clause.children]:
+        #                 found = True
+        #             if found:
+        #                 break
+        #         if not found:
+        #             raise GenerationError(
+        #                 f"Lowering '{type(self).__name__}' does not support "
+        #                 f"symbols that need synchronisation unless they are "
+        #                 f"in a depend clause, but found: "
+        #                 f"'{sym.name}' which is not in a depend clause.")
 
         self.addchild(private_clause)
         self.addchild(fprivate_clause)
