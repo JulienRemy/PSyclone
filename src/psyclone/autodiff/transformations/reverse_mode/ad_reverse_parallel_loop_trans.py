@@ -114,6 +114,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
         return scalar_adjoint_symbols_to_increment_atomically
 
+    # TODO: array symbol to array ref map instead
     def build_primal_array_symbol_to_read_indices_map(self, loop, options=None):
         primal_array_symbol_to_read_indices_map = dict()
 
@@ -131,6 +132,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
         return primal_array_symbol_to_read_indices_map
 
+    # TODO: array symbol to array ref map instead
     def build_adjoint_array_symbol_to_increment_indices_map(
         self, loop, options=None
     ):
@@ -246,7 +248,9 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         nested_loop_variables = self.nested_loops_variables(outer_loop)
         nested_loop_variable_names = [var.name for var in nested_loop_variables]
 
+        # TODO, would be better to associate {array symbol: [original array references]} and then proceed from there?
         # TODO, keep track of new indices to new bounds link
+        # put (the array symbol and original indices) OR (the original array reference) in new_vars_and_bounds ?
         adjoint_array_symbol_to_gather_like_indices_map = dict()
         new_vars_and_bounds = []
 
@@ -307,6 +311,9 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                 new_intervals.append(Interval(*sympy_writer([start, stop])))
             var_to_sympy_intervals_map[var] = new_intervals
 
+        # TODO: this and union should log which indices are being excluded for which ARRAY
+        # - in the intersect case so they can be computed outside
+        # - in the union case so they can be made into branches inside
         # Intersect
         var_to_sympy_interval_intersection = dict()
         for var, new_intervals in var_to_sympy_intervals_map.items():
