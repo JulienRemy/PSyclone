@@ -79,6 +79,9 @@ from psyclone.autodiff.transformations.reverse_mode.ad_reverse_loop_trans import
 from psyclone.autodiff.transformations.reverse_mode.ad_reverse_omp_region_directive_trans import (
     ADReverseOMPRegionDirectiveTrans,
 )
+from psyclone.autodiff.transformations.reverse_mode.ad_reverse_parallel_loop_trans import (
+    ADReverseParallelLoopTrans,
+)
 
 from psyclone.autodiff.transformations.forward_mode.ad_forward_container_trans import (
     ADForwardContainerTrans,
@@ -128,6 +131,7 @@ __all__ = [
     "ADReverseIfBlockTrans",
     "ADReverseLoopTrans",
     "ADReverseOMPRegionDirectiveTrans",
+    "ADReverseParallelLoopTrans",
     # Forward-mode transformations
     "ADForwardContainerTrans",
     "ADForwardRoutineTrans",
