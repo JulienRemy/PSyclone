@@ -175,16 +175,18 @@ class ADReverseLoopTrans(ADLoopTrans):
                 List[:py:class:`psyclone.psyir.nodes.Loop`,
                      :py:class:`psyclone.psyir.nodes.Assignment`]
         """
+        # Import here to avoid circular dependency
+        from psyclone.autodiff.transformations import (
+            ADReverseParallelLoopTrans,
+        )
+
         # pylint: disable=arguments-renamed, import-outside-toplevel
         self.validate(loop, options)
 
         # If this loop is within an OpenMP parallel region, the transformation
         # to use is an instance of the derived ADReverseParallelLoopTrans class
         if loop.ancestor(OMPParallelDirective) is not None:
-            # Import here to avoid circular dependency
-            from psyclone.autodiff.transformations import (
-                ADReverseParallelLoopTrans,
-            )
+
 
             if not isinstance(self, ADReverseParallelLoopTrans):
                 parallel_loop_trans = ADReverseParallelLoopTrans(
