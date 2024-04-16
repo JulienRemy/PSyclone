@@ -317,10 +317,11 @@ class ADReverseLoopTrans(ADLoopTrans):
         )
         returning_body.reverse()
 
-        if isinstance(self, ADReverseParallelLoopTrans):
-            returning_body = self.make_all_adjoint_increments_atomic(
-                loop, returning_body, options
-            )
+        # TODO: option
+        # if isinstance(self, ADReverseParallelLoopTrans):
+        #     returning_body = self.make_all_adjoint_increments_atomic(
+        #         loop, returning_body, options
+        #     )
 
         # Get the loop start, stop and step reversed
         rev_start, rev_stop, rev_step = self.reverse_bounds(loop, options)
@@ -342,6 +343,9 @@ class ADReverseLoopTrans(ADLoopTrans):
             rev_step,
             returning_body,
         )
+
+        if isinstance(self, ADReverseParallelLoopTrans):
+            self.transform_scatter_adjoints_to_gather_adjoints(returning_loop, loop.ancestor(Routine).symbol_table)
 
         # verbose option adds comments to the returning do loop
         # specifying the original loop bounds
