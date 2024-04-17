@@ -341,13 +341,18 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                         break
             # is_scatter_like[adjoint_array_symbol] = scatter
 
-        scatters_gathers_and_product_intervals_list = []
+        #scatters_gathers_and_product_intervals_list = []
+        scatters_index_subtitution_maps_and_product_intervals_list = []
+
+        identity_index_substitution_map = {loop_var: Reference(loop_var) for loop_var in loop_variables}
+
         for (
             adjoint_array_symbol,
             original_assignments,
         ) in adjoint_array_symbol_to_assignments_map.items():
             if adjoint_array_symbol in scatter_like_symbols_list:
-                transformed_assignments = []
+                #transformed_assignments = []
+                substitution_indices_maps_list = []
                 transformed_product_intervals = []
                 original_write_indices_list = (
                     adjoint_array_symbol_to_write_indices_list_map[
@@ -357,18 +362,20 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                 for original_write_indices, original_assignment in zip(
                     original_write_indices_list, original_assignments
                 ):
-                    transformed_write_indices = []
+                    # transformed_write_indices = []
                     substitution_indices_map = dict()
                     transformed_bounds_map = dict()
                     for original_write_index in original_write_indices:
                         if isinstance(original_write_index, Literal):
-                            transformed_write_indices.append(
-                                original_write_index.copy()
-                            )
+                            pass
+                            # transformed_write_indices.append(
+                            #     original_write_index.copy()
+                            # )
                         elif isinstance(original_write_index, Reference):
-                            transformed_write_indices.append(
-                                original_write_index.copy()
-                            )
+                            pass
+                            # transformed_write_indices.append(
+                            #     original_write_index.copy()
+                            # )
                             # no need to transform the bound even if a ref to a loop var
                         elif isinstance(original_write_index, BinaryOperation):
                             refs_symbols_in_op = [
@@ -379,9 +386,10 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                                 refs_symbols_in_op
                             )
                             if len(loops_vars_in_op) == 0:
-                                transformed_write_indices.append(
-                                    original_write_index.copy()
-                                )
+                                pass
+                                # transformed_write_indices.append(
+                                #     original_write_index.copy()
+                                # )
                             elif len(loops_vars_in_op) > 1:
                                 raise NotImplementedError(
                                     "Only binary operations on a single loop variable are implemented."
@@ -423,9 +431,9 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                                     original_write_index.operator
                                     is BinaryOperation.Operator.ADD
                                 ):
-                                    transformed_write_indices.append(
-                                        Reference(loop_var)
-                                    )
+                                    # transformed_write_indices.append(
+                                    #     Reference(loop_var)
+                                    # )
                                     substitution_indices_map[loop_var] = sub(
                                         Reference(loop_var), other_operand.copy()
                                     )
@@ -437,9 +445,9 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                                     original_write_index.operator
                                     is BinaryOperation.Operator.SUB
                                 ):
-                                    transformed_write_indices.append(
-                                        Reference(loop_var)
-                                    )
+                                    # transformed_write_indices.append(
+                                    #     Reference(loop_var)
+                                    # )
                                     substitution_indices_map[loop_var] = add(
                                         Reference(loop_var), other_operand.copy()
                                     )
@@ -484,61 +492,69 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                         sympy_transformed_product_interval
                     )
 
-                    transformed_lhs = ArrayReference.create(
-                        original_assignment.lhs.symbol,
-                        transformed_write_indices,
-                    )
+                    substitution_indices_maps_list.append(substitution_indices_map)
 
-                    # Still to transform the rhs
-                    transformed_assignment = Assignment.create(
-                        transformed_lhs, original_assignment.rhs.copy()
-                    )
+                    # transformed_lhs = ArrayReference.create(
+                    #     original_assignment.lhs.symbol,
+                    #     transformed_write_indices,
+                    # )
 
-                    for ref in transformed_assignment.rhs.walk(Reference):
-                        if ref.symbol in substitution_indices_map:
-                            ref.replace_with(
-                                substitution_indices_map[ref.symbol].copy()
-                            )
+                    # # Still to transform the rhs
+                    # transformed_assignment = Assignment.create(
+                    #     transformed_lhs, original_assignment.rhs.copy()
+                    # )
 
-                    transformed_assignments.append(transformed_assignment)
+                    # for ref in transformed_assignment.rhs.walk(Reference):
+                    #     if ref.symbol in substitution_indices_map:
+                    #         ref.replace_with(
+                    #             substitution_indices_map[ref.symbol].copy()
+                    #         )
 
-                    print("Transformed assignment: ", transformed_assignment.debug_string())
+                    # transformed_assignments.append(transformed_assignment)
+
+                    # print("Transformed assignment: ", transformed_assignment.debug_string())
                     print("Transformed bounds: ", [[bound.debug_string() for bound in bounds] for bounds in transformed_bounds_list])
                     print("Transformed interval: ", sympy_transformed_product_interval)
 
-                for (
-                        original_assignment,
-                        transformed_assignment,
-                        transformed_product_interval,
-                    ) in zip(
-                        original_assignments,
-                        transformed_assignments,
-                        transformed_product_intervals,
-                    ):
-                    scatters_gathers_and_product_intervals_list.append([original_assignment,
-                        transformed_assignment,
-                        transformed_product_interval])
+                # for (
+                #         original_assignment,
+                #         transformed_assignment,
+                #         transformed_product_interval,
+                #     ) in zip(
+                #         original_assignments,
+                #         transformed_assignments,
+                #         transformed_product_intervals,
+                #     ):
+                #     scatters_gathers_and_product_intervals_list.append([original_assignment,
+                #         transformed_assignment,
+                #         transformed_product_interval])
+                    
+                for (original_assignment, index_substitution_map, product_interval) in zip(original_assignments, substitution_indices_maps_list, transformed_product_intervals):
+                    scatters_index_subtitution_maps_and_product_intervals_list.append([original_assignment, index_substitution_map, product_interval])
 
             else:
+                # for original_assignment in original_assignments:
+                #     scatters_gathers_and_product_intervals_list.append([
+                #         original_assignment,
+                #         original_assignment.copy(),
+                #         original_product_interval,
+                #     ])
+
                 for original_assignment in original_assignments:
-                    scatters_gathers_and_product_intervals_list.append([
-                        original_assignment,
-                        original_assignment.copy(),
-                        original_product_interval,
-                    ])
+                    scatters_index_subtitution_maps_and_product_intervals_list.append([original_assignment, identity_index_substitution_map, original_product_interval])
 
         product_intervals = []
+        # for (
+        #     _,
+        #     _,
+        #     product_interval,
+        # ) in scatters_gathers_and_product_intervals_list:
+        #     product_intervals.append(product_interval)
         for (
             _,
             _,
             product_interval,
-        ) in scatters_gathers_and_product_intervals_list:
-            product_intervals.append(product_interval)
-        for (
-            _,
-            _,
-            product_interval,
-        ) in scatters_gathers_and_product_intervals_list:
+        ) in scatters_index_subtitution_maps_and_product_intervals_list:
             product_intervals.append(product_interval)
 
         product_intervals_intersection = product_intervals[0]
@@ -580,24 +596,47 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
         main_gather_loop_vars_and_bounds = self.nested_loops_variables_and_bounds(main_gather_loop)
 
-        product_interval_to_scatters_and_gathers_map = dict()
-        for scatter, gather, product_interval in scatters_gathers_and_product_intervals_list:
-            if product_interval in product_interval_to_scatters_and_gathers_map:
-                product_interval_to_scatters_and_gathers_map[product_interval].append([scatter, gather])
-            else:
-                product_interval_to_scatters_and_gathers_map[product_interval] = [[scatter, gather]]
-        for scatter_and_gathers in product_interval_to_scatters_and_gathers_map.values():
-            scatter_and_gathers.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
+        # product_interval_to_scatters_and_gathers_map = dict()
+        # for scatter, gather, product_interval in scatters_gathers_and_product_intervals_list:
+        #     if product_interval in product_interval_to_scatters_and_gathers_map:
+        #         product_interval_to_scatters_and_gathers_map[product_interval].append([scatter, gather])
+        #     else:
+        #         product_interval_to_scatters_and_gathers_map[product_interval] = [[scatter, gather]]
+        # for scatter_and_gathers in product_interval_to_scatters_and_gathers_map.values():
+        #     scatter_and_gathers.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
 
+        product_interval_to_scatters_and_index_substitutions_map = dict()
+        for scatter, index_substitution_map, product_interval in scatters_index_subtitution_maps_and_product_intervals_list:
+            if product_interval in product_interval_to_scatters_and_index_substitutions_map:
+                product_interval_to_scatters_and_index_substitutions_map[product_interval].append([scatter, index_substitution_map])
+            else:
+                product_interval_to_scatters_and_index_substitutions_map[product_interval] = [[scatter, index_substitution_map]]
+        for scatter_and_subst in product_interval_to_scatters_and_index_substitutions_map.values():
+            scatter_and_subst.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
+
+        original_inner_loop = main_gather_loop
+        while isinstance(original_inner_loop.loop_body.children[0], Loop):
+            original_inner_loop = original_inner_loop.loop_body.children[0]
        
-        mode = "no_branches"
+        mode = "branches"
+
+        all_scatters = [elem[0] for elem in scatters_index_subtitution_maps_and_product_intervals_list]
+        scalar_adjoint_symbols_to_increment_atomically = self.list_scalar_adjoint_symbols_to_increment_atomically(advancing_outer_loop, options)
 
         # Union and branches mode
         if mode == "branches":
-            new_main_gather_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union)
-            assert len(new_main_gather_loop_bounds) == 1
-            assert len(new_main_gather_loop_bounds[0]) == len(main_gather_loop_vars_and_bounds)
-            for [_, old_start, old_stop, _], [new_start, new_stop] in zip(main_gather_loop_vars_and_bounds, new_main_gather_loop_bounds[0]):
+
+            new_loop = main_gather_loop.copy()
+            new_inner_loop = new_loop
+            while isinstance(new_inner_loop.loop_body.children[0], Loop):
+                new_inner_loop = new_inner_loop.loop_body.children[0]
+            new_inner_loop.loop_body.pop_all_children()
+            new_loop_vars_and_bounds = self.nested_loops_variables_and_bounds(new_loop)
+
+            new_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union)
+            assert len(new_loop_bounds) == 1
+            assert len(new_loop_bounds[0]) == len(new_loop_vars_and_bounds)
+            for [_, old_start, old_stop, _], [new_start, new_stop] in zip(new_loop_vars_and_bounds, new_loop_bounds[0]):
                 old_start.replace_with(sympy_reader.psyir_from_expression(new_start, symbol_table))
                 old_stop.replace_with(sympy_reader.psyir_from_expression(new_stop, symbol_table))
 
@@ -614,18 +653,20 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
             # product_interval_to_scatters_and_gathers_map[product_intervals_intersection] = scatters_and_gathers_in_intersection
 
-            scatters_to_put_in_branches = [elem[0] for elem in scatters_gathers_and_product_intervals_list]
-
             # debug
             union_check = EmptySet()
 
+            #######################################################################################################
+            # TODO: use product_interval => scatters and subst
+            # TODO: deal with the original interval and complements of the product interval in it, this is WRONG!
+            #######################################################################################################
             for assignment in main_gather_loop.walk(Assignment):
-                if assignment in scatters_to_put_in_branches:
-                    index = scatters_to_put_in_branches.index(assignment)
-                    scatter, gather, product_interval = scatters_gathers_and_product_intervals_list[index]
+                if assignment in all_scatters:
+                    index = all_scatters.index(assignment)
+                    scatter, index_substitution_map, product_interval = scatters_index_subtitution_maps_and_product_intervals_list[index]
 
                     print("Product interval:", product_interval)
-                    print("\t scatter => gather :", scatter.debug_string() + " => " + gather.debug_string())
+                    print("\t scatter:", scatter.debug_string())
                     # debug
                     union_check = EmptySet()
 
@@ -667,17 +708,52 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                             else:
                                 if_condition = BinaryOperation.create(BinaryOperation.Operator.AND, if_condition, loop_var_condition)
 
-                        if_block = IfBlock.create(if_condition, [gather.copy()])
-                        scatter.replace_with(if_block)
+                        # all_scatters_to_substitute = [elem[0] for elem in scatters_and_substs]
+
+                        if_block = IfBlock.create(if_condition, [])
+
+                        for statement in original_inner_loop.loop_body.children:
+                            if not isinstance(statement, Assignment):
+                                print(statement.debug_string())
+                                raise NotImplementedError("")
+                            # Use gathers where they should be in the loop
+                            if statement == scatter:
+                                if_block.if_body.addchild(scatter.copy())
+                            # If no gather to use
+                            else:
+                                # Don't copy other scatters
+                                if statement in all_scatters:
+                                    pass
+                                # If not a scatter
+                                else:
+                                    # If a scalar adjoint increment, don't copy unless this is the original interval
+                                    if statement.lhs.symbol in scalar_adjoint_symbols_to_increment_atomically:
+                                        if product_interval == original_product_interval:
+                                            if_block.if_body.addchild(statement.copy())
+                                        else:
+                                            pass
+                                    # Otherwise copy
+                                    else:
+                                        if_block.if_body.addchild(statement.copy())
+
+                        new_inner_loop.loop_body.addchild(if_block)
+
+                        # TODO: go through original statements, as for intersection !!!
+                        
+
+                        # Perform substitutions here
+                        for ref in if_block.if_body.walk(Reference):
+                            if ref.symbol in index_substitution_map:
+                                ref.replace_with(index_substitution_map[ref.symbol].copy())
 
             print("Union:", product_intervals_union)
             print("Union check:", union_check)
 
-            print(self.make_scalar_adjoint_increments_atomic(advancing_outer_loop, inner_gather_loop.loop_body.children, options))
+            print(self.make_scalar_adjoint_increments_atomic(advancing_outer_loop, new_inner_loop.loop_body.children, options))
 
-            print("Loop with branches and scalar atomics is: ", main_gather_loop.debug_string())
+            print("Loop with branches and scalar atomics is: ", new_loop.debug_string())
 
-            return main_gather_loop
+            return new_loop
 
 
         # Intersection mode
@@ -726,9 +802,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
             # returning_outer_loop.detach()
 
-            all_scatters = [elem[0] for elem in scatters_gathers_and_product_intervals_list]
-            scalar_adjoint_symbols_to_increment_atomically = self.list_scalar_adjoint_symbols_to_increment_atomically(advancing_outer_loop, options)
-
             gather_other_statements = []
 
             new_main_gather_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_intersection)
@@ -742,9 +815,16 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
             print("now is ", main_gather_loop.debug_string())
 
             new_loops = []
-            for product_interval, scatters_and_gathers in product_interval_to_scatters_and_gathers_map.items():
+            for product_interval, scatters_and_substs in product_interval_to_scatters_and_index_substitutions_map.items():
+
+                maps = [subst_map for _, subst_map in scatters_and_substs]
+                if len(maps) > 1:
+                    for map in maps[1:]:
+                        assert maps[0] == map
+                substitution_map = scatters_and_substs[0][1]
+
                 print("Product interval:", product_interval)
-                print("\t scatters => gathers :", [scatter.debug_string() + " => " + gather.debug_string() for scatter, gather in scatters_and_gathers])
+                print("\t scatters :", [scatter.debug_string() for scatter, _ in scatters_and_substs])
                 # debug
                 union_check = EmptySet()
 
@@ -783,11 +863,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                     # debug
                     union_check = Union(union_check, gather_indices)
 
-                    all_scatters_to_substitute = [elem[0] for elem in scatters_and_gathers]
-
-                    original_inner_loop = main_gather_loop
-                    while isinstance(original_inner_loop.loop_body.children[0], Loop):
-                        original_inner_loop = original_inner_loop.loop_body.children[0]
+                    all_scatters_to_substitute = [elem[0] for elem in scatters_and_substs]
                     
                     for inner_loop in inner_loops:
                         for statement in original_inner_loop.loop_body.children:
@@ -796,9 +872,9 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                             # Use gathers where they should be in the loop
                             if statement in all_scatters_to_substitute:
                                 index = all_scatters_to_substitute.index(statement)
-                                scatter, gather = scatters_and_gathers[index]
+                                scatter, _ = scatters_and_substs[index]
                                 assert scatter == statement
-                                inner_loop.loop_body.addchild(gather.copy())
+                                inner_loop.loop_body.addchild(scatter.copy())
                             # If no gather to use
                             else:
                                 # Don't copy other scatters
@@ -812,6 +888,10 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                                     # Otherwise copy
                                     else:
                                         inner_loop.loop_body.addchild(statement.copy())
+
+                        for ref in inner_loop.walk(Reference):
+                            if ref.symbol in substitution_map:
+                                ref.replace_with(substitution_map[ref.symbol].copy())
 
                     # for scatter, gather in scatters_and_gathers:
                     #     scatter.detach()
