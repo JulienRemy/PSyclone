@@ -54,7 +54,7 @@ from psyclone.psyir.nodes import (
     OMPReductionClause,
     Literal,
 )
-from psyclone.psyir.symbols import ArgumentInterface, ArrayType
+from psyclone.psyir.symbols import ArgumentInterface, ArrayType, ScalarType
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADReverseLoopTrans
@@ -278,13 +278,14 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         return adjoint_array_symbol_to_assignments_map
 
     def transform_scatter_adjoints_to_gather_adjoints(
-        self, returning_outer_loop, symbol_table, options=None
+        self, advancing_outer_loop, returning_outer_loop, options=None
     ):
-        from sympy.sets.sets import Interval, ProductSet, Union
+        from sympy.sets.sets import Interval, ProductSet, Union, EmptySet
         from psyclone.psyir.backend.sympy_writer import SymPyWriter, SymPyReader
 
         sympy_writer = SymPyWriter()
         sympy_reader = SymPyReader(sympy_writer)
+        symbol_table = advancing_outer_loop.ancestor(Routine).symbol_table
 
         # For debug
         original_loop = returning_outer_loop.copy()
@@ -295,15 +296,15 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
         loop_variables = []
         psyir_original_bounds = []
-        sympy_original_intervals = []
+        original_intervals = []
         for var, start, stop, step in returning_loops_vars_and_bounds:
             psyir_original_bounds.append([stop, start])
-            sympy_original_intervals.append(
+            original_intervals.append(
                 Interval(*sympy_writer([stop, start]))
             )
             loop_variables.append(var)
 
-        sympy_original_product_interval = ProductSet(*sympy_original_intervals)
+        original_product_interval = ProductSet(*original_intervals)
 
         adjoint_array_symbol_to_assignments_map = (
             self.build_adjoint_array_symbol_to_assignments_map(
@@ -339,7 +340,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                         break
             # is_scatter_like[adjoint_array_symbol] = scatter
 
-        symbol_to_scatters_gathers_and_product_intervals_map = dict()
+        scatters_gathers_and_product_intervals_list = []
         for (
             adjoint_array_symbol,
             original_assignments,
@@ -504,15 +505,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                     print("Transformed bounds: ", [[bound.debug_string() for bound in bounds] for bounds in transformed_bounds_list])
                     print("Transformed interval: ", sympy_transformed_product_interval)
 
-                symbol_to_scatters_gathers_and_product_intervals_map[
-                    adjoint_array_symbol
-                ] = [
-                    [
-                        original_assignment,
-                        transformed_assignment,
-                        transformed_product_interval,
-                    ]
-                    for (
+                for (
                         original_assignment,
                         transformed_assignment,
                         transformed_product_interval,
@@ -520,31 +513,26 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                         original_assignments,
                         transformed_assignments,
                         transformed_product_intervals,
-                    )
-                ]
+                    ):
+                    scatters_gathers_and_product_intervals_list.append([original_assignment,
+                        transformed_assignment,
+                        transformed_product_interval])
 
             else:
-                symbol_to_scatters_gathers_and_product_intervals_map[
-                    adjoint_array_symbol
-                ] = [
-                    [
+                for original_assignment in original_assignments:
+                    scatters_gathers_and_product_intervals_list.append([
                         original_assignment,
                         original_assignment.copy(),
-                        sympy_original_product_interval,
-                    ]
-                    for original_assignment in original_assignments
-                ]
+                        original_product_interval,
+                    ])
 
         product_intervals = []
         for (
-            scatters_gathers_and_product_intervals
-        ) in symbol_to_scatters_gathers_and_product_intervals_map.values():
-            for (
-                _,
-                _,
-                product_interval,
-            ) in scatters_gathers_and_product_intervals:
-                product_intervals.append(product_interval)
+            _,
+            _,
+            product_interval,
+        ) in scatters_gathers_and_product_intervals_list:
+            product_intervals.append(product_interval)
 
         product_intervals_intersection = product_intervals[0]
         product_intervals_union = product_intervals[0]
@@ -574,17 +562,160 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         print("Intersection:", product_intervals_intersection)
         print("Union:", product_intervals_union)
         print("Intersection to bounds:", self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_intersection))
+        print("Union to bounds: ", self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union))
 
-        
+
         main_gather_loop = returning_outer_loop
-        # returning_outer_loop.detach()
-        gather_other_statements = []
+        inner_gather_loop = main_gather_loop
+        while isinstance(inner_gather_loop.loop_body.children[0], Loop):
+            inner_gather_loop = inner_gather_loop.loop_body.children[0]
 
         main_gather_loop_vars_and_bounds = self.nested_loops_variables_and_bounds(main_gather_loop)
 
+        product_interval_to_scatters_and_gathers_map = dict()
+        for scatter, gather, product_interval in scatters_gathers_and_product_intervals_list:
+            if product_interval in product_interval_to_scatters_and_gathers_map:
+                product_interval_to_scatters_and_gathers_map[product_interval].append([scatter, gather])
+            else:
+                product_interval_to_scatters_and_gathers_map[product_interval] = [[scatter, gather]]
+        for scatter_and_gathers in product_interval_to_scatters_and_gathers_map.values():
+            scatter_and_gathers.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
+
+        # Union mode
+        mode = "branches"
+        if mode == "branches":
+            new_main_gather_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union)
+            assert len(new_main_gather_loop_bounds) == 1
+            assert len(new_main_gather_loop_bounds[0]) == len(main_gather_loop_vars_and_bounds)
+            for [_, old_start, old_stop, _], [new_start, new_stop] in zip(main_gather_loop_vars_and_bounds, new_main_gather_loop_bounds[0]):
+                old_start.replace_with(sympy_reader.psyir_from_expression(new_start, symbol_table))
+                old_stop.replace_with(sympy_reader.psyir_from_expression(new_stop, symbol_table))
+
+            print("loop was ", original_loop.debug_string())
+            print("now is ", main_gather_loop.debug_string())
+
+            # scatters_and_gathers_in_intersection = []
+            # gathers_in_intersection = []
+            # for scatters_and_gathers in product_interval_to_scatters_and_gathers_map.values():
+            #     for scatter, gather in scatters_and_gathers:
+            #         if gather not in gathers_in_intersection:
+            #             scatters_and_gathers_in_intersection.append([scatter, gather])
+            #             gathers_in_intersection.append(gather)
+
+            # product_interval_to_scatters_and_gathers_map[product_intervals_intersection] = scatters_and_gathers_in_intersection
+
+            scatters_to_put_in_branches = [elem[0] for elem in scatters_gathers_and_product_intervals_list]
+
+            # debug
+            union_check = EmptySet()
+
+            for assignment in main_gather_loop.walk(Assignment):
+                if assignment in scatters_to_put_in_branches:
+                    index = scatters_to_put_in_branches.index(assignment)
+                    scatter, gather, product_interval = scatters_gathers_and_product_intervals_list[index]
+
+                    print("Product interval:", product_interval)
+                    print("\t scatter => gather :", scatter.debug_string() + " => " + gather.debug_string())
+                    # debug
+                    union_check = EmptySet()
+
+                    if product_intervals_union == product_interval:
+                        union_check = Union(union_check, product_interval)
+                    else:
+                        # if product_interval == product_intervals_intersection:
+                        #     gather_indices = product_intervals_intersection
+                        # else:
+                            #gather_indices = product_intervals_intersection.complement(product_interval)
+                        gather_indices = product_interval
+                        union_check = Union(union_check, gather_indices)
+
+                        if isinstance(gather_indices, ProductSet):
+                            nested_loops_bounds_list = self.sympy_product_set_to_nested_loops_bounds_list(gather_indices)
+                        else:
+                            raise NotImplementedError("")
+                        
+                        assert len(nested_loops_bounds_list) == 1
+                        nested_loops_bounds = nested_loops_bounds_list[0]
+                        
+                        if_condition = None
+                        for i, (single_loop_bounds, old_loop_var_and_bounds) in enumerate(zip(nested_loops_bounds, returning_loops_vars_and_bounds)):
+                            loop_var, _, _, step = old_loop_var_and_bounds
+
+                            new_start, new_stop = single_loop_bounds
+                            if new_start == new_stop:
+                                loop_value = sympy_reader.psyir_from_expression(new_start, symbol_table)
+                                loop_var_condition = BinaryOperation.create(BinaryOperation.Operator.EQ, Reference(loop_var), loop_value)
+                            else:
+                                new_start = sympy_reader.psyir_from_expression(new_start, symbol_table)
+                                new_stop = sympy_reader.psyir_from_expression(new_stop, symbol_table)
+                                le = BinaryOperation.create(BinaryOperation.Operator.LE, Reference(loop_var), new_start)
+                                ge = BinaryOperation.create(BinaryOperation.Operator.GE, Reference(loop_var), new_stop)
+                                loop_var_condition = BinaryOperation.create(BinaryOperation.Operator.AND, le, ge)
+
+                            if i == 0:
+                                if_condition = loop_var_condition
+                            else:
+                                if_condition = BinaryOperation.create(BinaryOperation.Operator.AND, if_condition, loop_var_condition)
+
+                        if_block = IfBlock.create(if_condition, [gather.copy()])
+                        scatter.replace_with(if_block)
+
+            print("Union:", product_intervals_union)
+            print("Union check:", union_check)
+
+            print(self.make_scalar_adjoint_increments_atomic(advancing_outer_loop, inner_gather_loop.loop_body.children, options))
+
+            print("Loop with branches and scalar atomics is: ", main_gather_loop.debug_string())
+
+            return main_gather_loop
+
+
         # Intersection mode
-        mode = "no_branches"
+        #mode = "no_branches"
         if mode == "no_branches":
+
+            # Only keep the scalar adjoints increments in the main gather loop
+            scalar_adjoints_atomic_loop = returning_outer_loop.copy()
+            inner_loop = scalar_adjoints_atomic_loop
+            while isinstance(inner_loop.loop_body.children[0], Loop):
+                inner_loop = inner_loop.loop_body.children[0]
+            
+            scalar_adjoints_symbols_list = []
+            for assignment in original_loop.walk(Assignment):
+                ref = assignment.lhs
+                if not isinstance(ref, ArrayReference) and isinstance(ref.datatype, ScalarType) and ref.symbol in self.routine_trans.data_symbol_differential_map.values():
+                    scalar_adjoints_symbols_list.append(ref.symbol)
+            scalar_adjoints_symbols_names_list = [symbol.name for symbol in scalar_adjoints_symbols_list]
+            print("scalar_adjoints_symbols_names_list:", scalar_adjoints_symbols_names_list)
+            nodes_to_detach = []
+            for node in inner_loop.loop_body.children:
+                print("found node ", node.debug_string())
+                if not isinstance(node, Assignment):
+                    raise NotImplementedError("")
+                if node.lhs.symbol.name not in scalar_adjoints_symbols_names_list:
+                    nodes_to_detach.append(node)
+            for node in nodes_to_detach:
+                node.detach()
+            
+
+
+            # Detach the scalar adjoints increments from the main gather loop
+            inner_loop = main_gather_loop
+            while isinstance(inner_loop.loop_body.children[0], Loop):
+                inner_loop = inner_loop.loop_body.children[0]
+            nodes_to_detach = []
+            for node in inner_loop.loop_body.children:
+                if not isinstance(node, Assignment):
+                    raise NotImplementedError("")
+                if node.lhs.symbol.name in scalar_adjoints_symbols_names_list:
+                    nodes_to_detach.append(node)
+            for node in nodes_to_detach:
+                node.detach()
+
+
+            # returning_outer_loop.detach()
+            gather_other_statements = []
+
             new_main_gather_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_intersection)
             assert len(new_main_gather_loop_bounds) == 1
             assert len(new_main_gather_loop_bounds[0]) == len(main_gather_loop_vars_and_bounds)
@@ -595,55 +726,65 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
             print("loop was ", original_loop.debug_string())
             print("now is ", main_gather_loop.debug_string())
 
-            for scatters_gathers_and_product_intervals in symbol_to_scatters_gathers_and_product_intervals_map.values():
-                # Debug check
-                union_check = product_intervals_intersection
-                for scatter, gather, product_interval in scatters_gathers_and_product_intervals:
-                    if product_intervals_intersection == product_interval:
-                        continue
+
+            new_loops = []
+            for product_interval, scatters_and_gathers in product_interval_to_scatters_and_gathers_map.items():
+                print("Product interval:", product_interval)
+                print("\t scatters => gathers :", [scatter.debug_string() + " => " + gather.debug_string() for scatter, gather in scatters_and_gathers])
+                # debug
+                union_check = EmptySet()
+
+                if product_intervals_intersection == product_interval:
+                    union_check = Union(union_check, product_interval)
+                else:
+                    gather_indices = product_intervals_intersection.complement(product_interval)
+
+                    if isinstance(gather_indices, Union):
+                        nested_loops_bounds_list = self.sympy_union_to_disjunction(gather_indices)
+                    elif isinstance(gather_indices, ProductSet):
+                        nested_loops_bounds_list = self.sympy_product_set_to_nested_loops_bounds_list(gather_indices)
                     else:
+                        raise NotImplementedError("")
+                    
+                    inner_loops = []
+                    for nested_loops_bounds in nested_loops_bounds_list:
+                        nested_loop = None
+                        inner_loop = None
+                        for i, (single_loop_bounds, old_loop_var_and_bounds) in enumerate(zip(nested_loops_bounds, returning_loops_vars_and_bounds)):
+                            loop_var, _, _, step = old_loop_var_and_bounds
+                            # TODO: no loop for single value
+                            new_start, new_stop = single_loop_bounds
+                            new_start = sympy_reader.psyir_from_expression(new_start, symbol_table)
+                            new_stop = sympy_reader.psyir_from_expression(new_stop, symbol_table)
+                            new_loop = Loop.create(loop_var, new_start, new_stop, step.copy(), [])
+                            if i == 0:
+                                nested_loop = new_loop
+                                inner_loop = new_loop
+                            else:
+                                inner_loop.loop_body.addchild(new_loop)
+                                inner_loop = new_loop
+                        inner_loops.append(inner_loop)
+                        new_loops.append(nested_loop)
+
+                    # debug
+                    union_check = Union(union_check, gather_indices)
+                    for scatter, gather in scatters_and_gathers:
                         scatter.detach()
-
-                        gather_values_outside_intersection = product_intervals_intersection.complement(product_interval)
-
-                        # debug
-                        union_check = Union(union_check, gather_values_outside_intersection)
-
-                        if isinstance(gather_values_outside_intersection, Union):
-                            nested_loops_bounds_list = self.sympy_union_to_disjunction(gather_values_outside_intersection)
-                        elif isinstance(gather_values_outside_intersection, ProductSet):
-                            nested_loops_bounds_list = self.sympy_product_set_to_nested_loops_bounds_list(gather_values_outside_intersection)
-                        else:
-                            raise NotImplementedError("")
                         
-                        new_loops = []
-                        for nested_loops_bounds in nested_loops_bounds_list:
-                            nested_loop = None
-                            inner_loop = None
-                            for i, (single_loop_bounds, old_loop_var_and_bounds) in enumerate(zip(nested_loops_bounds, returning_loops_vars_and_bounds)):
-                                loop_var, _, _, step = old_loop_var_and_bounds
-                                # TODO: no loop for single value
-                                new_start, new_stop = single_loop_bounds
-                                new_start = sympy_reader.psyir_from_expression(new_start, symbol_table)
-                                new_stop = sympy_reader.psyir_from_expression(new_stop, symbol_table)
-                                new_loop = Loop.create(loop_var, new_start, new_stop, step.copy(), [])
-                                if i == 0:
-                                    nested_loop = new_loop
-                                    inner_loop = new_loop
-                                else:
-                                    inner_loop.loop_body.addchild(new_loop)
-                                    inner_loop = new_loop
+                        for inner_loop in inner_loops:
                             inner_loop.loop_body.addchild(gather.copy())
-                            new_loops.append(nested_loop)
 
-                        gather_other_statements.extend(new_loops)
+            gather_other_statements.extend(new_loops)
 
-                # assert union_check == product_intervals_union
+            print("Union:", product_intervals_union)
+            print("Union check:", union_check)
 
             print("Other loops and statements:")
             statements_strings = [statement.debug_string() for statement in gather_other_statements]
             for string in statements_strings:
                 print(string)
+
+            print("Remaining scalar atomic loop:", scalar_adjoints_atomic_loop.debug_string())
 
 
     def sympy_finite_set_to_value(self, sympy_finite_set):

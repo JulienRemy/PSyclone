@@ -344,9 +344,6 @@ class ADReverseLoopTrans(ADLoopTrans):
             returning_body,
         )
 
-        if isinstance(self, ADReverseParallelLoopTrans):
-            self.transform_scatter_adjoints_to_gather_adjoints(returning_loop, loop.ancestor(Routine).symbol_table)
-
         # verbose option adds comments to the returning do loop
         # specifying the original loop bounds
         verbose = self.unpack_option("verbose", options)
@@ -425,6 +422,9 @@ class ADReverseLoopTrans(ADLoopTrans):
                 innermost_returning_loop.loop_body.addchild(
                     value_do_offset_assignment.copy(), 0
                 )
+
+        if isinstance(self, ADReverseParallelLoopTrans):
+            self.transform_scatter_adjoints_to_gather_adjoints(loop, returning_loop)
 
         recording.extend(recording_offsets_and_loop)
         returning = returning_offsets_and_loop + returning
