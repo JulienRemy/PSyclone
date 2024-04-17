@@ -280,15 +280,12 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
     def transform_scatter_adjoints_to_gather_adjoints(
         self, advancing_outer_loop, returning_outer_loop, options=None
-        self, advancing_outer_loop, returning_outer_loop, options=None
     ):
-        from sympy.sets.sets import Interval, ProductSet, Union, EmptySet
         from sympy.sets.sets import Interval, ProductSet, Union, EmptySet
         from psyclone.psyir.backend.sympy_writer import SymPyWriter, SymPyReader
 
         sympy_writer = SymPyWriter()
         sympy_reader = SymPyReader(sympy_writer)
-        symbol_table = advancing_outer_loop.ancestor(Routine).symbol_table
         symbol_table = advancing_outer_loop.ancestor(Routine).symbol_table
 
         # For debug
@@ -301,16 +298,13 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         loop_variables = []
         psyir_original_bounds = []
         original_intervals = []
-        original_intervals = []
         for var, start, stop, step in returning_loops_vars_and_bounds:
             psyir_original_bounds.append([stop, start])
-            original_intervals.append(
             original_intervals.append(
                 Interval(*sympy_writer([stop, start]))
             )
             loop_variables.append(var)
 
-        original_product_interval = ProductSet(*original_intervals)
         original_product_interval = ProductSet(*original_intervals)
 
         adjoint_array_symbol_to_assignments_map = (
@@ -347,7 +341,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                         break
             # is_scatter_like[adjoint_array_symbol] = scatter
 
-        scatters_gathers_and_product_intervals_list = []
         scatters_gathers_and_product_intervals_list = []
         for (
             adjoint_array_symbol,
@@ -514,7 +507,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                     print("Transformed interval: ", sympy_transformed_product_interval)
 
                 for (
-                for (
                         original_assignment,
                         transformed_assignment,
                         transformed_product_interval,
@@ -526,20 +518,12 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                     scatters_gathers_and_product_intervals_list.append([original_assignment,
                         transformed_assignment,
                         transformed_product_interval])
-                    ):
-                    scatters_gathers_and_product_intervals_list.append([original_assignment,
-                        transformed_assignment,
-                        transformed_product_interval])
 
             else:
                 for original_assignment in original_assignments:
                     scatters_gathers_and_product_intervals_list.append([
-                for original_assignment in original_assignments:
-                    scatters_gathers_and_product_intervals_list.append([
                         original_assignment,
                         original_assignment.copy(),
-                        original_product_interval,
-                    ])
                         original_product_interval,
                     ])
 
@@ -593,9 +577,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         inner_gather_loop = main_gather_loop
         while isinstance(inner_gather_loop.loop_body.children[0], Loop):
             inner_gather_loop = inner_gather_loop.loop_body.children[0]
-        inner_gather_loop = main_gather_loop
-        while isinstance(inner_gather_loop.loop_body.children[0], Loop):
-            inner_gather_loop = inner_gather_loop.loop_body.children[0]
 
         main_gather_loop_vars_and_bounds = self.nested_loops_variables_and_bounds(main_gather_loop)
 
@@ -608,10 +589,10 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         for scatter_and_gathers in product_interval_to_scatters_and_gathers_map.values():
             scatter_and_gathers.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
 
-        # Union mode
-        mode = "branches"
+       
+        mode = "no_branches"
 
-
+        # Union and branches mode
         if mode == "branches":
             new_main_gather_loop_bounds = self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union)
             assert len(new_main_gather_loop_bounds) == 1
@@ -759,19 +740,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
             print("loop was ", original_loop.debug_string())
             print("now is ", main_gather_loop.debug_string())
-
-
-            new_loops = []
-            for product_interval, scatters_and_gathers in product_interval_to_scatters_and_gathers_map.items():
-                print("Product interval:", product_interval)
-                print("\t scatters => gathers :", [scatter.debug_string() + " => " + gather.debug_string() for scatter, gather in scatters_and_gathers])
-                # debug
-                union_check = EmptySet()
-
-                if product_intervals_intersection == product_interval:
-                    union_check = Union(union_check, product_interval)
-                else:
-                    gather_indices = product_intervals_intersection.complement(product_interval)
 
             new_loops = []
             for product_interval, scatters_and_gathers in product_interval_to_scatters_and_gathers_map.items():
