@@ -65,43 +65,90 @@ from psyclone.psyir.nodes import (
     RegionDirective,
 )
 from psyclone.psyir.symbols import (
-    Symbol,
     DataSymbol,
-    RoutineSymbol,
     ArgumentInterface,
-    ScalarType,
     ArrayType,
 )
 
-# TODO: cleanup
-# TODO: doc
-# TODO: tests
-
 
 class DataFlowNode:
-    def __init__(
-        self, dag, psyir, access_type=AccessType.UNKNOWN
-    ):  # , forward_dependence):
+    """
+    Represents a node in the data flow graph.
+
+    :param dag: The data flow graph that the node belongs to.
+    :type dag: :py:class:`psyclone.psyir.dataflow.DataFlowDAG`
+    :param psyir: The PSyIR node associated with the data flow node.
+    :type psyir: :py:class:`psyclone.psyir.nodes.DataNode` or \
+                 :py:class:`psyclone.psyir.symbols.DataSymbol`
+    :param access_type: The access type of the data flow node. \
+                        Defaults to `AccessType.UNKNOWN`.
+    :type access_type: :py:class:`psyclone.psyir.dataflow.AccessType`
+
+    :raises TypeError: If `dag` is not an instance of \
+                       :py:class:`psyclone.psyir.dataflow.DataFlowDAG`, \
+                       or if `psyir` is not an instance of \
+                       :py:class:`psyclone.psyir.nodes.DataNode` or \
+                       :py:class:`psyclone.psyir.symbols.DataSymbol`, \
+                       or if `psyir` is a \
+                       :py:class:`psyclone.psyir.symbols.DataSymbol` \
+                       and its interface is not an instance of \
+                       :py:class:`psyclone.psyir.symbols.ArgumentInterface`, \
+                       or if `access_type` is not an instance of \
+                       :py:class:`psyclone.psyir.dataflow.AccessType`, \
+                       or if `psyir` is not an instance of \
+                       :py:class:`psyclone.psyir.nodes.Reference` or \
+                       :py:class:`psyclone.psyir.symbols.DataSymbol` and \
+                       `access_type` is not `AccessType.UNKNOWN`, \
+                       or if `psyir` is an instance of \
+                       :py:class:`psyclone.psyir.nodes.Reference` or \
+                       :py:class:`psyclone.psyir.symbols.DataSymbol` and \
+                       `access_type` is not `AccessType.READ` or \
+                       `AccessType.WRITE`.
+    """
+
+    def __init__(self, dag, psyir, access_type=AccessType.UNKNOWN):
         if not isinstance(dag, DataFlowDAG):
-            raise TypeError("")
+            raise TypeError(
+                f"'dag' argument must be of type 'DataFlowDAG' "
+                f"but found '{type(dag).__name__}'."
+            )
         if not isinstance(psyir, (DataNode, DataSymbol)):
-            raise TypeError("")
+            raise TypeError(
+                f"'psyir' argument must be of type 'DataNode' or "
+                f"'DataSymbol' but found '{type(psyir).__name__}'."
+            )
         if isinstance(psyir, DataSymbol) and not isinstance(
             psyir.interface, ArgumentInterface
         ):
-            raise TypeError("")
+            raise TypeError(
+                f"'psyir' argument must have 'ArgumentInterface' "
+                f"interface if it is a 'DataSymbol' but found "
+                f"'{type(psyir.interface).__name__}'."
+            )
         if not isinstance(access_type, AccessType):
-            raise TypeError("")
+            raise TypeError(
+                f"'access_type' argument must be of type "
+                f"'AccessType' but found "
+                f"'{type(access_type).__name__}'."
+            )
         if (
             not isinstance(psyir, (Reference, DataSymbol))
             and access_type is not AccessType.UNKNOWN
         ):
-            raise ValueError("")
+            raise ValueError(
+                "'access_type' argument must be "
+                "'AccessType.UNKNOWN' if 'psyir' argument is not "
+                "of type 'Reference' or 'DataSymbol'."
+            )
         if isinstance(psyir, (Reference, DataSymbol)) and access_type not in (
             AccessType.READ,
             AccessType.WRITE,
         ):
-            raise ValueError("")
+            raise ValueError(
+                "'access_type' argument must be 'AccessType.READ' "
+                "or 'AccessType.WRITE' if 'psyir' argument is of "
+                "type 'Reference' or 'DataSymbol'."
+            )
 
         self._psyir = psyir
         self._dag = dag
@@ -109,31 +156,53 @@ class DataFlowNode:
         self._backward_dependences = []
         self._access_type = access_type
 
+        # Add the new node to the DAG
         self.dag.dag_nodes.append(self)
 
-        # if forward_dependence is not None:
-        #     self.add_forward_dependence(forward_dependence)
-
     def add_backward_dependence_to_last_write(self):
+        """
+        Adds backward dependences to the last write of the symbol referenced \
+        by `self.psyir`. If `self.psyir` is a reference to a whole array, \
+        backward dependences are added to all last writes of its elements.
+        If `self.psyir` is a reference to a scalar or a single element of \
+        an array, a backward dependence is added to the last write of the \
+        referenced symbol.
+        """
         if isinstance(self.psyir, (Reference, DataSymbol)):
-            symbol = self.psyir if isinstance(self.psyir, DataSymbol) else self.psyir.symbol
+            symbol = (
+                self.psyir
+                if isinstance(self.psyir, DataSymbol)
+                else self.psyir.symbol
+            )
             # Reference to a whole array, should have backward dependences to
             # all last writes to its elements
-            if self.psyir.is_array and not isinstance(self.psyir, ArrayReference):
-                last_writes_to_ref = self.dag.get_all_last_writes_to_array_symbol(symbol)
+            if self.psyir.is_array and not isinstance(
+                self.psyir, ArrayReference
+            ):
+                last_writes_to_ref = (
+                    self.dag.get_all_last_writes_to_array_symbol(symbol)
+                )
                 for write in last_writes_to_ref:
                     if write is not self:
                         self.add_backward_dependence(write)
             else:
                 last_write_to_ref = self.dag.last_write_to(self.psyir)
 
-                # if self.psyir.name == "c" and isinstance(self.psyir.parent, Call):
-                #     print("adding last write to c, got ", last_write_to_ref.psyir)
-
-                if last_write_to_ref is not None and last_write_to_ref is not self:
+                if (
+                    last_write_to_ref is not None
+                    and last_write_to_ref is not self
+                ):
                     self.add_backward_dependence(last_write_to_ref)
 
     def recurse_on_children(self):
+        """
+        Recursively processes the children of the current PSyIR node and \
+        creates or gets data flow nodes for each child.
+
+        :raises NotImplementedError: If the type of the child node is not \
+                                     supported.
+
+        """
         psyir = self.psyir
         if isinstance(psyir, DataSymbol):
             pass
@@ -178,13 +247,6 @@ class DataFlowNode:
                     symbol.interface.access for symbol in args_symbols
                 ]
 
-                # draw_called_routines_dag = True
-                # if draw_called_routines_dag:
-                #     called_routine_dag = DataFlowDAG.create_from_schedule(called_routine)
-                #     # for node in called_routine_dag.dag_nodes:
-                #     #     node.copy_single_node_to(self.dag)
-                #     called_args_nodes = [called_routine_dag.get_dag_node_for(arg_sym) for arg_sym in args_symbols]
-
                 in_arg_nodes = []
                 out_arg_nodes = []
                 for i, (arg, intent) in enumerate(
@@ -202,9 +264,6 @@ class DataFlowNode:
                         )
                         in_arg_node.add_forward_dependence(self)
 
-                        # if draw_called_routines_dag:
-                        #     in_arg_node.add_forward_dependence(called_args_nodes[i])
-
                     if intent is not ArgumentInterface.Access.READ:
                         # NOTE: create to allow for duplicate DAG nodes
                         # with same PSyIR
@@ -218,11 +277,6 @@ class DataFlowNode:
                             ),
                         )
                         out_arg_node.add_backward_dependence(self)
-
-                        # if draw_called_routines_dag:
-                        #     out_arg_node.add_backward_dependence(called_args_nodes[i])
-
-                        # self.dag._update_last_write(out_arg_node)
 
             # We don't know the intents of the arguments
             # so treat everything as inout
@@ -281,7 +335,25 @@ class DataFlowNode:
             raise NotImplementedError(type(psyir).__name__)
 
     def get_called_routine_from_name(self, name):
-        # TODO: this looks from the root for a routine, not through imports, enclosing containers, etc
+        """
+        Retrieves the called routine with the given name from the root of \
+        the PSyIR tree.
+
+        :param name: the name of the routine to retrieve.
+        :type name: str
+
+        :return: the called routine with the given name, \
+                 or None if not found.
+        :rtype: Union[:py:class:`Routine`, NoneType]
+        """
+        if not isinstance(name, str):
+            raise TypeError(
+                f"'name' argument must be of type 'str' "
+                f"but found '{type(name).__name__}'."
+            )
+
+        # TODO: this looks from the root for a routine, not through imports,
+        # enclosing containers, etc
         all_routines = self.psyir.root.walk(Routine)
         called_routine = None
         for routine in all_routines:
@@ -292,13 +364,32 @@ class DataFlowNode:
         return called_routine
 
     def get_intent_from_called_routine(self, called_routine):
+        """
+        Get the intent of a variable in the called routine based on its \
+        corresponding argument in the calling routine.
+
+        :param called_routine: the called routine.
+        :type called_routine: :py:class:`Routine`
+
+        :return: the intent of the variable in the called routine.
+        :rtype: :py:class:`ArgumentInterface.Access`
+        """
         if not isinstance(self.psyir.parent, Call):
-            raise TypeError("")
+            raise TypeError(
+                "'self.psyir.parent' must be of type 'Call' "
+                f"but found '{type(self.psyir.parent).__name__}'."
+            )
         if not isinstance(called_routine, Routine):
-            raise TypeError("")
+            raise TypeError(
+                f"'called_routine' argument must be of type 'Routine' but "
+                f"found '{type(called_routine).__name__}'."
+            )
         call = self.psyir.parent
         if call.routine.name != called_routine.name:
-            raise ValueError("")
+            raise ValueError(
+                f"The name of the called routine '{call.routine.name}' does "
+                f"not match the name of the given routine '{called_routine.name}'."
+            )
 
         arg_index = self.psyir.parent.children.index(self.psyir)
         routine_arg = called_routine.symbol_table.argument_list[arg_index]
@@ -306,8 +397,19 @@ class DataFlowNode:
         return routine_arg.interface.access
 
     def get_call_argument_intent(self):
+        """
+        Returns the intent of the arguments passed to the parent Call node.
+
+        :return: The intent of the arguments passed to the parent Call node.
+        :rtype: ArgumentInterface.Access
+        :raises TypeError: If the parent of the current node is not a Call node.
+        """
+
         if not isinstance(self.psyir.parent, Call):
-            raise TypeError("")
+            raise TypeError(
+                f"'self.psyir.parent' must be of type 'Call' but found "
+                f"'{type(self.psyir.parent).__name__}'."
+            )
         call = self.psyir.parent
         called_routine_name = call.routine.name
         called_routine = self.get_called_routine_from_name(called_routine_name)
@@ -321,6 +423,20 @@ class DataFlowNode:
 
     @classmethod
     def create(cls, dag, psyir, access_type=AccessType.UNKNOWN):
+        """
+        Create a DataFlowNode object.
+
+        :param dag: The DataFlowDAG in which to create this node.
+        :type dag: :py:class:`DataFlowDAG`
+        :param psyir: The PSyIR node associated with this DataFlowNode.
+        :type psyir: :py:class:`psyclone.psyir.nodes.Node`
+        :param access_type: The access type of this DataFlowNode.
+        :type access_type: :py:class:`psyclone.core.access_type.AccessType`
+
+        :returns: The created DataFlowNode object.
+        :rtype: :py:class:`DataFlowNode`
+        """
+
         # Arguments are typechecked by the constructor
 
         dag_node = cls(dag, psyir, access_type)
@@ -331,22 +447,62 @@ class DataFlowNode:
 
     @classmethod
     def create_or_get(cls, dag, psyir, access_type=AccessType.UNKNOWN):
+        """Create a DataFlowNode object or get it if it already exists in the
+        DAG.
+
+        :param dag: The DataFlowDAG in which to create this node.
+        :type dag: :py:class:`DataFlowDAG`
+        :param psyir: The PSyIR node or symbol associated with this 
+                      DataFlowNode.
+        :type psyir: :py:class:`DataNode` or :py:class:`DataSymbol`
+        :param access_type: The access type of the DataFlowNode. 
+                            Defaults to AccessType.UNKNOWN.
+        :type access_type: :py:class:`AccessType`
+
+        :returns: The created or existing DataFlowNode object.
+        :rtype: :py:class:`DataFlowNode`
+
+        :raises TypeError: If dag is not an instance of DataFlowDAG,  \
+                           or psyir is not an instance of DataNode or \
+                           DataSymbol, \
+                           or access_type is not an instance of AccessType.
+        :raises ValueError: If psyir is an instance of Reference or DataSymbol \
+                            and access_type is not AccessType.READ \
+                            or AccessType.WRITE.
+        """
         if not isinstance(dag, DataFlowDAG):
-            raise TypeError("")
+            raise TypeError(
+                f"'dag' argument must be of type 'DataFlowDAG' but found "
+                f"'{type(dag).__name__}'."
+            )
         if not isinstance(psyir, (DataNode, DataSymbol)):
-            raise TypeError("")
+            raise TypeError(
+                f"'psyir' argument must be of type 'DataNode' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
         if not isinstance(access_type, AccessType):
-            raise TypeError("")
+            raise TypeError(
+                f"'access_type' argument must be of type 'AccessType' but "
+                f"found '{type(access_type).__name__}'."
+            )
         if (
             not isinstance(psyir, (Reference, DataSymbol))
             and access_type is not AccessType.UNKNOWN
         ):
-            raise ValueError("")
+            raise ValueError(
+                f"'access_type' argument must be 'AccessType.UNKNOWN' if "
+                f"'psyir' argument is not of type 'Reference' or 'DataSymbol' "
+                f"but found '{access_type.name}'."
+            )
         if isinstance(psyir, (Reference, DataSymbol)) and access_type not in (
             AccessType.READ,
             AccessType.WRITE,
         ):
-            raise ValueError("")
+            raise ValueError(
+                f"'access_type' argument must be 'AccessType.READ' or "
+                f"'AccessType.WRITE' if 'psyir' argument is of type "
+                f"'Reference' or 'DataSymbol' but found '{access_type.name}'."
+            )
 
         existing_dag_node = dag.get_dag_node_for(psyir, access_type)
         if existing_dag_node is not None:
@@ -355,14 +511,32 @@ class DataFlowNode:
             return cls.create(dag, psyir, access_type)
 
     def copy_single_node_to(self, new_dag):
+        """Copy this node to new_dag.
+
+        :param dag: The DataFlowDAG in which to create this node.
+        :type dag: :py:class:`DataFlowDAG`
+
+        """
         if not isinstance(new_dag, DataFlowDAG):
-            raise TypeError("")
+            raise TypeError("new_dag must be an instance of DataFlowDAG")
 
         return DataFlowNode(new_dag, self.psyir, self.access_type)
 
     def copy_or_get_single_node_to(self, new_dag):
+        """Copy this node to new_dag or get it if it already exists in it.
+
+        :param new_dag: The DataFlowDAG in which to create this node.
+        :type new_dag: :py:class:`DataFlowDAG`
+
+        :raises TypeError: If new_dag is not an instance of DataFlowDAG.
+
+        :returns: The copied or existing DataFlowNode object.
+        :rtype: :py:class:`DataFlowNode`"""
         if not isinstance(new_dag, DataFlowDAG):
-            raise TypeError("")
+            raise TypeError(
+                f"'new_dag' argument must be of type 'DataFlowDAG' but found "
+                f"'{type(new_dag).__name__}'."
+            )
 
         existing_dag_node = new_dag.get_dag_node_for(
             self.psyir, self.access_type
@@ -373,6 +547,20 @@ class DataFlowNode:
             return self.copy_single_node_to(new_dag)
 
     def add_forward_dependence(self, forward_dependence):
+        """
+        Adds a forward dependence between the current DataFlowNode and the \
+        given DataFlowNode.
+
+        :param forward_dependence: The DataFlowNode to add as a forward \
+                                   dependence.
+        :type forward_dependence: :py:class:`DataFlowNode`
+
+        :raises TypeError: If the forward_dependence is not an instance of \
+                           DataFlowNode.
+        :raises ValueError: If the forward_dependence is the same as the \
+                            current DataFlowNode.
+        """
+
         if not isinstance(forward_dependence, DataFlowNode):
             raise TypeError(type(forward_dependence).__name__)
         if self is forward_dependence:
@@ -387,6 +575,18 @@ class DataFlowNode:
         # print("")
 
     def add_backward_dependence(self, backward_dependence):
+        """Adds a backward dependence between the current DataFlowNode and \
+        the given DataFlowNode.
+
+        :param backward_dependence: The DataFlowNode to add as a backward \
+                                    dependence.
+        :type backward_dependence: :py:class:`DataFlowNode`
+
+        :raises TypeError: If the backward_dependence is not an instance of \
+                           DataFlowNode.
+        :raises ValueError: If the backward_dependence is the same as the \
+                            current DataFlowNode.
+        """
         if not isinstance(backward_dependence, DataFlowNode):
             raise TypeError("")
         if self is backward_dependence:
@@ -402,46 +602,128 @@ class DataFlowNode:
 
     @property
     def dag(self):
+        """The DataFlowDAG that the node belongs to.
+
+        :returns: The DataFlowDAG that the node belongs to.
+        :rtype: :py:class:`DataFlowDAG`"""
         return self._dag
 
     @property
     def psyir(self):
+        """The PSyIR node wrapped by the data flow node.
+
+        :returns: The PSyIR node wrapped by the data flow node.
+        :rtype: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+        """
         return self._psyir
 
     @property
     def forward_dependences(self):
+        """The forward dependences of the data flow node, as a list.
+
+        :returns: The forward dependences of the data flow node.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         return self._forward_dependences
 
     @property
     def backward_dependences(self):
+        """The backward dependences of the data flow node, as a list.
+
+        :returns: The backward dependences of the data flow node.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         return self._backward_dependences
 
     @property
     def access_type(self):
+        """The access type of the data flow node.
+
+        :returns: The access type of the data flow node.
+        :rtype: :py:class:`psyclone.core.access_type.AccessType`"""
         return self._access_type
 
     @property
     def is_call_argument_reference(self):
-        return (
-            isinstance(self.psyir, Reference)  # symbols have no parent
-            and isinstance(self.psyir.parent, Call)  # should be an arg
-        )
+        """If the PSyIR node wrapped by the data flow node is a reference to a \
+        call argument.
 
-    def copy_forward(self, dag_copy=None, originals=[], copies=[]):
+        :returns: True if the PSyIR node wrapped by the data flow node is a \
+                  reference to a call argument, False otherwise.
+        :rtype: bool
+        """
+        return isinstance(
+            self.psyir, Reference
+        ) and isinstance(  # symbols have no parent
+            self.psyir.parent, Call
+        )  # should be an arg
+
+    def copy_forward(self, dag_copy=None, originals=None, copies=None):
+        """Copy the current node to a new DAG, recursing along the forward \
+        dependences.
+
+        :param dag_copy: The new DAG to copy the node to. 
+                         If None, a new DAG is created. Defaults to None.
+        :type dag_copy: Union[:py:class:`DataFlowDAG`, NoneType]
+        :param originals: The list of original nodes. Defaults to an empty list.
+        :type originals: List[:py:class:`DataFlowNode`]
+        :param copies: The list of copied nodes. Defaults to None.
+        :type copies: Union[List[:py:class:`DataFlowNode`], NoneType]
+
+        :raises TypeError: If dag_copy is not an instance of DataFlowDAG, \
+                           or originals is not a list or None, \
+                           or copies is not a list or None, \
+                           or if an element of originals is not an instance \
+                           of DataFlowNode, \
+                           or if an element of copies is not an instance \
+                           of DataFlowNode.
+        :raises ValueError: If the lengths of originals and copies are not \
+                            equal.
+
+        :returns: The copied node.
+        :rtype: :py:class:`DataFlowNode`
+        """
         if not isinstance(dag_copy, (DataFlowDAG, NoneType)):
-            raise TypeError("")
-        if not isinstance(originals, list):
-            raise TypeError("")
-        if not isinstance(copies, list):
-            raise TypeError("")
-        if len(originals) != len(copies):
-            raise ValueError("")
-        for original in originals:
-            if not isinstance(original, DataFlowNode):
-                raise TypeError("")
-        for copy in copies:
-            if not isinstance(copy, DataFlowNode):
-                raise TypeError("")
+            raise TypeError(
+                f"'dag_copy' argument must be of type 'DataFlowDAG' or "
+                f"NoneType but found '{type(dag_copy).__name__}'."
+            )
+        if not isinstance(originals, (list, NoneType)):
+            raise TypeError(
+                f"'originals' argument must be of type 'list' or 'NoneType' "
+                f"but found '{type(originals).__name__}'."
+            )
+        if not isinstance(copies, (list, NoneType)):
+            raise TypeError(
+                f"'copies' argument must be of type 'list' or 'NoneType' but "
+                f"found '{type(copies).__name__}'."
+            )
+        if isinstance(originals, list) and isinstance(copies, list):
+            if len(originals) != len(copies):
+                raise ValueError(
+                    f"The lengths of 'originals' and 'copies' must be equal "
+                    f"but found {len(originals)} and {len(copies)} respectively."
+                )
+        if isinstance(originals, list):
+            for original in originals:
+                if not isinstance(original, DataFlowNode):
+                    raise TypeError(
+                        f"'originals' argument must be a list of "
+                        f"'DataFlowNode' but found an element of type "
+                        f"'{type(original).__name__}'."
+                    )
+        if isinstance(copies, list):
+            for copy in copies:
+                if not isinstance(copy, DataFlowNode):
+                    raise TypeError(
+                        f"'copies' argument must be a list of 'DataFlowNode' "
+                        f"but found an element of type '{type(copy).__name__}'."
+                    )
+
+        if originals is None:
+            originals = []
+        if copies is None:
+            copies = []
 
         if dag_copy is None:
             dag_copy = DataFlowDAG()
@@ -463,20 +745,71 @@ class DataFlowNode:
         return copy
 
     def copy_backward(self, dag_copy=None, originals=[], copies=[]):
+        """Copy the current node to a new DAG, recursing along the backward \
+        dependences.
+
+        :param dag_copy: The new DAG to copy the node to. 
+                         If None, a new DAG is created. Defaults to None.
+        :type dag_copy: Union[:py:class:`DataFlowDAG`, NoneType]
+        :param originals: The list of original nodes. Defaults to an empty list.
+        :type originals: List[:py:class:`DataFlowNode`]
+        :param copies: The list of copied nodes. Defaults to None.
+        :type copies: Union[List[:py:class:`DataFlowNode`], NoneType]
+
+        :raises TypeError: If dag_copy is not an instance of DataFlowDAG, \
+                           or originals is not a list, \
+                           or copies is not a list, \
+                           or if an element of originals is not an instance \
+                           of DataFlowNode, \
+                           or if an element of copies is not an instance \
+                           of DataFlowNode.
+        :raises ValueError: If the lengths of originals and copies are not \
+                            equal.
+
+        :returns: The copied node.
+        :rtype: :py:class:`DataFlowNode`
+        """
         if not isinstance(dag_copy, (DataFlowDAG, NoneType)):
-            raise TypeError("")
-        if not isinstance(originals, list):
-            raise TypeError("")
-        if not isinstance(copies, list):
-            raise TypeError("")
-        if len(originals) != len(copies):
-            raise ValueError("")
-        for original in originals:
-            if not isinstance(original, DataFlowNode):
-                raise TypeError("")
-        for copy in copies:
-            if not isinstance(copy, DataFlowNode):
-                raise TypeError("")
+            raise TypeError(
+                f"'dag_copy' argument must be of type 'DataFlowDAG' or "
+                f"'NoneType' but found '{type(dag_copy).__name__}'."
+            )
+        if not isinstance(originals, (list, NoneType)):
+            raise TypeError(
+                f"'originals' argument must be of type 'list' or 'NoneType' "
+                f"but found '{type(originals).__name__}'."
+            )
+        if not isinstance(copies, (list, NoneType)):
+            raise TypeError(
+                f"'copies' argument must be of type 'list' or 'NoneType' but "
+                f"found '{type(copies).__name__}'."
+            )
+        if isinstance(originals, list) and isinstance(copies, list):
+            if len(originals) != len(copies):
+                raise ValueError(
+                    f"The lengths of 'originals' and 'copies' must be equal "
+                    f"but found {len(originals)} and {len(copies)} respectively."
+                )
+        if isinstance(originals, list):
+            for original in originals:
+                if not isinstance(original, DataFlowNode):
+                    raise TypeError(
+                        f"'originals' argument must be a list of "
+                        f"'DataFlowNode' but found an element of type "
+                        f"'{type(original).__name__}'."
+                    )
+        if isinstance(copies, list):
+            for copy in copies:
+                if not isinstance(copy, DataFlowNode):
+                    raise TypeError(
+                        f"'copies' argument must be a list of 'DataFlowNode' "
+                        f"but found an element of type '{type(copy).__name__}'."
+                    )
+
+        if originals is None:
+            originals = []
+        if copies is None:
+            copies = []
 
         if dag_copy is None:
             dag_copy = DataFlowDAG()
@@ -497,6 +830,13 @@ class DataFlowNode:
         return copy
 
     def to_psyir_list_forward(self):
+        """Recursively get the PSyIR nodes of the forward dependences of the \
+        current node and output them as a list.
+
+        :returns: list of all recursively found PSyIR nodes along the forward \
+                  dependences.
+        :rtype: List[:py:class:`DataNode`]
+        """
         psyir_list = [self.psyir]
         for dep in self.forward_dependences:
             dep_psyir_list = dep.to_psyir_list_forward()
@@ -508,6 +848,13 @@ class DataFlowNode:
         return psyir_list
 
     def to_psyir_list_backward(self):
+        """Recursively get the PSyIR nodes of the backward dependences of the \
+        current node and output them as a list.
+
+        :returns: list of all recursively found PSyIR nodes along the backward \
+                  dependences.
+        :rtype: List[:py:class:`DataNode`]
+        """
         psyir_list = [self.psyir]
         for dep in self.backward_dependences:
             dep_psyir_list = dep.to_psyir_list_backward()
@@ -518,6 +865,11 @@ class DataFlowNode:
         return psyir_list
 
     def __str__(self):
+        """Write a string representation of the DataFlowNode.
+
+        :returns: The string representation of the DataFlowNode.
+        :rtype: str
+        """
         string = "DataFlowNode<"
         if isinstance(self.psyir, DataSymbol):
             string += str(self.psyir)
@@ -531,25 +883,52 @@ class DataFlowNode:
         return string
 
     def __repr__(self):
+        """Write a string representation of the DataFlowNode.
+
+        :returns: The string representation of the DataFlowNode.
+        :rtype: str
+        """
         return str(self)
 
 
-class DataFlowDAG:  # (dict)
+class DataFlowDAG:
+    """A data flow graph representing the data dependencies between PSyIR \
+    nodes.
+    """
+
     def __init__(self):
         self._schedule = None
         self._dag_nodes = []
 
-    # Schedule or None
     @property
     def schedule(self):
+        """The PSyIR schedule that the data flow graph is based on, \
+        if it was created from one, None otherwise.
+
+        :returns: The PSyIR schedule that the data flow graph is based on, \
+                  if it was created from one.
+        :rtype: Union[:py:class:`Schedule`, NoneType]
+        """
         return self._schedule
 
     @property
     def dag_nodes(self):
+        """The list of DAG nodes in the data flow graph.
+
+        :returns: The list of DAG nodes in the data flow graph.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         return self._dag_nodes
 
     @property
     def in_arguments_nodes(self):
+        """The list of nodes in the data flow graph that are intent(in[out]) \
+        arguments.
+
+        :returns: The list of nodes in the data flow graph that are \
+                  intent(in[out]) arguments.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         in_arguments_nodes = []
         for dag_node in self.dag_nodes:
             if (
@@ -561,6 +940,13 @@ class DataFlowDAG:  # (dict)
 
     @property
     def out_arguments_nodes(self):
+        """The list of nodes in the data flow graph that are intent([in]out) \
+        arguments.
+
+        :returns: The list of nodes in the data flow graph that are \
+                  intent([in]out) arguments.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         out_arguments_nodes = []
         for dag_node in self.dag_nodes:
             if (
@@ -572,6 +958,12 @@ class DataFlowDAG:  # (dict)
 
     @property
     def forward_leaves(self):
+        """The list of forward leaves in the data flow graph, ie. nodes with \
+        no forward dependences.
+
+        :returns: The list of forward leaves in the data flow graph.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         forward_leaves = []
         for dag_node in self.dag_nodes:
             if (
@@ -584,6 +976,12 @@ class DataFlowDAG:  # (dict)
 
     @property
     def backward_leaves(self):
+        """The list of backward leaves in the data flow graph, ie. nodes with \
+        no backward dependences.
+
+        :returns: The list of backward leaves in the data flow graph.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         backward_leaves = []
         for dag_node in self.dag_nodes:
             if (
@@ -596,8 +994,21 @@ class DataFlowDAG:  # (dict)
 
     @classmethod
     def create_from_schedule(cls, schedule):
+        """Create a DataFlowDAG from a PSyIR schedule (Schedule or Routine).
+
+        :param schedule: The PSyIR schedule to create the data flow graph from.
+        :type schedule: :py:class:`Schedule`
+
+        :raises TypeError: If the schedule is not an instance of Schedule.
+
+        :returns: The created DataFlowDAG.
+        :rtype: :py:class:`DataFlowDAG`
+        """
         if not isinstance(schedule, Schedule):
-            raise TypeError("")
+            raise TypeError(
+                f"'schedule' argument must be of type 'Schedule' but "
+                f"found '{type(schedule).__name__}'."
+            )
 
         dag = cls()
         dag._schedule = schedule
@@ -628,10 +1039,29 @@ class DataFlowDAG:  # (dict)
         return dag
 
     def get_all_last_writes_to_array_symbol(self, array_symbol):
+        """Get all last writes to the array symbol in the data flow graph.
+        This is done by getting all writes to the symbol and then removing \
+        the ones where indices are the same.
+
+        :param array_symbol: The array symbol to get the last writes to.
+        :type array_symbol: :py:class:`DataSymbol`
+
+        :raises TypeError: If array_symbol is not an instance of DataSymbol \
+                           or if array_symbol is not an array.
+
+        :returns: The list of all last writes to the array symbol.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         if not isinstance(array_symbol, DataSymbol):
-            raise TypeError("")
+            raise TypeError(
+                f"'array_symbol' argument must be of type 'DataSymbol' but "
+                f"found '{type(array_symbol).__name__}'."
+            )
         if not isinstance(array_symbol.datatype, ArrayType):
-            raise TypeError("")
+            raise TypeError(
+                f"'array_symbol' argument must be an array but found "
+                f"'{type(array_symbol.datatype).__name__}'."
+            )
 
         all_writes_to_symbol = self.all_writes_to(array_symbol)
         all_last_writes_to_symbol = all_writes_to_symbol.copy()
@@ -652,18 +1082,58 @@ class DataFlowDAG:  # (dict)
         return all_last_writes_to_symbol
 
     def get_dag_node_for(self, psyir, access_type):
-        if not isinstance(psyir, (DataNode, DataSymbol)):
-            raise TypeError("")
-        if not isinstance(access_type, AccessType):
-            raise TypeError("")
+        """Get the DAG node for the given PSyIR node and access type from the \
+        data flow graph.
 
+        :param psyir: The PSyIR node to get the DAG node for.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+        :param access_type: The access type which the DAG node must have.
+        :type access_type: :py:class:`AccessType`
+
+        :raises TypeError: If psyir is not an instance of DataNode or \
+                           DataSymbol, \
+                           or if access_type is not an instance of AccessType.
+        :raises ValueError: If multiple DAG nodes are found for the given \
+                            PSyIR node and access type.
+
+        :returns: The DAG node for the given PSyIR node and access type, \
+                  or None if not found.
+        :rtype: Union[:py:class:`DataFlowNode`, NoneType]
+        """
+
+        if not isinstance(psyir, (DataNode, DataSymbol)):
+            raise TypeError(
+                f"'psyir' argument must be of type 'DataNode' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
+        if not isinstance(access_type, AccessType):
+            raise TypeError(
+                f"'access_type' argument must be of type 'AccessType' but "
+                f"found '{type(access_type).__name__}'."
+            )
+
+        dag_nodes_for = []
         for dag_node in self.dag_nodes:
             if dag_node.psyir is psyir and dag_node.access_type is access_type:
-                return dag_node
+                dag_nodes_for.append(dag_node)
 
-        return None
+        if len(dag_nodes_for) == 0:
+            return None
+
+        if len(dag_nodes_for) == 1:
+            return dag_nodes_for[0]
+
+        raise ValueError(
+            f"Multiple DAG nodes found for PSyIR node '{psyir}' with access "
+            f"type '{access_type}'."
+        )
 
     def to_psyir_list(self):
+        """Get all PSyIR nodes in the data flow graph as a list.
+
+        :returns: The list of all PSyIR nodes in the data flow graph.
+        :rtype: List[Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+        """
         psyir_list = []
         for leaf in self.backward_leaves:
             leaf_psyir_list = leaf.to_psyir_list_forward()
@@ -673,97 +1143,225 @@ class DataFlowDAG:  # (dict)
         return psyir_list
 
     def dataflow_tree_from(self, psyir):
+        """Extract a data flow tree starting from the given PSyIR node and \
+        going along the forward dependences.
+
+        :param psyir: The PSyIR node to start the data flow tree from.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+
+        :raises TypeError: If the given PSyIR node is not an instance of \
+                           DataNode or DataSymbol.
+        :raises ValueError: If the given PSyIR node is not found in the data \
+                            flow graph.
+        :raises ValueError: If the given PSyIR node is not the unique backward \
+                            leaf of the data flow tree.
+
+        :returns: The data flow tree starting from the given PSyIR node.
+        :rtype: :py:class:`DataFlowDAG`
+        """
+        if not isinstance(psyir, (DataNode, DataSymbol)):
+            raise TypeError(
+                f"'psyir' argument must be of type 'DataNode' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
+
         from_node = None
-        nodes = self.backward_leaves
+        nodes = self.backward_leaves.copy()
         new_nodes = []
-        while from_node is None:
+        while len(nodes) != 0:
             for node in nodes:
                 if node.psyir == psyir:
                     from_node = node
                 else:
                     new_nodes.extend(node.forward_dependences)
 
-            if from_node is None and len(new_nodes) == 0:
-                raise ValueError("Not found")
+            nodes = new_nodes.copy()
+            new_nodes = []
 
-            nodes = new_nodes
+        if from_node is None:
+            raise ValueError(
+                "'from_node' argument not found in the data flow graph."
+            )
 
-        copy_from_node = from_node.copy_forward()
-        tree_from_node = copy_from_node.dag
+        tree_from_node = DataFlowDAG()
+        copy_from_node = from_node.copy_forward(tree_from_node)
 
         tree_backward_leaves = tree_from_node.backward_leaves
         if (
             len(tree_backward_leaves) != 1
             or tree_backward_leaves[0] is not copy_from_node
         ):
-            raise ValueError("")
+            raise ValueError(
+                "'from_node' argument is not the unique backward leaf of the "
+                "data flow tree."
+            )
 
         return tree_from_node
 
     def dataflow_tree_to(self, psyir):
+        """Extract a data flow tree ending in the given PSyIR node and going \
+        along the backward dependences.
+
+        :param psyir: The PSyIR node to end the data flow tree in.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+
+        :raises TypeError: If the given PSyIR node is not an instance of \
+                           DataNode or DataSymbol.
+        :raises ValueError: If the given PSyIR node is not found in the data \
+                            flow graph.
+        :raises ValueError: If the given PSyIR node is not the unique forward \
+                            leaf of the data flow tree.
+
+        :returns: The data flow tree ending in the given PSyIR node.
+        :rtype: :py:class:`DataFlowDAG`
+        """
+        if not isinstance(psyir, (DataNode, DataSymbol)):
+            raise TypeError(
+                f"'psyir' argument must be of type 'DataNode' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
+        
         to_node = None
-        nodes = self.forward_leaves
+        nodes = self.forward_leaves.copy()
         new_nodes = []
-        while to_node is None:
+        while len(nodes) != 0:
             for node in nodes:
                 if node.psyir == psyir:
                     to_node = node
                 else:
                     new_nodes.extend(node.backward_dependences)
 
-            if to_node is None and len(new_nodes) == 0:
-                raise ValueError("Not found")
+            nodes = new_nodes.copy()
+            new_nodes = []
 
-            nodes = new_nodes
+        if to_node is None:
+            raise ValueError(
+                "'to_node' argument not found in the data flow graph."
+            )
 
-        copy_to_node = to_node.copy_backward()
-        tree_to_node = copy_to_node.dag
+        tree_to_node = DataFlowDAG()
+        copy_to_node = to_node.copy_backward(tree_to_node)
 
         tree_forward_leaves = tree_to_node.forward_leaves
         if (
             len(tree_forward_leaves) != 1
             or tree_forward_leaves[0] is not copy_to_node
         ):
-            raise ValueError("")
+            raise ValueError(
+                "'to_node' argument is not the unique forward leaf of the "
+                "data flow tree."
+            )
 
         return tree_to_node
 
     @property
+    def all_reads(self):
+        """Get all reads in the data flow graph.
+
+        :returns: The list of all reads in the data flow graph.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
+        return [
+            dag_node
+            for dag_node in self.dag_nodes
+            if dag_node.access_type is AccessType.READ
+        ]
+
+    def all_reads_from(self, psyir):
+        """Get all reads from the given PSyIR symbol (or symbol of node) \
+        in the data flow graph.
+
+        :param psyir: The PSyIR node or symbol to get all reads from.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+
+        :raises TypeError: If the given PSyIR node is not an instance of \
+                           DataNode or DataSymbol.
+
+        :returns: The list of all reads from the given PSyIR symbol.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
+        if not isinstance(psyir, (Reference, DataSymbol)):
+            raise TypeError(
+                f"'psyir' argument must be of type 'Reference' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
+
+        all_reads_from = []
+        symbol = psyir if isinstance(psyir, DataSymbol) else psyir.symbol
+
+        for read in self.all_reads:
+            if isinstance(read.psyir, DataSymbol):
+                if read.psyir == symbol:
+                    all_reads_from.append(read)
+            elif isinstance(read.psyir, Reference):
+                if read.psyir.symbol == symbol:
+                    all_reads_from.append(read)
+
+        return all_reads_from
+
+    @property
     def all_writes(self):
+        """Get all writes in the data flow graph.
+
+        :returns: The list of all writes in the data flow graph.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         return [
             dag_node
             for dag_node in self.dag_nodes
             if dag_node.access_type is AccessType.WRITE
         ]
 
-    def all_writes_to(self, psyir):  # , with_same_indices = None):
+    def all_writes_to(self, psyir):
+        """Get all writes to the given PSyIR symbol (or symbol of node) in the \
+        data flow graph.
+
+        :param psyir: The PSyIR node or symbol to get all writes to.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+
+        :raises TypeError: If the given PSyIR node is not an instance of \
+                           DataNode or DataSymbol.
+
+        :returns: The list of all writes to the given PSyIR symbol.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
         if not isinstance(psyir, (Reference, DataSymbol)):
-            raise TypeError()
+            raise TypeError(
+                f"'psyir' argument must be of type 'Reference' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
 
         all_writes_to = []
-        if isinstance(psyir, DataSymbol):
-            for write in self.all_writes:
-                if isinstance(write.psyir, DataSymbol):
-                    if write.psyir == psyir:
-                        all_writes_to.append(write)
-                elif isinstance(write.psyir, Reference):
-                    if write.psyir.symbol == psyir:
-                        all_writes_to.append(write)
-        else:
-            for write in self.all_writes:
-                if isinstance(write.psyir, DataSymbol):
-                    if write.psyir == psyir.symbol:
-                        all_writes_to.append(write)
-                elif isinstance(write.psyir, Reference):
-                    if write.psyir.symbol == psyir.symbol:
-                        all_writes_to.append(write)
+        symbol = psyir if isinstance(psyir, DataSymbol) else psyir.symbol
+
+        for write in self.all_writes:
+            if isinstance(write.psyir, DataSymbol):
+                if write.psyir == symbol:
+                    all_writes_to.append(write)
+            elif isinstance(write.psyir, Reference):
+                if write.psyir.symbol == symbol:
+                    all_writes_to.append(write)
 
         return all_writes_to
 
     @staticmethod
     def node_position(node):
+        """Compute the position of a DAG node in the PSyIR tree.
+        For DataSymbols, writes are considered to be at the beginning of the \
+        tree and reads at the end.
+
+        :param node: The DAG node to compute the position of.
+        :type node: :py:class:`DataFlowNode`
+
+        :raises TypeError: If the given node is not an instance of DataFlowNode.
+
+        :returns: The position of the DAG node in the PSyIR tree.
+        :rtype: int
+        """
         if not isinstance(node, DataFlowNode):
-            raise TypeError("")
+            raise TypeError(
+                f"'node' argument must be of type 'DataFlowNode' but found '{type(node).__name__}'."
+            )
 
         if isinstance(node.psyir, DataSymbol):
             if node.access_type is AccessType.WRITE:
@@ -771,12 +1369,33 @@ class DataFlowDAG:  # (dict)
             elif node.access_type is AccessType.READ:
                 return 1000000
             else:
-                raise ValueError("")
+                raise ValueError(
+                    f"The access type of the node '{node}' should be either "
+                    f"'WRITE' or 'READ' but found '{node.access_type.name}'."
+                )
         else:
             return node.psyir.abs_position
 
-    def last_write_to(self, psyir):  # , with_same_indices = None):
-        # Arguments are typechecked by all_writes_to
+    def last_write_to(self, psyir):
+        """Get the last write to the given PSyIR symbol (or symbol of node) in \
+        the data flow graph.
+        This looks at directives to exclude writes in private scopes.
+        This also looks at loops to determine if indices should be considered or not.
+
+        :param psyir: The PSyIR node or symbol to get the last write to.
+        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+
+        :raises TypeError: If the given PSyIR node is not an instance of \
+                           DataNode or DataSymbol.
+
+        :returns: The last write to the given PSyIR symbol.
+        :rtype: :py:class:`DataFlowNode`
+        """
+        if not isinstance(psyir, (Reference, DataSymbol)):
+            raise TypeError(
+                f"'psyir' argument must be of type 'Reference' or 'DataSymbol' "
+                f"but found '{type(psyir).__name__}'."
+            )
 
         last_write = None
         all_writes_to = self.all_writes_to(psyir)  # , with_same_indices)
@@ -869,12 +1488,29 @@ class DataFlowDAG:  # (dict)
         return last_write
 
     def _statement_list_to_dag_nodes(self, statement_list):
+        """Generate the DAG nodes from a list of PSyIR statements.
+
+        :param statement_list: The list of PSyIR statements to generate the \
+                               DAG nodes from.
+        :type statement_list: List[:py:class:`Statement`]
+
+        :raises TypeError: If statement_list is not a list or if an element of \
+                           statement_list is not an instance of Statement.
+        :raises NotImplementedError: If a statement is not yet supported.
+        """
+
         if not isinstance(statement_list, list):
-            raise TypeError("")
+            raise TypeError(
+                f"'statement_list' argument must be of type 'list' but found "
+                f"'{type(statement_list).__name__}'."
+            )
         for statement in statement_list:
             if not isinstance(statement, Statement):
-                raise TypeError("")
-            
+                raise TypeError(
+                    f"'statement_list' argument must be a list of 'Statement' "
+                    f"but found an element of type '{type(statement).__name__}'."
+                )
+
         for statement in statement_list:
             if isinstance(statement, Assignment):
                 # print("dealing with assignment ", statement.debug_string())
@@ -890,7 +1526,9 @@ class DataFlowDAG:  # (dict)
                         else AccessType.UNKNOWN
                     ),
                 )
-                lhs_node = DataFlowNode.create_or_get(self, lhs, AccessType.WRITE)
+                lhs_node = DataFlowNode.create_or_get(
+                    self, lhs, AccessType.WRITE
+                )
                 rhs_node.add_forward_dependence(lhs_node)
             elif isinstance(statement, Call):
                 if isinstance(statement, IntrinsicCall):
@@ -949,7 +1587,9 @@ class DataFlowDAG:  # (dict)
 
                 self._statement_list_to_dag_nodes(statement.if_body.children)
                 if statement.else_body is not None:
-                    self._statement_list_to_dag_nodes(statement.else_body.children)
+                    self._statement_list_to_dag_nodes(
+                        statement.else_body.children
+                    )
 
             elif isinstance(statement, Directive):
                 for clause in statement.clauses:
@@ -970,7 +1610,9 @@ class DataFlowDAG:  # (dict)
                         for ref in clause.children:
                             DataFlowNode.create(self, ref, AccessType.READ)
                 if isinstance(statement, RegionDirective):
-                    self._statement_list_to_dag_nodes(statement.dir_body.children)
+                    self._statement_list_to_dag_nodes(
+                        statement.dir_body.children
+                    )
 
             elif isinstance(statement, CodeBlock):
                 # TODO?
@@ -985,6 +1627,11 @@ class DataFlowDAG:  # (dict)
                 raise NotImplementedError("")
 
     def to_dot_format(self):
+        """Build a string representation of the data flow graph in DOT format.
+
+        :returns: The string representation of the data flow graph in DOT format.
+        :rtype: str
+        """
         if isinstance(self.schedule, Routine):
             digraph_name = self.schedule.name
         else:
@@ -993,6 +1640,7 @@ class DataFlowDAG:  # (dict)
 
         # TODO: subgraphs?
 
+        # Add the nodes
         id_counter = 0
         id_to_dag_node = dict()
         for dag_node in self.dag_nodes:
@@ -1008,9 +1656,11 @@ class DataFlowDAG:  # (dict)
                 color = "black"
 
             if isinstance(dag_node.psyir, DataSymbol):
-                label = f"{dag_node.psyir.name} ({dag_node.psyir.interface.access.name})"
+                label = (f"{dag_node.psyir.name} "
+                         f"({dag_node.psyir.interface.access.name})")
                 lines.append(
-                    f'{id} [label="{label}", shape="invtriangle", color="{color}"]'
+                    f'{id} [label="{label}", shape="invtriangle", '
+                    f'color="{color}"]'
                 )
             else:
                 label = dag_node.psyir.debug_string()
@@ -1027,6 +1677,7 @@ class DataFlowDAG:  # (dict)
                 else:
                     raise ValueError(type(dag_node.psyir).__name__)
 
+        # Add the edges
         for this_node in self.dag_nodes:
             for id, node in id_to_dag_node.items():
                 if this_node is node:
@@ -1046,6 +1697,11 @@ class DataFlowDAG:  # (dict)
         return "\n".join(lines)
 
     def render_graph(self, filename="graph"):
+        """Render the data flow graph as a PNG image using pydot.
+
+        :param filename: name of output PNG file, defaults to "graph".
+        :type filename: str, optional
+        """
         import pydot
 
         dot_graph = self.to_dot_format()
@@ -1053,101 +1709,132 @@ class DataFlowDAG:  # (dict)
         graph.write_png(f"{filename}.png")
 
     def __str__(self):
+        """Get a string representation of the data flow graph.
+
+        :returns: The string representation of the data flow graph.
+        :rtype: str"""
         sorted_dag_nodes = self.dag_nodes
         sorted_dag_nodes.sort(key=self.node_position)
         strings = [str(dag_node) for dag_node in sorted_dag_nodes]
         return "\n".join(strings)
 
     def __repr__(self):
+        """Get a string representation of the data flow graph.
+
+        :returns: The string representation of the data flow graph.
+        :rtype: str
+        """
         return str(self)
 
 
-from psyclone.psyir.frontend.fortran import FortranReader
+if __name__ == "__main__":
+    from psyclone.psyir.frontend.fortran import FortranReader
 
-reader = FortranReader()
+    reader = FortranReader()
 
-psyir = reader.psyir_from_source(
+    psyir = reader.psyir_from_source(
+        """
+    subroutine foo(a, b)
+        real, intent(inout) :: a
+        real, intent(out), dimension(10) :: b
+        real :: c, d, e, f
+        integer :: i, j
+
+        b = 3.0
+        d = 4.0
+
+        do i = 1, 9
+            b(i) = a**i
+            c = b(i)
+            b(i + 1) = d
+        end do
+
+        b(3) = 3.0
+    end subroutine foo
+
+
+    subroutine bar(x, y)
+        real, intent(inout) :: x
+        real, intent(inout) :: y
+
+        x = x + 1.0
+        y = exp(x**2)
+    end subroutine bar
     """
-subroutine foo(a, b)
-    real, intent(inout) :: a
-    real, intent(out), dimension(10) :: b
-    real :: c, d, e, f
-    integer :: i, j
+    )
 
-    b = 3.0
-    d = 4.0
+    routine = psyir.children[0]
+    dag = DataFlowDAG.create_from_schedule(routine)
 
-    do i = 1, 9
-        b(i) = a**i
-        c = b(i)
-        b(i + 1) = d
-    end do
+    dag_fwd_leaves = dag.forward_leaves
+    dag_bwd_leaves = dag.backward_leaves
 
-    b(3) = 3.0
-end subroutine foo
+    # print("DAG nodes:")
+    # for node in dag.dag_nodes:
+    #     print(node.psyir)
 
+    # print("==========\nForward leaves:")
+    # for leaf in dag_fwd_leaves:
+    #     print(leaf.psyir)
 
-subroutine bar(x, y)
-    real, intent(inout) :: x
-    real, intent(inout) :: y
+    # print("==========\nBackward leaves:")
+    # for leaf in dag_bwd_leaves:
+    #     print(leaf.psyir)
 
-    x = x + 1.0
-    y = exp(x**2)
-end subroutine bar
-"""
-)
+    a, b = routine.symbol_table.argument_list
+    flow_from_a = dag.dataflow_tree_from(a)
+    flow_to_b = dag.dataflow_tree_to(b)
+    list_from_a = flow_from_a.to_psyir_list()
+    list_to_b = flow_to_b.to_psyir_list()
 
-routine = psyir.children[0]
-dag = DataFlowDAG.create_from_schedule(routine)
+    bwd_leaves_from_a = flow_from_a.backward_leaves
+    print("==========\nBackward leaves:")
+    for leaf in bwd_leaves_from_a:
+        print(leaf.psyir)
 
-dag_fwd_leaves = dag.forward_leaves
-dag_bwd_leaves = dag.backward_leaves
+    fwd_leaves_to_b = flow_to_b.forward_leaves
+    print("==========\nForward leaves:")
+    for leaf in fwd_leaves_to_b:
+        print(leaf.psyir)
 
-# print("DAG nodes:")
-# for node in dag.dag_nodes:
-#     print(node.psyir)
+    # print("===========\nFwd and bwd deps for b_arg")
+    # b_out_arg_node = DataFlowNode.create_or_get(dag, b)
+    # print(b_out_arg_node.forward_dependences, 
+    #        b_out_arg_node.backward_dependences)
 
-# print("==========\nForward leaves:")
-# for leaf in dag_fwd_leaves:
-#     print(leaf.psyir)
+    # print("=====\n from a:")
+    # for psyir in list_from_a:
+    #     print(psyir)
+    #     print("------------")
+    # print("=====\n to b:")
+    # for psyir in list_to_b:
+    #     print(psyir)
+    #     print("------------")
+    # print(flow_to_b.to_psyir_list())
 
-# print("==========\nBackward leaves:")
-# for leaf in dag_bwd_leaves:
-#     print(leaf.psyir)
+    dag.render_graph("dag")
+    flow_from_a.render_graph("from_a")
+    flow_to_b.render_graph("to_b")
 
-a, b = routine.symbol_table.argument_list
-flow_from_a = dag.dataflow_tree_from(a)
-flow_to_b = dag.dataflow_tree_to(b)
-list_from_a = flow_from_a.to_psyir_list()
-list_to_b = flow_to_b.to_psyir_list()
+    # print(dag)
 
-bwd_leaves_from_a = flow_from_a.backward_leaves
-print("==========\nBackward leaves:")
-for leaf in bwd_leaves_from_a:
-    print(leaf.psyir)
+    from psyclone.psyir.symbols import REAL_TYPE
+    from psyclone.psyir.nodes import BinaryOperation
 
-fwd_leaves_to_b = flow_to_b.forward_leaves
-print("==========\nForward leaves:")
-for leaf in fwd_leaves_to_b:
-    print(leaf.psyir)
+    dag = DataFlowDAG()
+    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
+    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
+    reference = Reference(datasymbol)
+    reference2 = Reference(datasymbol2)
+    operation = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, reference, reference2
+    )
+    read = AccessType.READ
+    write = AccessType.WRITE
 
-# print("===========\nFwd and bwd deps for b_arg")
-# b_out_arg_node = DataFlowNode.create_or_get(dag, b)
-# print(b_out_arg_node.forward_dependences, b_out_arg_node.backward_dependences)
+    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
 
-
-# print("=====\n from a:")
-# for psyir in list_from_a:
-#     print(psyir)
-#     print("------------")
-# print("=====\n to b:")
-# for psyir in list_to_b:
-#     print(psyir)
-#     print("------------")
-# print(flow_to_b.to_psyir_list())
-
-dag.render_graph("dag")
-flow_from_a.render_graph("from_a")
-flow_to_b.render_graph("to_b")
-
-print(dag)
+    print("===")
+    print(dag.dataflow_tree_from(reference))
+    print("===")
+    print(dag.dataflow_tree_from(reference2))
