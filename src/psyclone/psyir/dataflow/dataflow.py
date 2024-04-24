@@ -35,6 +35,7 @@
 # -----------------------------------------------------------------------------
 
 from types import NoneType
+from psyclone.core import AccessType
 from psyclone.psyir.nodes import (
     Operation,
     Directive,
@@ -54,6 +55,14 @@ from psyclone.psyir.nodes import (
     Loop,
     IfBlock,
     ArrayReference,
+    OMPPrivateClause,
+    ACCCopyOutClause,
+    OMPFirstprivateClause,
+    OMPSharedClause,
+    ACCCopyClause,
+    ACCCopyInClause,
+    OMPDependClause,
+    RegionDirective,
 )
 from psyclone.psyir.symbols import (
     Symbol,
@@ -68,21 +77,37 @@ from psyclone.psyir.symbols import (
 # TODO: doc
 # TODO: tests
 
+
 class DataFlowNode:
-    def __init__(self, dag, psyir):  # , forward_dependence):
+    def __init__(
+        self, dag, psyir, access_type=AccessType.UNKNOWN
+    ):  # , forward_dependence):
         if not isinstance(dag, DataFlowDAG):
             raise TypeError("")
-        if not isinstance(psyir, (DataNode, DataSymbol, RoutineSymbol)):
+        if not isinstance(psyir, (DataNode, DataSymbol)):
             raise TypeError("")
         if isinstance(psyir, DataSymbol) and not isinstance(
             psyir.interface, ArgumentInterface
         ):
             raise TypeError("")
+        if not isinstance(access_type, AccessType):
+            raise TypeError("")
+        if (
+            not isinstance(psyir, (Reference, DataSymbol))
+            and access_type is not AccessType.UNKNOWN
+        ):
+            raise ValueError("")
+        if isinstance(psyir, (Reference, DataSymbol)) and access_type not in (
+            AccessType.READ,
+            AccessType.WRITE,
+        ):
+            raise ValueError("")
 
         self._psyir = psyir
         self._dag = dag
         self._forward_dependences = []
         self._backward_dependences = []
+        self._access_type = access_type
 
         self.dag.dag_nodes.append(self)
 
@@ -90,18 +115,27 @@ class DataFlowNode:
         #     self.add_forward_dependence(forward_dependence)
 
     def add_backward_dependence_to_last_write(self):
-        if isinstance(self.psyir, Reference):
-            last_write_to_ref = self.dag.last_write_to(self.psyir)
+        if isinstance(self.psyir, (Reference, DataSymbol)):
+            symbol = self.psyir if isinstance(self.psyir, DataSymbol) else self.psyir.symbol
+            # Reference to a whole array, should have backward dependences to
+            # all last writes to its elements
+            if self.psyir.is_array and not isinstance(self.psyir, ArrayReference):
+                last_writes_to_ref = self.dag.get_all_last_writes_to_array_symbol(symbol)
+                for write in last_writes_to_ref:
+                    if write is not self:
+                        self.add_backward_dependence(write)
+            else:
+                last_write_to_ref = self.dag.last_write_to(self.psyir)
 
-            # if self.psyir.name == "c" and isinstance(self.psyir.parent, Call):
-            #     print("adding last write to c, got ", last_write_to_ref.psyir)
+                # if self.psyir.name == "c" and isinstance(self.psyir.parent, Call):
+                #     print("adding last write to c, got ", last_write_to_ref.psyir)
 
-            if last_write_to_ref is not None and last_write_to_ref is not self:
-                self.add_backward_dependence(last_write_to_ref)
+                if last_write_to_ref is not None and last_write_to_ref is not self:
+                    self.add_backward_dependence(last_write_to_ref)
 
     def recurse_on_children(self):
         psyir = self.psyir
-        if isinstance(psyir, (DataSymbol, RoutineSymbol)):
+        if isinstance(psyir, DataSymbol):
             pass
         elif isinstance(psyir, Reference):
             pass
@@ -119,13 +153,19 @@ class DataFlowNode:
             # print("intrinsic call:", psyir.debug_string())
             for arg in psyir.children:
                 # print("arg:", arg.debug_string())
-                arg_node = DataFlowNode.create_or_get(self.dag, arg)
+                arg_node = DataFlowNode.create_or_get(
+                    self.dag,
+                    arg,
+                    (
+                        AccessType.READ
+                        if isinstance(arg, Reference)
+                        else AccessType.UNKNOWN
+                    ),
+                )
                 arg_node.add_forward_dependence(self)
                 # child_nodes.append(child_node)
 
         elif isinstance(psyir, Call):
-            # TODO: deduplicate using edited DAG._call_to_dag_nodes
-
             called_routine = self.get_called_routine_from_name(
                 psyir.routine.name
             )
@@ -151,7 +191,15 @@ class DataFlowNode:
                     zip(psyir.children, args_intents)
                 ):
                     if intent is not ArgumentInterface.Access.WRITE:
-                        in_arg_node = DataFlowNode.create_or_get(self.dag, arg)
+                        in_arg_node = DataFlowNode.create_or_get(
+                            self.dag,
+                            arg,
+                            (
+                                AccessType.READ
+                                if isinstance(arg, Reference)
+                                else AccessType.UNKNOWN
+                            ),
+                        )
                         in_arg_node.add_forward_dependence(self)
 
                         # if draw_called_routines_dag:
@@ -161,7 +209,13 @@ class DataFlowNode:
                         # NOTE: create to allow for duplicate DAG nodes
                         # with same PSyIR
                         out_arg_node = DataFlowNode.create(
-                            self.dag, arg, is_out_node_from_call=True
+                            self.dag,
+                            arg,
+                            (
+                                AccessType.WRITE
+                                if isinstance(arg, Reference)
+                                else AccessType.UNKNOWN
+                            ),
                         )
                         out_arg_node.add_backward_dependence(self)
 
@@ -173,15 +227,30 @@ class DataFlowNode:
             # We don't know the intents of the arguments
             # so treat everything as inout
             else:
+
                 in_arg_nodes = [
-                    DataFlowNode.create_or_get(self.dag, arg)
+                    DataFlowNode.create_or_get(
+                        self.dag,
+                        arg,
+                        (
+                            AccessType.READ
+                            if isinstance(arg, Reference)
+                            else AccessType.UNKNOWN
+                        ),
+                    )
                     for arg in psyir.children
                 ]
                 # NOTE: create to allow for duplicate DAG nodes
                 # with same PSyIR
                 out_arg_nodes = [
                     DataFlowNode.create(
-                        self.dag, arg, is_out_node_from_call=True
+                        self.dag,
+                        arg,
+                        (
+                            AccessType.WRITE
+                            if isinstance(arg, Reference)
+                            else AccessType.UNKNOWN
+                        ),
                     )
                     for arg in psyir.children
                 ]
@@ -193,7 +262,15 @@ class DataFlowNode:
 
         elif isinstance(psyir, Operation):
             for operand in psyir.children:
-                operand_node = DataFlowNode.create_or_get(self.dag, operand)
+                operand_node = DataFlowNode.create_or_get(
+                    self.dag,
+                    operand,
+                    (
+                        AccessType.READ
+                        if isinstance(operand, Reference)
+                        else AccessType.UNKNOWN
+                    ),
+                )
                 self.add_backward_dependence(operand_node)
 
         elif isinstance(psyir, CodeBlock):
@@ -243,68 +320,53 @@ class DataFlowNode:
         return self.get_intent_from_called_routine(called_routine)
 
     @classmethod
-    def create(cls, dag, psyir, is_out_node_from_call=False):
-        # Other arguments are typechecked by the constructor
-        if not isinstance(is_out_node_from_call, bool):
-            raise TypeError("")
+    def create(cls, dag, psyir, access_type=AccessType.UNKNOWN):
+        # Arguments are typechecked by the constructor
 
-        dag_node = cls(dag, psyir)
-        if isinstance(psyir, Reference):
-            # TODO: what about intrinsics that modify their arguments?
-            if (
-                isinstance(psyir.parent, Assignment)
-                and (psyir is psyir.parent.lhs)
-            ) or is_out_node_from_call:
-                dag._update_last_write(dag_node)
-
+        dag_node = cls(dag, psyir, access_type)
         dag_node.add_backward_dependence_to_last_write()
         dag_node.recurse_on_children()
-        # dag.dag_nodes.append(dag_node)
-        if isinstance(psyir, DataSymbol) and isinstance(
-            psyir.interface, ArgumentInterface
-        ):
-            if psyir.interface.access is not ArgumentInterface.Access.WRITE:
-                dag.read_arguments_nodes.append(dag_node)
-            if psyir.interface.access is not ArgumentInterface.Access.READ:
-                dag.written_arguments_nodes.append(dag_node)
+
         return dag_node
 
     @classmethod
-    def create_or_get(cls, dag, psyir):
+    def create_or_get(cls, dag, psyir, access_type=AccessType.UNKNOWN):
         if not isinstance(dag, DataFlowDAG):
             raise TypeError("")
-        if not isinstance(psyir, (DataNode, DataSymbol, RoutineSymbol)):
+        if not isinstance(psyir, (DataNode, DataSymbol)):
             raise TypeError("")
+        if not isinstance(access_type, AccessType):
+            raise TypeError("")
+        if (
+            not isinstance(psyir, (Reference, DataSymbol))
+            and access_type is not AccessType.UNKNOWN
+        ):
+            raise ValueError("")
+        if isinstance(psyir, (Reference, DataSymbol)) and access_type not in (
+            AccessType.READ,
+            AccessType.WRITE,
+        ):
+            raise ValueError("")
 
-        existing_dag_node = dag.get_dag_node_for(psyir)
+        existing_dag_node = dag.get_dag_node_for(psyir, access_type)
         if existing_dag_node is not None:
             return existing_dag_node
         else:
-            return cls.create(dag, psyir)
+            return cls.create(dag, psyir, access_type)
 
     def copy_single_node_to(self, new_dag):
         if not isinstance(new_dag, DataFlowDAG):
             raise TypeError("")
 
-        dag_node = DataFlowNode(new_dag, self.psyir)
-        if isinstance(self.psyir, DataSymbol) and isinstance(
-            self.psyir.interface, ArgumentInterface
-        ):
-            if (
-                self.psyir.interface.access
-                is not ArgumentInterface.Access.WRITE
-            ):
-                new_dag.read_arguments_nodes.append(dag_node)
-            if self.psyir.interface.access is not ArgumentInterface.Access.READ:
-                new_dag.written_arguments_nodes.append(dag_node)
-        return dag_node
+        return DataFlowNode(new_dag, self.psyir, self.access_type)
 
     def copy_or_get_single_node_to(self, new_dag):
         if not isinstance(new_dag, DataFlowDAG):
             raise TypeError("")
 
-        # FIXME: this won't work for duplicate call args, etc
-        existing_dag_node = new_dag.get_dag_node_for(self.psyir)
+        existing_dag_node = new_dag.get_dag_node_for(
+            self.psyir, self.access_type
+        )
         if existing_dag_node is not None:
             return existing_dag_node
         else:
@@ -354,24 +416,15 @@ class DataFlowNode:
     def backward_dependences(self):
         return self._backward_dependences
 
-    # # TODO: test this fully...
-    # @property
-    # def is_out_reference_from_call(self):
-    #     return (
-    #         isinstance(self.psyir, DataNode)  # symbols have no parent
-    #         and isinstance(self.psyir.parent, Call)  # should be an arg
-    #         and len(self.backward_dependences) == 1  # only the call
-    #         and self.backward_dependences[0].psyir is self.psyir.parent
-    #     )
+    @property
+    def access_type(self):
+        return self._access_type
 
-    # TODO: test this fully...
     @property
     def is_call_argument_reference(self):
         return (
             isinstance(self.psyir, Reference)  # symbols have no parent
             and isinstance(self.psyir.parent, Call)  # should be an arg
-            # and len(self.backward_dependences) == 1  # only the call
-            # and self.backward_dependences[0].psyir is self.psyir.parent
         )
 
     def copy_forward(self, dag_copy=None, originals=[], copies=[]):
@@ -464,59 +517,27 @@ class DataFlowNode:
 
         return psyir_list
 
-    # def get_backward_leaves(self):
-    #     if len(self.backward_dependences) == 0:
-    #         return {self}
+    def __str__(self):
+        string = "DataFlowNode<"
+        if isinstance(self.psyir, DataSymbol):
+            string += str(self.psyir)
+        else:
+            string += (
+                f"{type(self.psyir).__name__}: '{self.psyir.debug_string()}'"
+            )
+        string += f", access_type: {self.access_type.name}"
+        string += f", {len(self.backward_dependences)} backward dependences"
+        string += f", {len(self.forward_dependences)} forward dependences>"
+        return string
 
-    #     leaves = set()
-    #     for bwd in self.backward_dependences:
-    #         leaves.update(bwd.get_backward_leaves())
-
-    #     return leaves
-
-    # def to_psyir_list(self, psyir_type = None):
-    #     if not isinstance(psyir_type, (Node, Symbol, NoneType)):
-    #         raise TypeError("")
-    #     psyir_list = [self.psyir]
-    #     for dep in self.backward_dependences + self.forward_dependences:
-    #         dep_list = dep._to_psyir_list_coming_from(self)
-    #         for psyir in dep_list:
-    #             if psyir not in psyir_list:
-    #                 psyir_list.append(psyir)
-    #     #     psyir_list.update(bwd._to_psyir_set_coming_from(self))
-    #     # for fwd in self.forward_dependences:
-    #     #     psyir_list.update(fwd._to_psyir_set_coming_from(self))
-
-    #     if psyir_type is None:
-    #         return psyir_list
-    #     else:
-    #         return [psyir for psyir in psyir_list if isinstance(psyir, psyir_type)]
-
-    # def _to_psyir_list_coming_from(self, coming_from):
-    #     if not isinstance(coming_from, DataFlowNode):
-    #         raise TypeError("")
-
-    #     psyir_list = [self.psyir]
-    #     for dep in self.backward_dependences + self.forward_dependences:
-    #         print(coming_from.psyir, dep.psyir)
-    #         if dep is not coming_from:
-    #             dep_list = dep._to_psyir_list_coming_from(self)
-    #             for psyir in dep_list:
-    #                 if psyir not in psyir_list:
-    #                     psyir_list.append(psyir)
-
-    #     return psyir_list
+    def __repr__(self):
+        return str(self)
 
 
 class DataFlowDAG:  # (dict)
     def __init__(self):
         self._schedule = None
         self._dag_nodes = []
-        self._last_writes = []  # Internal
-        self._read_arguments_nodes = []
-        self._written_arguments_nodes = []
-        # self._forward_leaves = []
-        # self._backward_leaves = []
 
     # Schedule or None
     @property
@@ -528,12 +549,26 @@ class DataFlowDAG:  # (dict)
         return self._dag_nodes
 
     @property
-    def read_arguments_nodes(self):
-        return self._read_arguments_nodes
+    def in_arguments_nodes(self):
+        in_arguments_nodes = []
+        for dag_node in self.dag_nodes:
+            if (
+                isinstance(dag_node.psyir, DataSymbol)
+                and dag_node.access_type is AccessType.WRITE
+            ):
+                in_arguments_nodes.append(dag_node)
+        return in_arguments_nodes
 
     @property
-    def written_arguments_nodes(self):
-        return self._written_arguments_nodes
+    def out_arguments_nodes(self):
+        out_arguments_nodes = []
+        for dag_node in self.dag_nodes:
+            if (
+                isinstance(dag_node.psyir, DataSymbol)
+                and dag_node.access_type is AccessType.READ
+            ):
+                out_arguments_nodes.append(dag_node)
+        return out_arguments_nodes
 
     @property
     def forward_leaves(self):
@@ -546,7 +581,6 @@ class DataFlowDAG:  # (dict)
             ):
                 forward_leaves.append(dag_node)
         return forward_leaves
-        # return self._forward_leaves
 
     @property
     def backward_leaves(self):
@@ -555,48 +589,79 @@ class DataFlowDAG:  # (dict)
             if (
                 len(dag_node.backward_dependences) == 0
                 and dag_node not in backward_leaves
-                and dag_node not in self.written_arguments_nodes
+                # and dag_node not in self.out_arguments_nodes
             ):
                 backward_leaves.append(dag_node)
         return backward_leaves
-        # return self._backward_leaves
 
     @classmethod
     def create_from_schedule(cls, schedule):
         if not isinstance(schedule, Schedule):
             raise TypeError("")
-        
-        dag = cls()
 
+        dag = cls()
         dag._schedule = schedule
-        
+
         if isinstance(schedule, Routine):
             for argument in schedule.symbol_table.argument_list:
-                argument_node = DataFlowNode.create_or_get(dag, argument)
+                # intent(in) => write-like node at routine start
+                if argument.interface.access is ArgumentInterface.Access.READ:
+                    DataFlowNode.create(dag, argument, AccessType.WRITE)
+                # intent(out) => read-like node at routine end
+                elif (
+                    argument.interface.access is ArgumentInterface.Access.WRITE
+                ):
+                    DataFlowNode.create(dag, argument, AccessType.READ)
+                # intent(inout) or unknown => write-like node at routine start
+                #                             and read-like node at routine end
+                else:
+                    DataFlowNode.create(dag, argument, AccessType.WRITE)
+                    DataFlowNode.create(dag, argument, AccessType.READ)
 
-        for statement in schedule.children:
-            dag._statement_to_dag_nodes(statement)
+        # Transform all statements found in the schedule, recursing if need be
+        dag._statement_list_to_dag_nodes(schedule.children)
 
-        for i, last_write in enumerate(dag._last_writes):
-            for out_arg_node in dag._written_arguments_nodes:
-                if last_write.psyir.symbol == out_arg_node.psyir:
-                    out_arg_node.add_backward_dependence(last_write)
-                    dag._last_writes[i] = out_arg_node
+        # Link the (in)out argument output node to the previous writes
+        for out_arg_node in dag.out_arguments_nodes:
+            out_arg_node.add_backward_dependence_to_last_write()
 
         return dag
 
-    def get_dag_node_for(self, psyir):
+    def get_all_last_writes_to_array_symbol(self, array_symbol):
+        if not isinstance(array_symbol, DataSymbol):
+            raise TypeError("")
+        if not isinstance(array_symbol.datatype, ArrayType):
+            raise TypeError("")
+
+        all_writes_to_symbol = self.all_writes_to(array_symbol)
+        all_last_writes_to_symbol = all_writes_to_symbol.copy()
+        # For every write, check if *it's* previous write is in the list
+        # and remove it if so
+        for write in all_writes_to_symbol:
+            previous_write = self.last_write_to(write.psyir)
+            # Do it conservatively with respect to indices, ie. only
+            # remove if the indices are the same
+            if (
+                isinstance(write, ArrayReference)
+                and isinstance(previous_write, ArrayReference)
+                and write.indices == previous_write.indices
+            ):
+                if previous_write in all_last_writes_to_symbol:
+                    all_last_writes_to_symbol.remove(previous_write)
+
+        return all_last_writes_to_symbol
+
+    def get_dag_node_for(self, psyir, access_type):
+        if not isinstance(psyir, (DataNode, DataSymbol)):
+            raise TypeError("")
+        if not isinstance(access_type, AccessType):
+            raise TypeError("")
+
         for dag_node in self.dag_nodes:
-            if dag_node.psyir is psyir:
+            if dag_node.psyir is psyir and dag_node.access_type is access_type:
                 return dag_node
 
         return None
-
-    def contains_node(self, node):
-        if self.get_dag_node_for(node.psyir) is not None:
-            return True
-
-        return False
 
     def to_psyir_list(self):
         psyir_list = []
@@ -627,7 +692,10 @@ class DataFlowDAG:  # (dict)
         tree_from_node = copy_from_node.dag
 
         tree_backward_leaves = tree_from_node.backward_leaves
-        if len(tree_backward_leaves) != 1 or tree_backward_leaves[0] is not copy_from_node:
+        if (
+            len(tree_backward_leaves) != 1
+            or tree_backward_leaves[0] is not copy_from_node
+        ):
             raise ValueError("")
 
         return tree_from_node
@@ -652,116 +720,269 @@ class DataFlowDAG:  # (dict)
         tree_to_node = copy_to_node.dag
 
         tree_forward_leaves = tree_to_node.forward_leaves
-        if len(tree_forward_leaves) != 1 or tree_forward_leaves[0] is not copy_to_node:
+        if (
+            len(tree_forward_leaves) != 1
+            or tree_forward_leaves[0] is not copy_to_node
+        ):
             raise ValueError("")
 
         return tree_to_node
 
-    def last_write_to(self, reference):
-        if not isinstance(reference, Reference):
-            raise TypeError("")
+    @property
+    def all_writes(self):
+        return [
+            dag_node
+            for dag_node in self.dag_nodes
+            if dag_node.access_type is AccessType.WRITE
+        ]
 
-        # Scalar, no question about indices
-        if isinstance(reference.datatype, ScalarType):
-            for last_write in self._last_writes:
-                if last_write.psyir == reference:
-                    return last_write
+    def all_writes_to(self, psyir):  # , with_same_indices = None):
+        if not isinstance(psyir, (Reference, DataSymbol)):
+            raise TypeError()
 
-        # Array, consider indices iff in the same loop
-        elif isinstance(reference.datatype, ArrayType):
-            # First consider last writes
-            for last_write in self._last_writes:
-                # This checks if both are within the same loop or not in loops
-                if last_write.ancestor(Loop) is reference.ancestor(Loop):
-                    if last_write.psyir == reference:
-                        return last_write
-                # If in different loops (or one in, the other not),
-                # return the last time any array element was written
-                else:
-                    if last_write.psyir.symbol == reference.symbol:
-                        return last_write
+        all_writes_to = []
+        if isinstance(psyir, DataSymbol):
+            for write in self.all_writes:
+                if isinstance(write.psyir, DataSymbol):
+                    if write.psyir == psyir:
+                        all_writes_to.append(write)
+                elif isinstance(write.psyir, Reference):
+                    if write.psyir.symbol == psyir:
+                        all_writes_to.append(write)
         else:
-            raise NotImplementedError("")
+            for write in self.all_writes:
+                if isinstance(write.psyir, DataSymbol):
+                    if write.psyir == psyir.symbol:
+                        all_writes_to.append(write)
+                elif isinstance(write.psyir, Reference):
+                    if write.psyir.symbol == psyir.symbol:
+                        all_writes_to.append(write)
 
-        # If not written to yet, it may still be an in argument of a routine
-        for in_arg_node in self._read_arguments_nodes:
-            if in_arg_node.psyir == reference.symbol:
-                return in_arg_node
+        return all_writes_to
 
-        return None
-
-    def _update_last_write(self, new_node):
-        if not isinstance(new_node, (DataFlowNode)):
+    @staticmethod
+    def node_position(node):
+        if not isinstance(node, DataFlowNode):
             raise TypeError("")
-        if not isinstance(new_node.psyir, Reference):
-            raise TypeError("")
 
-        # print("updating last write to ", new_node.psyir.name)
-
-        last_write = self.last_write_to(new_node.psyir)
-
-        # or part for read args
-        if last_write is None or last_write not in self._last_writes:
-            self._last_writes.append(new_node)
-            # print("appended")
+        if isinstance(node.psyir, DataSymbol):
+            if node.access_type is AccessType.WRITE:
+                return -1
+            elif node.access_type is AccessType.READ:
+                return 1000000
+            else:
+                raise ValueError("")
         else:
-            index = self._last_writes.index(last_write)
-            self._last_writes[index] = new_node
-            # print("updated")
+            return node.psyir.abs_position
 
-    def _statement_to_dag_nodes(self, statement):
-        if not isinstance(statement, Statement):
-            raise TypeError("")
-        if isinstance(statement, Assignment):
-            # print("dealing with assignment ", statement.debug_string())
-            # print("last writes are ", [w.psyir.name for w in self._last_writes])
-            lhs, rhs = statement.children
-            # NOTE: rhs then lhs is important for last writes ordering
-            rhs_node = DataFlowNode.create_or_get(self, rhs)
-            lhs_node = DataFlowNode.create_or_get(self, lhs)
-            rhs_node.add_forward_dependence(lhs_node)
-        elif isinstance(statement, Call):
-            if isinstance(statement, IntrinsicCall):
-                # TODO: which are these? ALLOCATE and so on?
-                raise NotImplementedError("")
-            DataFlowNode.create_or_get(self, statement)
-        elif isinstance(statement, Loop):
-            # TODO
-            # loop_var_node =
-            for expr in (
-                statement.start_expr,
-                statement.stop_expr,
-                statement.step_expr,
+    def last_write_to(self, psyir):  # , with_same_indices = None):
+        # Arguments are typechecked by all_writes_to
+
+        last_write = None
+        all_writes_to = self.all_writes_to(psyir)  # , with_same_indices)
+        all_writes_to.sort(key=self.node_position, reverse=True)
+
+        # TODO: extensive testing...
+        # Consider all writes in parallel directives with variable scoping
+        # - private or firstprivate for OpenMP
+        # - copyin for ACC
+        # ie. which are not written back outside of scope
+        all_writes_in_private_directives = []
+        associated_directives = []
+        for write in all_writes_to:
+            if isinstance(write.psyir, Reference):
+                directive_ancestors = []
+                directive_ancestor = write.psyir.ancestor(Directive)
+                while directive_ancestor is not None:
+                    directive_ancestors.append(directive_ancestor)
+                    directive_ancestor = directive_ancestor.ancestor(Directive)
+                if len(directive_ancestors) != 0:
+                    for directive in directive_ancestors:
+                        for clause in directive.clauses:
+                            if isinstance(
+                                clause,
+                                (
+                                    OMPPrivateClause,
+                                    OMPFirstprivateClause,
+                                    ACCCopyInClause,
+                                ),
+                            ):
+                                for ref in clause.children:
+                                    if ref.symbol == (
+                                        psyir
+                                        if isinstance(psyir, DataSymbol)
+                                        else psyir.symbol
+                                    ):
+                                        all_writes_in_private_directives.append(
+                                            write
+                                        )
+                                        associated_directives.append(directive)
+
+        # If looking for the last write to a Symbol, this is an out argument,
+        # all these private writes can be removed
+        if isinstance(psyir, DataSymbol):
+            for write in all_writes_in_private_directives:
+                all_writes_to.remove(write)
+        # Otherwise, remove all the writes for which there is no path from the
+        # directive to the psyir, that is for which the psyir and the write
+        # are not in the same directive
+        else:
+            for write, directive in zip(
+                all_writes_in_private_directives, associated_directives
             ):
-                DataFlowNode.create_or_get(self, expr)
-            for stmt in statement.loop_body.children:
-                self._statement_to_dag_nodes(stmt)
-        elif isinstance(statement, WhileLoop):
-            DataFlowNode.create_or_get(self, statement.condition)
-            for stmt in statement.loop_body.children:
-                self._statement_to_dag_nodes(stmt)
-        elif isinstance(statement, IfBlock):
-            DataFlowNode.create_or_get(self, statement.condition)
-            for stmt in statement.if_body.children:
-                self._statement_to_dag_nodes(stmt)
-            if statement.else_body is not None:
-                for stmt in statement.else_body.children:
-                    self._statement_to_dag_nodes(stmt)
-        elif isinstance(statement, Directive):
-            # TODO: deal with clauses...
-            raise NotImplementedError("")
-        elif isinstance(statement, CodeBlock):
-            # TODO?
-            raise NotImplementedError("")
-        elif isinstance(statement, PSyDataNode):
-            # Treating these as external to the actual program
-            pass
-        elif isinstance(statement, Return):
-            # FIXME, is this right?
-            pass
-        # TODO
-        else:
-            raise NotImplementedError("")
+                try:
+                    psyir.path_from(directive)
+                except ValueError:
+                    all_writes_to.remove(write)
+
+        if len(all_writes_to) != 0:
+            # For array references, we need to consider indices in some cases
+            # - if not, we only look at the symbol
+            if isinstance(psyir, ArrayReference):
+                all_writes_to_possibly_same_index = []
+                for write in all_writes_to:
+                    # - in arguments write to all indices, so yes
+                    if isinstance(write.psyir, DataSymbol):
+                        all_writes_to_possibly_same_index.append(write)
+                    elif isinstance(write.psyir, ArrayReference):
+                        psyir_loop_ancestor = psyir.ancestor(Loop)
+                        write_loop_ancestor = write.psyir.ancestor(Loop)
+                        # - if within same loop or not in loops,
+                        # we require indices equality
+                        if psyir_loop_ancestor is write_loop_ancestor:
+                            if psyir.indices == write.psyir.indices:
+                                all_writes_to_possibly_same_index.append(write)
+                        # - otherwise it might be the same indices
+                        else:
+                            all_writes_to_possibly_same_index.append(write)
+                    # - if a reference to the whole array then yes
+                    else:
+                        all_writes_to_possibly_same_index.append(write)
+
+                if len(all_writes_to_possibly_same_index) != 0:
+                    last_write = all_writes_to_possibly_same_index[0]
+
+            # For scalar references or references to the whole array
+            else:
+                last_write = all_writes_to[0]
+
+        return last_write
+
+    def _statement_list_to_dag_nodes(self, statement_list):
+        if not isinstance(statement_list, list):
+            raise TypeError("")
+        for statement in statement_list:
+            if not isinstance(statement, Statement):
+                raise TypeError("")
+            
+        for statement in statement_list:
+            if isinstance(statement, Assignment):
+                # print("dealing with assignment ", statement.debug_string())
+                # print("last writes are ", [w.psyir.name for w in self._last_writes])
+                lhs, rhs = statement.children
+                # NOTE: rhs then lhs is important for last writes ordering
+                rhs_node = DataFlowNode.create_or_get(
+                    self,
+                    rhs,
+                    (
+                        AccessType.READ
+                        if isinstance(rhs, Reference)
+                        else AccessType.UNKNOWN
+                    ),
+                )
+                lhs_node = DataFlowNode.create_or_get(self, lhs, AccessType.WRITE)
+                rhs_node.add_forward_dependence(lhs_node)
+            elif isinstance(statement, Call):
+                if isinstance(statement, IntrinsicCall):
+                    # TODO: which are these? ALLOCATE and so on?
+                    raise NotImplementedError("")
+                DataFlowNode.create_or_get(self, statement)
+            elif isinstance(statement, Loop):
+                # TODO
+                # loop_var_node =
+                for expr in (
+                    statement.start_expr,
+                    statement.stop_expr,
+                    statement.step_expr,
+                ):
+                    # No point in creating nodes for literals
+                    if len(expr.walk(Reference)) != 0:
+                        DataFlowNode.create_or_get(
+                            self,
+                            expr,
+                            (
+                                AccessType.READ
+                                if isinstance(expr, Reference)
+                                else AccessType.UNKNOWN
+                            ),
+                        )
+
+                self._statement_list_to_dag_nodes(statement.loop_body.children)
+
+            elif isinstance(statement, WhileLoop):
+                # No point in creating nodes for literals
+                if len(statement.condition.walk(Reference)) != 0:
+                    DataFlowNode.create_or_get(
+                        self,
+                        statement.condition,
+                        (
+                            AccessType.READ
+                            if isinstance(statement.condition, Reference)
+                            else AccessType.UNKNOWN
+                        ),
+                    )
+
+                self._statement_list_to_dag_nodes(statement.loop_body.children)
+
+            elif isinstance(statement, IfBlock):
+                # No point in creating nodes for literals
+                if len(statement.condition.walk(Reference)) != 0:
+                    DataFlowNode.create_or_get(
+                        self,
+                        statement.condition,
+                        (
+                            AccessType.READ
+                            if isinstance(statement.condition, Reference)
+                            else AccessType.UNKNOWN
+                        ),
+                    )
+
+                self._statement_list_to_dag_nodes(statement.if_body.children)
+                if statement.else_body is not None:
+                    self._statement_list_to_dag_nodes(statement.else_body.children)
+
+            elif isinstance(statement, Directive):
+                for clause in statement.clauses:
+                    # TODO: OMPReductionClause once implemented
+                    if isinstance(clause, (OMPPrivateClause, ACCCopyOutClause)):
+                        for ref in clause.children:
+                            DataFlowNode.create(self, ref, AccessType.WRITE)
+                    elif isinstance(
+                        clause,
+                        (
+                            OMPFirstprivateClause,
+                            OMPSharedClause,
+                            ACCCopyClause,
+                            ACCCopyInClause,
+                            OMPDependClause,
+                        ),
+                    ):
+                        for ref in clause.children:
+                            DataFlowNode.create(self, ref, AccessType.READ)
+                if isinstance(statement, RegionDirective):
+                    self._statement_list_to_dag_nodes(statement.dir_body.children)
+
+            elif isinstance(statement, CodeBlock):
+                # TODO?
+                raise NotImplementedError("")
+            elif isinstance(statement, PSyDataNode):
+                # Treating these as external to the actual program
+                pass
+            elif isinstance(statement, Return):
+                break
+            # TODO
+            else:
+                raise NotImplementedError("")
 
     def to_dot_format(self):
         if isinstance(self.schedule, Routine):
@@ -770,6 +991,8 @@ class DataFlowDAG:  # (dict)
             digraph_name = "G"
         lines = [f"digraph {digraph_name}", "{"]
 
+        # TODO: subgraphs?
+
         id_counter = 0
         id_to_dag_node = dict()
         for dag_node in self.dag_nodes:
@@ -777,17 +1000,30 @@ class DataFlowDAG:  # (dict)
             id_to_dag_node[id] = dag_node
             id_counter += 1
 
+            if dag_node.access_type is AccessType.READ:
+                color = "blue"
+            elif dag_node.access_type is AccessType.WRITE:
+                color = "red"
+            else:
+                color = "black"
+
             if isinstance(dag_node.psyir, DataSymbol):
                 label = f"{dag_node.psyir.name} ({dag_node.psyir.interface.access.name})"
-                lines.append(f'{id} [label="{label}", shape="invtriangle"]')
+                lines.append(
+                    f'{id} [label="{label}", shape="invtriangle", color="{color}"]'
+                )
             else:
                 label = dag_node.psyir.debug_string()
                 if isinstance(dag_node.psyir, Call):
-                    lines.append(f'{id} [label="{label}", shape="box"]')
+                    lines.append(
+                        f'{id} [label="{label}", shape="box", color="{color}"]'
+                    )
                 elif isinstance(dag_node.psyir, Operation):
-                    lines.append(f'{id} [label="{label}", shape="oval"]')
+                    lines.append(
+                        f'{id} [label="{label}", shape="oval", color="{color}"]'
+                    )
                 elif isinstance(dag_node.psyir, (Reference, Literal)):
-                    lines.append(f'{id} [label="{label}"]')
+                    lines.append(f'{id} [label="{label}", color="{color}"]')
                 else:
                     raise ValueError(type(dag_node.psyir).__name__)
 
@@ -816,6 +1052,15 @@ class DataFlowDAG:  # (dict)
         (graph,) = pydot.graph_from_dot_data(dot_graph)
         graph.write_png(f"{filename}.png")
 
+    def __str__(self):
+        sorted_dag_nodes = self.dag_nodes
+        sorted_dag_nodes.sort(key=self.node_position)
+        strings = [str(dag_node) for dag_node in sorted_dag_nodes]
+        return "\n".join(strings)
+
+    def __repr__(self):
+        return str(self)
+
 
 from psyclone.psyir.frontend.fortran import FortranReader
 
@@ -824,32 +1069,21 @@ reader = FortranReader()
 psyir = reader.psyir_from_source(
     """
 subroutine foo(a, b)
-    real, intent(in) :: a
-    real, intent(out) :: b
+    real, intent(inout) :: a
+    real, intent(out), dimension(10) :: b
     real :: c, d, e, f
     integer :: i, j
 
-    c = a + 1.0
-    e = a**2
-    f = cos(e)
-    d = c + 2.0
-    c = d * a
-    b = c + d
+    b = 3.0
+    d = 4.0
 
-    ! j = 3
-    ! do i = 1, j, 1
-    !     b = b + 1.0
-    ! end do
+    do i = 1, 9
+        b(i) = a**i
+        c = b(i)
+        b(i + 1) = d
+    end do
 
-    if (b .ge. 4.0) then
-        b = b - 1.0
-    else
-        b = b + 1.0
-    end if
-
-    call bar(c, b)
-
-    b = b + c
+    b(3) = 3.0
 end subroutine foo
 
 
@@ -915,3 +1149,5 @@ for leaf in fwd_leaves_to_b:
 dag.render_graph("dag")
 flow_from_a.render_graph("from_a")
 flow_to_b.render_graph("to_b")
+
+print(dag)
