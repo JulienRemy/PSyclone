@@ -63,7 +63,7 @@ from psyclone.psyir.nodes import (
     ACCCopyInClause,
     OMPDependClause,
     RegionDirective,
-    OMPParallelDirective
+    OMPParallelDirective,
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
@@ -73,6 +73,7 @@ from psyclone.psyir.symbols import (
 
 # TODO: a proper dataflow would take into account if/else branches.
 # TODO: we could 'inline' the called (and found) routines in the DAG.
+
 
 class DataFlowNode:
     """
@@ -1023,7 +1024,10 @@ class DataFlowDAG:
         if isinstance(schedule, Routine):
             for argument in schedule.symbol_table.argument_list:
                 # intent(in[out]) => write-like node at routine start
-                if argument.interface.access is not ArgumentInterface.Access.WRITE:
+                if (
+                    argument.interface.access
+                    is not ArgumentInterface.Access.WRITE
+                ):
                     DataFlowNode.create(dag, argument, AccessType.WRITE)
 
         # Transform all statements found in the schedule, recursing if need be
@@ -1032,8 +1036,11 @@ class DataFlowDAG:
         # Add nodes for the intent([in]out) arguments of the routine (if any)
         if isinstance(schedule, Routine):
             for argument in schedule.symbol_table.argument_list:
-               # intent(out) => read-like node at routine end
-                if argument.interface.access is not ArgumentInterface.Access.READ:
+                # intent(out) => read-like node at routine end
+                if (
+                    argument.interface.access
+                    is not ArgumentInterface.Access.READ
+                ):
                     DataFlowNode.create(dag, argument, AccessType.READ)
 
         # # Link the (in)out argument output node to the previous writes
@@ -1403,6 +1410,12 @@ class DataFlowDAG:
                 f"found '{type(dag_node).__name__}'."
             )
 
+        symbol = (
+            dag_node.psyir
+            if isinstance(dag_node.psyir, DataSymbol)
+            else dag_node.psyir.symbol
+        )
+
         last_write = None
         all_writes_before = self.all_writes_to(dag_node.psyir)
         # Filter the writes to the same psyir (symbol) according to their
@@ -1457,13 +1470,7 @@ class DataFlowDAG:
                                 ),
                             ):
                                 for ref in clause.children:
-                                    if ref.symbol == (
-                                        dag_node.psyir
-                                        if isinstance(
-                                            dag_node.psyir, DataSymbol
-                                        )
-                                        else dag_node.psyir.symbol
-                                    ):
+                                    if ref.symbol == symbol:
                                         all_writes_in_private_directives.append(
                                             write
                                         )
@@ -1624,23 +1631,23 @@ class DataFlowDAG:
                     )
 
             elif isinstance(statement, Directive):
-                for clause in statement.clauses:
-                    # TODO: OMPReductionClause once implemented
-                    if isinstance(clause, (OMPPrivateClause, ACCCopyOutClause)):
-                        for ref in clause.children:
-                            DataFlowNode.create(self, ref, AccessType.WRITE)
-                    elif isinstance(
-                        clause,
-                        (
-                            OMPFirstprivateClause,
-                            OMPSharedClause,
-                            ACCCopyClause,
-                            ACCCopyInClause,
-                            OMPDependClause,
-                        ),
-                    ):
-                        for ref in clause.children:
-                            DataFlowNode.create(self, ref, AccessType.READ)
+                # for clause in statement.clauses:
+                    # # TODO: OMPReductionClause once implemented
+                    # if isinstance(clause, (OMPPrivateClause, ACCCopyOutClause)):
+                    #     for ref in clause.children:
+                    #         DataFlowNode.create(self, ref, AccessType.WRITE)
+                    # elif isinstance(
+                    #     clause,
+                    #     (
+                    #         OMPFirstprivateClause,
+                    #         OMPSharedClause,
+                    #         ACCCopyClause,
+                    #         ACCCopyInClause,
+                    #         OMPDependClause,
+                    #     ),
+                    # ):
+                    #     for ref in clause.children:
+                    #         DataFlowNode.create(self, ref, AccessType.READ)
                 if isinstance(statement, RegionDirective):
                     self._statement_list_to_dag_nodes(
                         statement.dir_body.children
@@ -1707,12 +1714,18 @@ class DataFlowDAG:
                         f'{id} [label="{label}", shape="oval", color="{color}"]'
                     )
                 elif isinstance(dag_node.psyir, (Reference, Literal)):
-                    if isinstance(dag_node.psyir.parent, (OMPFirstprivateClause,
+                    if isinstance(
+                        dag_node.psyir.parent,
+                        (
+                            OMPFirstprivateClause,
                             OMPSharedClause,
                             ACCCopyClause,
                             ACCCopyInClause,
                             OMPDependClause,
-                            OMPPrivateClause, ACCCopyOutClause)):
+                            OMPPrivateClause,
+                            ACCCopyOutClause,
+                        ),
+                    ):
                         label += f"({type(dag_node.psyir.parent).__name__})"
                         lines.append(
                             f'{id} [label="{label}", shape="diamond", '
@@ -1847,6 +1860,7 @@ end subroutine bar"""
         real, intent(inout) :: c
 
         !$ omp parallel private(b) firstprivate(c)
+            b = 2.0
             a = b + c
             b = 3.0
             c = 4.0
