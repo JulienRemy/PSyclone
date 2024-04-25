@@ -13,6 +13,14 @@ from psyclone.psyir.nodes import (
     BinaryOperation,
     Assignment,
     ArrayReference,
+    Loop,
+    OMPParallelDirective,
+    OMPPrivateClause,
+    OMPFirstprivateClause,
+    ACCParallelDirective,
+    ACCCopyClause,
+    ACCCopyOutClause,
+    ACCCopyInClause
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
@@ -152,7 +160,7 @@ def test_data_flow_node_create():
     assert node3._psyir == reference
     assert node3._access_type == read
     assert node3._forward_dependences == []
-    assert node3._backward_dependences == [node1]
+    assert node3._backward_dependences == []
 
     binary_operation = BinaryOperation.create(
         BinaryOperation.Operator.ADD,
@@ -217,7 +225,7 @@ def test_data_flow_node_create_or_get():
     assert node3._psyir == reference
     assert node3._access_type == read
     assert node3._forward_dependences == []
-    assert node3._backward_dependences == [node1]
+    assert node3._backward_dependences == []
     assert len(dag.dag_nodes) == 4
 
     # Test valid get
@@ -870,7 +878,7 @@ def test_data_flow_dag_node_position():
         dag.node_position(node6)
 
 
-def test_data_flow_dag_last_write_to():
+def test_data_flow_dag_last_write_to_scalar_case():
     # Scalar case
     datasymbol = DataSymbol(
         "a",
@@ -904,51 +912,280 @@ def test_data_flow_dag_last_write_to():
     node = dag.get_dag_node_for(operation, AccessType.UNKNOWN)
     node2 = dag.get_dag_node_for(reference, read)
     node3 = dag.get_dag_node_for(reference2, read)
-    node4 = dag.get_dag_node_for(reference2_copy, write)
+    node4 = dag.get_dag_node_for(reference2_copy, write) #LHS of b = a + b
     node5 = dag.get_dag_node_for(datasymbol, write)
     node6 = dag.get_dag_node_for(datasymbol2, read)
 
     # Test valid last_write_to
-    assert dag.last_write_to(reference) is node5
-    assert dag.last_write_to(reference2) is node4
+    assert dag.last_write_before(node2) is node5
+    assert dag.last_write_before(node3) is None
+    assert dag.last_write_before(node5) is None
+    assert dag.last_write_before(node6) is node4
 
+    # Test invalid last_write_to
+    with pytest.raises(TypeError):
+        dag.last_write_before(False)
+    with pytest.raises(TypeError):
+        dag.last_write_before(1)
+    with pytest.raises(TypeError):
+        dag.last_write_before(None)
+
+def test_data_flow_dag_last_write_to_array_case():
     #####
     # Array case
-    datasymbol = DataSymbol(
+    datasymbol_a = DataSymbol(
         "a",
         ArrayType(REAL_TYPE, shape=[10]),
         interface=ArgumentInterface(access=ArgumentInterface.Access.READ),
     )
-    datasymbol2 = DataSymbol(
+    datasymbol_b = DataSymbol(
         "b",
         ArrayType(REAL_TYPE, shape=[10]),
         interface=ArgumentInterface(access=ArgumentInterface.Access.WRITE),
     )
+    datasymbol_c = DataSymbol(
+        "c",
+        ArrayType(REAL_TYPE, shape=[10]),
+    )
+    datasymbol_i = DataSymbol("i", INTEGER_TYPE)
 
-    reference = Reference(datasymbol)
-    reference2 = Reference(datasymbol2)
+    reference_a = Reference(datasymbol_a)
+    reference_b = Reference(datasymbol_b)
+    reference_c = Reference(datasymbol_c)
+    reference_i = Reference(datasymbol_i)
 
     array_reference_a1 = ArrayReference.create(
-        datasymbol, [Literal("1", INTEGER_TYPE)]
+        datasymbol_a, [Literal("1", INTEGER_TYPE)]
     )
     array_reference_a2 = ArrayReference.create(
-        datasymbol, [Literal("2", INTEGER_TYPE)]
+        datasymbol_a, [Literal("2", INTEGER_TYPE)]
     )
 
     array_reference_b1 = ArrayReference.create(
-        datasymbol2, [Literal("1", INTEGER_TYPE)]
+        datasymbol_b, [Literal("1", INTEGER_TYPE)]
     )
     array_reference_b2 = ArrayReference.create(
-        datasymbol2, [Literal("2", INTEGER_TYPE)]
+        datasymbol_b, [Literal("2", INTEGER_TYPE)]
     )
 
-    # TODO: Add test for array case, within loop, outside, etc.
-    # TODO Add tests for directives
+    array_reference_c1 = ArrayReference.create(
+        datasymbol_c, [Literal("1", INTEGER_TYPE)]
+    )
+    array_reference_c2 = ArrayReference.create(
+        datasymbol_c, [Literal("2", INTEGER_TYPE)]
+    )
 
-    # Test invalid last_write_to
-    with pytest.raises(TypeError):
-        dag.last_write_to(False)
-    with pytest.raises(TypeError):
-        dag.last_write_to(1)
-    with pytest.raises(TypeError):
-        dag.last_write_to(None)
+    # subroutine test_routine(a:in, b:out)
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+    routine.symbol_table.add(datasymbol_i)
+
+    # b = a
+    assignment1 = Assignment.create(reference_b, reference_a)
+    routine.addchild(assignment1)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_arg_a = dag.get_dag_node_for(datasymbol_a, AccessType.WRITE)
+    node_arg_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+    node_ref_a = dag.get_dag_node_for(reference_a, AccessType.READ)
+    node_ref_b = dag.get_dag_node_for(reference_b, AccessType.WRITE)
+
+    # Test valid last_write_to
+    assert dag.last_write_before(node_ref_a) is node_arg_a
+    assert dag.last_write_before(node_ref_b) is None
+    assert dag.last_write_before(node_arg_a) is None
+    assert dag.last_write_before(node_arg_b) is node_ref_b
+
+    # b = a
+    # c = b
+    reference_b_copy = reference_b.copy()
+    assignment2 = Assignment.create(reference_c, reference_b_copy)
+    routine.addchild(assignment2)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_arg_a = dag.get_dag_node_for(datasymbol_a, AccessType.WRITE)
+    node_arg_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+    node_ref_a = dag.get_dag_node_for(reference_a, AccessType.READ)
+    node_ref_b_write = dag.get_dag_node_for(reference_b, AccessType.WRITE)
+    node_ref_b_read = dag.get_dag_node_for(reference_b_copy, AccessType.READ)
+    node_ref_c = dag.get_dag_node_for(reference_c, AccessType.WRITE)
+
+    # Test valid last_write_to
+    assert dag.last_write_before(node_ref_a) is node_arg_a
+    assert dag.last_write_before(node_ref_b_write) is None
+    assert dag.last_write_before(node_ref_b_read) is node_ref_b_write
+    assert dag.last_write_before(node_ref_c) is None
+
+    # b = a
+    # c = b
+    # b(1) = c(1)
+    # c(2) = b(2)
+    array_assignment1 = Assignment.create(array_reference_b1, array_reference_c1)
+    routine.addchild(array_assignment1)
+    array_assignment2 = Assignment.create(array_reference_c2, array_reference_b2)
+    routine.addchild(array_assignment2)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_arg_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+    node_ref_a = dag.get_dag_node_for(reference_a, AccessType.READ)
+    node_ref_b_read = dag.get_dag_node_for(reference_b_copy, AccessType.READ)
+    node_ref_b_write = dag.get_dag_node_for(reference_b, AccessType.WRITE)
+    node_ref_c = dag.get_dag_node_for(reference_c, AccessType.WRITE)
+    node_ref_b1 = dag.get_dag_node_for(array_reference_b1, AccessType.WRITE)
+    node_ref_c1 = dag.get_dag_node_for(array_reference_c1, AccessType.READ)
+    node_ref_b2 = dag.get_dag_node_for(array_reference_b2, AccessType.READ)
+    node_ref_c2 = dag.get_dag_node_for(array_reference_c2, AccessType.WRITE)
+
+    # Test valid last_write_to
+    assert dag.last_write_before(node_ref_c2) is node_ref_c
+    assert dag.last_write_before(node_ref_b1) is node_ref_b_write
+    assert dag.last_write_before(node_ref_c) is None
+    assert dag.last_write_before(node_ref_b_read) is node_ref_b_write
+    assert dag.last_write_before(node_arg_b) is node_ref_b1
+
+    # Test array indexing within same loop
+    # subroutine test_routine(a:in, b:out)
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+    routine.symbol_table.add(datasymbol_i)
+    # do i = 1, 9, 1
+    #   b(i) = b(i) + a(i)
+    #   b(i+1) = b(i+1) + c(i+1)
+    # end do
+    array_reference_bi_write = ArrayReference.create(datasymbol_b, [reference_i])
+    array_reference_bi_read = array_reference_bi_write.copy()
+    array_reference_bi1_write = ArrayReference.create(datasymbol_b, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    array_reference_bi1_read = array_reference_bi1_write.copy()
+    array_reference_ai_read = ArrayReference.create(datasymbol_a, [reference_i.copy()])
+    array_reference_ci1_read = ArrayReference.create(datasymbol_c, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    loop = Loop.create(datasymbol_i, Literal("1", INTEGER_TYPE), Literal("9", INTEGER_TYPE), Literal("1", INTEGER_TYPE), [])
+    assignment1 = Assignment.create(array_reference_bi_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi_read, array_reference_ai_read))
+    assignment2 = Assignment.create(array_reference_bi1_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi1_read, array_reference_ci1_read))
+    loop.loop_body.addchild(assignment1)
+    loop.loop_body.addchild(assignment2)
+    routine.addchild(loop)
+
+
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_arg_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+    node_ref_bi_write = dag.get_dag_node_for(array_reference_bi_write, AccessType.WRITE)
+    node_ref_bi1_write = dag.get_dag_node_for(array_reference_bi1_write, AccessType.WRITE)
+    node_ref_bi_read = dag.get_dag_node_for(array_reference_bi_read, AccessType.READ)
+    node_ref_bi1_read = dag.get_dag_node_for(array_reference_bi1_read, AccessType.READ)
+    node_ref_ai_read = dag.get_dag_node_for(array_reference_ai_read, AccessType.READ)
+    node_ref_ci1_read = dag.get_dag_node_for(array_reference_ci1_read, AccessType.READ)
+
+    # Test valid last_write_to
+    assert dag.last_write_before(node_ref_bi_write) is None
+    assert dag.last_write_before(node_ref_bi1_write) is None
+    assert dag.last_write_before(node_arg_b) is node_ref_bi1_write
+    assert node_ref_bi_read.backward_dependences == []
+    assert node_ref_bi1_read.backward_dependences == []
+    assert len(node_arg_b.backward_dependences) == 2
+
+    # Test array indexing within loop and outside loop
+    # subroutine test_routine(a:in, b:out)
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+    routine.symbol_table.add(datasymbol_i)
+    # i = 1
+    # b(i+1) = c(i+1)
+    # do i = 1, 9, 1
+    #   b(i) = b(i) + a(i)
+    #   b(i+1) = b(i+1) + 2.0
+    # end do
+    # i = 1
+    # c(i) = b(i)
+    array_reference_bi_write = ArrayReference.create(datasymbol_b, [reference_i.copy()])
+    array_reference_bi_read = array_reference_bi_write.copy()
+    array_reference_bi1_write = ArrayReference.create(datasymbol_b, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    array_reference_bi1_read = array_reference_bi1_write.copy()
+    array_reference_ai_read = ArrayReference.create(datasymbol_a, [reference_i.copy()])
+    loop = Loop.create(datasymbol_i, Literal("1", INTEGER_TYPE), Literal("9", INTEGER_TYPE), Literal("1", INTEGER_TYPE), [])
+    assignment1 = Assignment.create(array_reference_bi_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi_read, array_reference_ai_read))
+    assignment2 = Assignment.create(array_reference_bi1_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi1_read, Literal("2.0", REAL_TYPE)))
+    loop.loop_body.addchild(assignment1)
+    loop.loop_body.addchild(assignment2)
+    array_reference_bi_read2 = array_reference_bi_write.copy()
+    array_reference_bi1_write2 = array_reference_bi1_write.copy()
+    array_reference_ci1_read = ArrayReference.create(datasymbol_c, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    array_reference_ci_write = ArrayReference.create(datasymbol_c, [reference_i.copy()])
+    assignment3 = Assignment.create(array_reference_bi1_write2, array_reference_ci1_read)
+    assignment4 = Assignment.create(array_reference_ci_write, array_reference_bi_read2)
+
+    routine.addchild(assignment3)
+    routine.addchild(loop)
+    routine.addchild(assignment4)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_ref_bi1_write = dag.get_dag_node_for(array_reference_bi1_write, AccessType.WRITE)
+    node_ref_bi_read2 = dag.get_dag_node_for(array_reference_bi_read2, AccessType.READ)
+    node_ref_bi_read = dag.get_dag_node_for(array_reference_bi_read, AccessType.READ)
+    node_ref_bi_write = dag.get_dag_node_for(array_reference_bi_write, AccessType.WRITE)
+    node_ref_bi1_write = dag.get_dag_node_for(array_reference_bi1_write, AccessType.WRITE)
+    node_ref_bi1_write2 = dag.get_dag_node_for(array_reference_bi1_write2, AccessType.WRITE)
+    node_datasymbol_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+
+    assert len(node_datasymbol_b.backward_dependences) == 3
+    assert node_ref_bi1_write in node_datasymbol_b.backward_dependences
+    assert node_ref_bi1_write2 in node_datasymbol_b.backward_dependences
+    assert node_ref_bi_write in node_datasymbol_b.backward_dependences
+
+    # Test array indexing within two different loops
+    # subroutine test_routine(a:in, b:out)
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+    routine.symbol_table.add(datasymbol_i)
+
+    # do i = 1, 10, 1
+    #   b(i) = b(i) + a(i)
+    # end do
+    # do i = 1, 9, 1
+    #   b(i+1) = b(i+1) + a(i+1)
+    # end do
+    loop1 = Loop.create(datasymbol_i, Literal("1", INTEGER_TYPE), Literal("10", INTEGER_TYPE), Literal("1", INTEGER_TYPE), [])
+    loop2 = Loop.create(datasymbol_i, Literal("1", INTEGER_TYPE), Literal("9", INTEGER_TYPE), Literal("1", INTEGER_TYPE), [])
+    array_reference_bi_write = ArrayReference.create(datasymbol_b, [reference_i.copy()])
+    array_reference_bi_read = array_reference_bi_write.copy()
+    array_reference_bi1_write = ArrayReference.create(datasymbol_b, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    array_reference_bi1_read = array_reference_bi1_write.copy()
+    array_reference_ai_read = ArrayReference.create(datasymbol_a, [reference_i.copy()])
+    array_reference_ai1_read = ArrayReference.create(datasymbol_a, [BinaryOperation.create(BinaryOperation.Operator.ADD, reference_i.copy(), Literal("1", INTEGER_TYPE))])
+    assignment1 = Assignment.create(array_reference_bi_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi_read, array_reference_ai_read))
+    loop1.loop_body.addchild(assignment1)
+    assignment2 = Assignment.create(array_reference_bi1_write, BinaryOperation.create(BinaryOperation.Operator.ADD, array_reference_bi1_read, array_reference_ai1_read))
+    loop2.loop_body.addchild(assignment2)
+    routine.addchild(loop1)
+    routine.addchild(loop2)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_ref_bi_write = dag.get_dag_node_for(array_reference_bi_write, AccessType.WRITE)
+    node_ref_bi_read = dag.get_dag_node_for(array_reference_bi_read, AccessType.READ)
+    node_ref_bi1_write = dag.get_dag_node_for(array_reference_bi1_write, AccessType.WRITE)
+    node_ref_bi1_read = dag.get_dag_node_for(array_reference_bi1_read, AccessType.READ)
+    node_datasymbol_b = dag.get_dag_node_for(datasymbol_b, AccessType.READ)
+    
+    
+    # Test valid last_write_to
+    assert dag.last_write_before(node_ref_bi_write) is None
+    assert dag.last_write_before(node_ref_bi1_read) is node_ref_bi_write
+    assert dag.last_write_before(node_ref_bi1_write) is node_ref_bi_write
+    assert dag.last_write_before(node_datasymbol_b) is node_ref_bi1_write
+    assert len(node_datasymbol_b.backward_dependences) == 2

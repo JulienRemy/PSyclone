@@ -168,7 +168,10 @@ class DataFlowNode:
         an array, a backward dependence is added to the last write of the \
         referenced symbol.
         """
-        if isinstance(self.psyir, (Reference, DataSymbol)):
+        if (
+            isinstance(self.psyir, (Reference, DataSymbol))
+            and self.access_type is AccessType.READ
+        ):
             symbol = (
                 self.psyir
                 if isinstance(self.psyir, DataSymbol)
@@ -186,7 +189,7 @@ class DataFlowNode:
                     if write is not self:
                         self.add_backward_dependence(write)
             else:
-                last_write_to_ref = self.dag.last_write_to(self.psyir)
+                last_write_to_ref = self.dag.last_write_before(self)
 
                 if (
                     last_write_to_ref is not None
@@ -1068,7 +1071,7 @@ class DataFlowDAG:
         # For every write, check if *it's* previous write is in the list
         # and remove it if so
         for write in all_writes_to_symbol:
-            previous_write = self.last_write_to(write.psyir)
+            previous_write = self.last_write_before(write)
             # Do it conservatively with respect to indices, ie. only
             # remove if the indices are the same
             if (
@@ -1220,7 +1223,7 @@ class DataFlowDAG:
                 f"'psyir' argument must be of type 'DataNode' or 'DataSymbol' "
                 f"but found '{type(psyir).__name__}'."
             )
-        
+
         to_node = None
         nodes = self.forward_leaves.copy()
         new_nodes = []
@@ -1360,7 +1363,8 @@ class DataFlowDAG:
         """
         if not isinstance(node, DataFlowNode):
             raise TypeError(
-                f"'node' argument must be of type 'DataFlowNode' but found '{type(node).__name__}'."
+                f"'node' argument must be of type 'DataFlowNode' but found "
+                f"'{type(node).__name__}'."
             )
 
         if isinstance(node.psyir, DataSymbol):
@@ -1376,30 +1380,55 @@ class DataFlowDAG:
         else:
             return node.psyir.abs_position
 
-    def last_write_to(self, psyir):
-        """Get the last write to the given PSyIR symbol (or symbol of node) in \
-        the data flow graph.
+    def last_write_before(self, dag_node):
+        """Get the last write to the PSyIR from dag_node before it, excluding \
+        itself, if any, or None if not found.
         This looks at directives to exclude writes in private scopes.
-        This also looks at loops to determine if indices should be considered or not.
+        This also looks at loops to determine if indices should be considered \
+        or not.
 
-        :param psyir: The PSyIR node or symbol to get the last write to.
-        :type psyir: Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
+        :param dag_node: The DAG node to get the last write before.
+        :type dag_node: :py:class:`DataFlowNode`
 
-        :raises TypeError: If the given PSyIR node is not an instance of \
-                           DataNode or DataSymbol.
+        :raises TypeError: If the given dag_node is not an instance of \
+                           DataFlowNode.
 
-        :returns: The last write to the given PSyIR symbol.
-        :rtype: :py:class:`DataFlowNode`
+        :returns: The last write before dag_node, or None if not found.
+        :rtype: Union[:py:class:`DataFlowNode`, NoneType]
         """
-        if not isinstance(psyir, (Reference, DataSymbol)):
+        if not isinstance(dag_node, DataFlowNode):
             raise TypeError(
-                f"'psyir' argument must be of type 'Reference' or 'DataSymbol' "
-                f"but found '{type(psyir).__name__}'."
+                f"'dag_node' argument must be of type 'DataFlowNode' but "
+                f"found '{type(dag_node).__name__}'."
             )
 
         last_write = None
-        all_writes_to = self.all_writes_to(psyir)  # , with_same_indices)
-        all_writes_to.sort(key=self.node_position, reverse=True)
+        all_writes_before = self.all_writes_to(dag_node.psyir)
+        # Filter the writes to the same psyir (symbol) according to their
+        # abs_position for nodes or made up position for arguments
+        all_writes_before = [
+            write
+            for write in all_writes_before
+            if self.node_position(write) < self.node_position(dag_node)
+        ]
+        # NOTE: abs_position is not enough for assignments
+        # as lhs.abs_position < rhs.abs_position
+        # nor for calls, so filter these out
+        # Otherwise we'd get the lhs of say 'b = b + a' as the last write
+        # before 'b' on the rhs, which is wrong.
+        if not isinstance(dag_node.psyir, DataSymbol):
+            for write in all_writes_before:
+                if not isinstance(write.psyir, DataSymbol):
+                    if isinstance(write.psyir.parent, (Assignment, Call)):
+                        try:
+                            dag_node.psyir.path_from(write.psyir.parent)
+                        except ValueError:
+                            pass
+                        else:
+                            all_writes_before.remove(write)
+
+        # Sort the remaining writes by descending position
+        all_writes_before.sort(key=self.node_position, reverse=True)
 
         # TODO: extensive testing...
         # Consider all writes in parallel directives with variable scoping
@@ -1408,7 +1437,7 @@ class DataFlowDAG:
         # ie. which are not written back outside of scope
         all_writes_in_private_directives = []
         associated_directives = []
-        for write in all_writes_to:
+        for write in all_writes_before:
             if isinstance(write.psyir, Reference):
                 directive_ancestors = []
                 directive_ancestor = write.psyir.ancestor(Directive)
@@ -1428,9 +1457,11 @@ class DataFlowDAG:
                             ):
                                 for ref in clause.children:
                                     if ref.symbol == (
-                                        psyir
-                                        if isinstance(psyir, DataSymbol)
-                                        else psyir.symbol
+                                        dag_node.psyir
+                                        if isinstance(
+                                            dag_node.psyir, DataSymbol
+                                        )
+                                        else dag_node.psyir.symbol
                                     ):
                                         all_writes_in_private_directives.append(
                                             write
@@ -1439,9 +1470,9 @@ class DataFlowDAG:
 
         # If looking for the last write to a Symbol, this is an out argument,
         # all these private writes can be removed
-        if isinstance(psyir, DataSymbol):
+        if isinstance(dag_node.psyir, DataSymbol):
             for write in all_writes_in_private_directives:
-                all_writes_to.remove(write)
+                all_writes_before.remove(write)
         # Otherwise, remove all the writes for which there is no path from the
         # directive to the psyir, that is for which the psyir and the write
         # are not in the same directive
@@ -1450,26 +1481,26 @@ class DataFlowDAG:
                 all_writes_in_private_directives, associated_directives
             ):
                 try:
-                    psyir.path_from(directive)
+                    dag_node.psyir.path_from(directive)
                 except ValueError:
-                    all_writes_to.remove(write)
+                    all_writes_before.remove(write)
 
-        if len(all_writes_to) != 0:
+        if len(all_writes_before) != 0:
             # For array references, we need to consider indices in some cases
             # - if not, we only look at the symbol
-            if isinstance(psyir, ArrayReference):
+            if isinstance(dag_node.psyir, ArrayReference):
                 all_writes_to_possibly_same_index = []
-                for write in all_writes_to:
+                for write in all_writes_before:
                     # - in arguments write to all indices, so yes
                     if isinstance(write.psyir, DataSymbol):
                         all_writes_to_possibly_same_index.append(write)
                     elif isinstance(write.psyir, ArrayReference):
-                        psyir_loop_ancestor = psyir.ancestor(Loop)
+                        psyir_loop_ancestor = dag_node.psyir.ancestor(Loop)
                         write_loop_ancestor = write.psyir.ancestor(Loop)
                         # - if within same loop or not in loops,
                         # we require indices equality
                         if psyir_loop_ancestor is write_loop_ancestor:
-                            if psyir.indices == write.psyir.indices:
+                            if dag_node.psyir.indices == write.psyir.indices:
                                 all_writes_to_possibly_same_index.append(write)
                         # - otherwise it might be the same indices
                         else:
@@ -1483,7 +1514,7 @@ class DataFlowDAG:
 
             # For scalar references or references to the whole array
             else:
-                last_write = all_writes_to[0]
+                last_write = all_writes_before[0]
 
         return last_write
 
@@ -1656,8 +1687,10 @@ class DataFlowDAG:
                 color = "black"
 
             if isinstance(dag_node.psyir, DataSymbol):
-                label = (f"{dag_node.psyir.name} "
-                         f"({dag_node.psyir.interface.access.name})")
+                label = (
+                    f"{dag_node.psyir.name} "
+                    f"({dag_node.psyir.interface.access.name})"
+                )
                 lines.append(
                     f'{id} [label="{label}", shape="invtriangle", '
                     f'color="{color}"]'
@@ -1732,54 +1765,87 @@ if __name__ == "__main__":
 
     reader = FortranReader()
 
-    psyir = reader.psyir_from_source(
-        """
-    subroutine foo(a, b)
-        real, intent(inout) :: a
-        real, intent(out), dimension(10) :: b
-        real :: c, d, e, f
-        integer :: i, j
+    source1 = """
+subroutine foo(a, b)
+    real, intent(inout) :: a
+    real, intent(out), dimension(10) :: b
+    real :: c, d, e, f
+    integer :: i, j
 
-        b = 3.0
-        d = 4.0
+    b = 3.0
+    d = 4.0
 
-        do i = 1, 9
-            b(i) = a**i
-            c = b(i)
-            b(i + 1) = d
-        end do
+    do i = 1, 9
+        b(i) = a**i
+        c = b(i)
+        b(i + 1) = d
+    end do
 
-        b(3) = 3.0
-    end subroutine foo
+    b(3) = 3.0
+end subroutine foo
 
 
-    subroutine bar(x, y)
-        real, intent(inout) :: x
-        real, intent(inout) :: y
+subroutine bar(x, y)
+    real, intent(inout) :: x
+    real, intent(inout) :: y
 
-        x = x + 1.0
-        y = exp(x**2)
-    end subroutine bar
+    x = x + 1.0
+    y = exp(x**2)
+end subroutine bar
     """
-    )
+
+    source2 = """
+subroutine foo(a, b)
+    real, intent(in) :: a
+    real, intent(out) :: b
+    real :: c, d, e, f
+    integer :: i, j
+    c = a + 1.0
+    e = a**2
+    f = cos(e)
+    d = c + 2.0
+    c = d * a
+    b = c + d
+    ! j = 3
+    ! do i = 1, j, 1
+    !     b = b + 1.0
+    ! end do
+    if (b .ge. 4.0) then
+        b = b - 1.0
+    else
+        b = b + 1.0
+    end if
+    call bar(c, b)
+    b = b + c
+end subroutine foo
+
+subroutine bar(x, y)
+    real, intent(inout) :: x
+    real, intent(inout) :: y
+
+    x = x + 1.0
+    y = exp(x**2)
+end subroutine bar"""
+
+    psyir = reader.psyir_from_source(source2)
 
     routine = psyir.children[0]
     dag = DataFlowDAG.create_from_schedule(routine)
 
-    dag_fwd_leaves = dag.forward_leaves
-    dag_bwd_leaves = dag.backward_leaves
+    #     dag_fwd_leaves = dag.forward_leaves
+    #     dag_bwd_leaves = dag.backward_leaves
 
-    # print("DAG nodes:")
-    # for node in dag.dag_nodes:
-    #     print(node.psyir)
+    #     # print("DAG nodes:")
+    #     # for node in dag.dag_nodes:
+    #     #     print(node.psyir)
 
-    # print("==========\nForward leaves:")
-    # for leaf in dag_fwd_leaves:
-    #     print(leaf.psyir)
+    #     # print("==========\nForward leaves:")
+    #     # for leaf in dag_fwd_leaves:
+    #     #     print(leaf.psyir)
 
-    # print("==========\nBackward leaves:")
-    # for leaf in dag_bwd_leaves:
-    #     print(leaf.psyir)
+    #     # print("==========\nBackward leaves:")
+    #     # for leaf in dag_bwd_leaves:
+    #     #     print(leaf.psyir)
 
     a, b = routine.symbol_table.argument_list
     flow_from_a = dag.dataflow_tree_from(a)
@@ -1787,54 +1853,54 @@ if __name__ == "__main__":
     list_from_a = flow_from_a.to_psyir_list()
     list_to_b = flow_to_b.to_psyir_list()
 
-    bwd_leaves_from_a = flow_from_a.backward_leaves
-    print("==========\nBackward leaves:")
-    for leaf in bwd_leaves_from_a:
-        print(leaf.psyir)
+    #     bwd_leaves_from_a = flow_from_a.backward_leaves
+    #     print("==========\nBackward leaves:")
+    #     for leaf in bwd_leaves_from_a:
+    #         print(leaf.psyir)
 
-    fwd_leaves_to_b = flow_to_b.forward_leaves
-    print("==========\nForward leaves:")
-    for leaf in fwd_leaves_to_b:
-        print(leaf.psyir)
+    #     fwd_leaves_to_b = flow_to_b.forward_leaves
+    #     print("==========\nForward leaves:")
+    #     for leaf in fwd_leaves_to_b:
+    #         print(leaf.psyir)
 
-    # print("===========\nFwd and bwd deps for b_arg")
-    # b_out_arg_node = DataFlowNode.create_or_get(dag, b)
-    # print(b_out_arg_node.forward_dependences, 
-    #        b_out_arg_node.backward_dependences)
+    #     # print("===========\nFwd and bwd deps for b_arg")
+    #     # b_out_arg_node = DataFlowNode.create_or_get(dag, b)
+    #     # print(b_out_arg_node.forward_dependences,
+    #     #        b_out_arg_node.backward_dependences)
 
-    # print("=====\n from a:")
-    # for psyir in list_from_a:
-    #     print(psyir)
-    #     print("------------")
-    # print("=====\n to b:")
-    # for psyir in list_to_b:
-    #     print(psyir)
-    #     print("------------")
-    # print(flow_to_b.to_psyir_list())
+    #     # print("=====\n from a:")
+    #     # for psyir in list_from_a:
+    #     #     print(psyir)
+    #     #     print("------------")
+    #     # print("=====\n to b:")
+    #     # for psyir in list_to_b:
+    #     #     print(psyir)
+    #     #     print("------------")
+    #     # print(flow_to_b.to_psyir_list())
 
     dag.render_graph("dag")
     flow_from_a.render_graph("from_a")
     flow_to_b.render_graph("to_b")
 
-    # print(dag)
+#     # print(dag)
 
-    from psyclone.psyir.symbols import REAL_TYPE
-    from psyclone.psyir.nodes import BinaryOperation
+#     from psyclone.psyir.symbols import REAL_TYPE
+#     from psyclone.psyir.nodes import BinaryOperation
 
-    dag = DataFlowDAG()
-    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
-    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
-    reference = Reference(datasymbol)
-    reference2 = Reference(datasymbol2)
-    operation = BinaryOperation.create(
-        BinaryOperation.Operator.ADD, reference, reference2
-    )
-    read = AccessType.READ
-    write = AccessType.WRITE
+#     dag = DataFlowDAG()
+#     datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
+#     datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
+#     reference = Reference(datasymbol)
+#     reference2 = Reference(datasymbol2)
+#     operation = BinaryOperation.create(
+#         BinaryOperation.Operator.ADD, reference, reference2
+#     )
+#     read = AccessType.READ
+#     write = AccessType.WRITE
 
-    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
+#     node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
 
-    print("===")
-    print(dag.dataflow_tree_from(reference))
-    print("===")
-    print(dag.dataflow_tree_from(reference2))
+#     print("===")
+#     print(dag.dataflow_tree_from(reference))
+#     print("===")
+#     print(dag.dataflow_tree_from(reference2))
