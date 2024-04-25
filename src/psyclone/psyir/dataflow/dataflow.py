@@ -63,6 +63,7 @@ from psyclone.psyir.nodes import (
     ACCCopyInClause,
     OMPDependClause,
     RegionDirective,
+    OMPParallelDirective
 )
 from psyclone.psyir.symbols import (
     DataSymbol,
@@ -70,6 +71,8 @@ from psyclone.psyir.symbols import (
     ArrayType,
 )
 
+# TODO: a proper dataflow would take into account if/else branches.
+# TODO: we could 'inline' the called (and found) routines in the DAG.
 
 class DataFlowNode:
     """
@@ -1016,28 +1019,26 @@ class DataFlowDAG:
         dag = cls()
         dag._schedule = schedule
 
+        # Add nodes for the intent(in[out]) arguments of the routine (if any)
         if isinstance(schedule, Routine):
             for argument in schedule.symbol_table.argument_list:
-                # intent(in) => write-like node at routine start
-                if argument.interface.access is ArgumentInterface.Access.READ:
+                # intent(in[out]) => write-like node at routine start
+                if argument.interface.access is not ArgumentInterface.Access.WRITE:
                     DataFlowNode.create(dag, argument, AccessType.WRITE)
-                # intent(out) => read-like node at routine end
-                elif (
-                    argument.interface.access is ArgumentInterface.Access.WRITE
-                ):
-                    DataFlowNode.create(dag, argument, AccessType.READ)
-                # intent(inout) or unknown => write-like node at routine start
-                #                             and read-like node at routine end
-                else:
-                    DataFlowNode.create(dag, argument, AccessType.WRITE)
-                    DataFlowNode.create(dag, argument, AccessType.READ)
 
         # Transform all statements found in the schedule, recursing if need be
         dag._statement_list_to_dag_nodes(schedule.children)
 
-        # Link the (in)out argument output node to the previous writes
-        for out_arg_node in dag.out_arguments_nodes:
-            out_arg_node.add_backward_dependence_to_last_write()
+        # Add nodes for the intent([in]out) arguments of the routine (if any)
+        if isinstance(schedule, Routine):
+            for argument in schedule.symbol_table.argument_list:
+               # intent(out) => read-like node at routine end
+                if argument.interface.access is not ArgumentInterface.Access.READ:
+                    DataFlowNode.create(dag, argument, AccessType.READ)
+
+        # # Link the (in)out argument output node to the previous writes
+        # for out_arg_node in dag.out_arguments_nodes:
+        #     out_arg_node.add_backward_dependence_to_last_write()
 
         return dag
 
@@ -1706,7 +1707,19 @@ class DataFlowDAG:
                         f'{id} [label="{label}", shape="oval", color="{color}"]'
                     )
                 elif isinstance(dag_node.psyir, (Reference, Literal)):
-                    lines.append(f'{id} [label="{label}", color="{color}"]')
+                    if isinstance(dag_node.psyir.parent, (OMPFirstprivateClause,
+                            OMPSharedClause,
+                            ACCCopyClause,
+                            ACCCopyInClause,
+                            OMPDependClause,
+                            OMPPrivateClause, ACCCopyOutClause)):
+                        label += f"({type(dag_node.psyir.parent).__name__})"
+                        lines.append(
+                            f'{id} [label="{label}", shape="diamond", '
+                            f'color="{color}"]'
+                        )
+                    else:
+                        lines.append(f'{id} [label="{label}", color="{color}"]')
                 else:
                     raise ValueError(type(dag_node.psyir).__name__)
 
@@ -1796,8 +1809,8 @@ end subroutine bar
 
     source2 = """
 subroutine foo(a, b)
-    real, intent(in) :: a
-    real, intent(out) :: b
+    real, intent(inout) :: a
+    real, intent(inout) :: b
     real :: c, d, e, f
     integer :: i, j
     c = a + 1.0
@@ -1827,9 +1840,36 @@ subroutine bar(x, y)
     y = exp(x**2)
 end subroutine bar"""
 
-    psyir = reader.psyir_from_source(source2)
+    source3 = """
+    subroutine foo(a, b, c)
+        real, intent(inout) :: a
+        real, intent(inout) :: b
+        real, intent(inout) :: c
 
+        !$ omp parallel private(b) firstprivate(c)
+            a = b + c
+            b = 3.0
+            c = 4.0
+        !$omp end parallel
+    end subroutine foo
+    """
+
+    source = source3
+    psyir = reader.psyir_from_source(source)
     routine = psyir.children[0]
+
+    if source == source3:
+        datasymbol_b = routine.symbol_table.lookup("b")
+        datasymbol_c = routine.symbol_table.lookup("c")
+        directive = OMPParallelDirective.create(routine.pop_all_children())
+        private_clause = OMPPrivateClause.create([datasymbol_b])
+        ref_b_private = private_clause.children[0]
+        firstprivate_clause = OMPFirstprivateClause.create([datasymbol_c])
+        ref_c_firstprivate = firstprivate_clause.children[0]
+        directive.children[2] = private_clause
+        directive.children[3] = firstprivate_clause
+        routine.addchild(directive)
+
     dag = DataFlowDAG.create_from_schedule(routine)
 
     #     dag_fwd_leaves = dag.forward_leaves
@@ -1847,7 +1887,7 @@ end subroutine bar"""
     #     # for leaf in dag_bwd_leaves:
     #     #     print(leaf.psyir)
 
-    a, b = routine.symbol_table.argument_list
+    a, b = routine.symbol_table.argument_list[:2]
     flow_from_a = dag.dataflow_tree_from(a)
     flow_to_b = dag.dataflow_tree_to(b)
     list_from_a = flow_from_a.to_psyir_list()
