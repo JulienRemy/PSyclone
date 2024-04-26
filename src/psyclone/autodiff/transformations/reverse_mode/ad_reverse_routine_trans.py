@@ -49,7 +49,9 @@ from psyclone.psyir.nodes import (
     IfBlock,
     Loop,
     Schedule,
-    DataNode
+    DataNode,
+    Statement,
+    Routine,
 )
 from psyclone.psyir.symbols import (
     REAL_TYPE,
@@ -59,6 +61,7 @@ from psyclone.psyir.symbols import (
     ArrayType,
 )
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
+from psyclone.psyir.dataflow import DataFlowDAG, DataFlowNode
 
 from psyclone.autodiff import own_routine_symbol, assign_zero
 from psyclone.autodiff.tapes import ADTape, ADValueTape, ADControlTape
@@ -125,6 +128,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         # Lists of adjoint symbols for operations
         self.operation_adjoints = []
+
+        # List of active datanodes
+        self.active_datanodes = []
 
         # Transformations need to know about the ADReverseRoutineTrans
         # calling them
@@ -472,6 +478,65 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         )
         return symbols
 
+    @property
+    def active_datanodes(self):
+        """Returns the list of active datanodes in the Routine, based on the \
+        activity analysis.
+        
+        :return: list of active datanodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]"""
+        return self._active_datanodes
+
+    @active_datanodes.setter
+    def active_datanodes(self, active_datanodes):
+        if not isinstance(active_datanodes, list):
+            raise TypeError(
+                f"'active_datanodes' argument should be of "
+                f"type 'list' but found "
+                f"'{type(active_datanodes).__name__}'."
+            )
+        for datanode in active_datanodes:
+            if not isinstance(datanode, DataNode):
+                raise TypeError(
+                    f"'active_datanodes' argument should be of "
+                    f"a list with elements of type 'DataNode' but found "
+                    f"'{type(datanode).__name__}'."
+                )
+        self._active_datanodes = active_datanodes
+
+    @property
+    def active_statements(self):
+        """Returns the list of active statements in the Routine, based on the \
+        activity analysis.
+
+        :return: list of active statements.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Statement`]
+        """
+        return self._active_statements
+
+    @active_statements.setter
+    def active_statements(self, active_statements):
+        if not isinstance(active_statements, list):
+            raise TypeError(
+                f"'active_statements' argument should be of "
+                f"type 'list' but found "
+                f"'{type(active_statements).__name__}'."
+            )
+        for statement in active_statements:
+            if not isinstance(statement, Statement):
+                raise TypeError(
+                    f"'active_statements' argument should be of "
+                    f"a list with elements of type 'Statement' but found "
+                    f"'{type(statement).__name__}'."
+                )
+        if statement not in self.routine.children:
+            raise ValueError(
+                f"'active_statements' argument should be a list of "
+                f"statements of the Routine but found a statement "
+                f"{statement.debug_string()} that is not in the Routine."
+            )
+        self._active_statements = active_statements
+
     def validate(
         self,
         routine,
@@ -657,6 +722,14 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         # Process all symbols in the table, generating adjoint symbols
         self.process_data_symbols(options)
 
+        # Perform the activity analysis on the routine
+        activity_analysis = self.unpack_option("activity_analysis", options)
+        if activity_analysis:
+            self.perform_activity_analysis(options)
+        else:
+            self.active_datanodes = self.routine.walk(DataNode)
+            self.active_statements = self.routine.walk(Statement)
+
         # Transform the statements found in the Routine
         self.transform_children(options)
 
@@ -775,6 +848,152 @@ class ADReverseRoutineTrans(ADRoutineTrans):
             self.container_trans.container.addchild(jacobian_routine)
 
         return self.recording, self.returning, self.reversing
+
+    def perform_activity_analysis(self, options=None):
+        """Perform activity analysis on the input routine, based on the \
+        dataflows from the independent variables and to the dependent ones.
+        
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        
+        :raise"""
+
+        if not isinstance(options, (dict, NoneType)):
+            raise TypeError(
+                f"'options' argument should be of "
+                f"type 'dict' but found "
+                f"'{type(options).__name__}'."
+            )
+
+        active_datanodes = self.get_active_datanodes(options)
+        active_statements = self.get_active_statements(
+            active_datanodes, options
+        )
+
+        self.active_datanodes = active_datanodes
+        self.active_statements = active_statements
+
+        return active_datanodes, active_statements
+
+    def get_active_datanodes(self, options=None):
+        """Get the active datanodes in the routine, based on the dataflows \
+        from the independent variables and to the dependent ones.
+        
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        
+        :raises TypeError: if options is of the wrong type.
+        
+        :return: list of active datanodes.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.DataNode`]"""
+
+        if not isinstance(options, (dict, NoneType)):
+            raise TypeError(
+                f"'options' argument should be of "
+                f"type 'dict' but found "
+                f"'{type(options).__name__}'."
+            )
+
+        dependent_arguments = [
+            self.routine.symbol_table.lookup(name)
+            for name in self.dependent_variables
+        ]
+        independent_arguments = [
+            self.routine.symbol_table.lookup(name)
+            for name in self.independent_variables
+        ]
+
+        dag = DataFlowDAG.create_from_schedule(self.routine)
+        trees_to_dependent_arguments = [
+            dag.dataflow_tree_to(dep_arg) for dep_arg in dependent_arguments
+        ]
+        trees_from_independent_arguments = [
+            dag.dataflow_tree_from(indep_arg)
+            for indep_arg in independent_arguments
+        ]
+
+        # Union from dependent arguments
+        active_psyir_to_dependent_arguments = []
+        for tree in trees_to_dependent_arguments:
+            psyir_list = tree.to_psyir_list()
+            for psyir in psyir_list:
+                if psyir not in active_psyir_to_dependent_arguments:
+                    active_psyir_to_dependent_arguments.append(psyir)
+
+        # Union to independent arguments
+        active_psyir_from_independent_arguments = []
+        for tree in trees_from_independent_arguments:
+            psyir_list = tree.to_psyir_list()
+            for psyir in psyir_list:
+                if psyir not in active_psyir_from_independent_arguments:
+                    active_psyir_from_independent_arguments.append(psyir)
+
+        # Intersection
+        active_psyir = []
+        for psyir in active_psyir_to_dependent_arguments:
+            if psyir in active_psyir_from_independent_arguments:
+                active_psyir.append(psyir)
+
+        # Filter the DataNodes
+        active_datanodes = []
+        for psyir in active_psyir:
+            if isinstance(psyir, DataNode):
+                active_datanodes.append(psyir)
+
+        return active_datanodes
+
+    def get_active_statements(self, active_datanodes, options=None):
+        """Get the active statements in the routine, based on the dataflows \
+        from the independent variables and to the dependent ones.
+        
+        :param active_datanodes: list of active datanodes.
+        :type active_datanodes: List[:py:class:`psyclone.psyir.nodes.DataNode`]
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
+        
+        :raises: TypeError: if active_datanodes is of the wrong type.
+        :raises: TypeError: if an element of active_datanodes is of the wrong type.
+        :raises: TypeError: if options is of the wrong type.
+        
+        :return: list of active statements.
+        :rtype: List[:py:class:`psyclone.psyir.nodes.Statement`]
+        """
+
+        if not isinstance(active_datanodes, list):
+            raise TypeError(
+                f"'active_datanodes' argument should be of "
+                f"type 'list' but found "
+                f"'{type(active_datanodes).__name__}'."
+            )
+        for datanode in active_datanodes:
+            if not isinstance(datanode, DataNode):
+                raise TypeError(
+                    f"'active_datanodes' argument should be of "
+                    f"a list with elements of type 'DataNode' but found "
+                    f"'{type(datanode).__name__}'."
+                )
+
+        if not isinstance(options, (dict, NoneType)):
+            raise TypeError(
+                f"'options' argument should be of "
+                f"type 'dict' but found "
+                f"'{type(options).__name__}'."
+            )
+
+        active_statements = []
+        for datanode in active_datanodes:
+            statement = datanode.ancestor(Statement)
+            if statement not in active_statements:
+                active_statements.append(statement)
+                while statement not in self.routine.children:
+                    statement = statement.parent
+                    if statement not in active_statements:
+                        active_statements.append(statement)
+
+        return active_statements
 
     # TODO: when using arrays, it may make sense to check indices?
     def is_written_before(self, reference):
@@ -1113,6 +1332,9 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """
         # Go line by line through the Routine
         for child in self.routine.children:
+            if child not in self.active_statements:
+                continue
+
             if isinstance(child, Assignment):
                 (recording, returning) = self.transform_assignment(
                     child, options

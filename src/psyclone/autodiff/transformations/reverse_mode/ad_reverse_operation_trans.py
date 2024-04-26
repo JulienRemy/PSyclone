@@ -195,6 +195,9 @@ class ADReverseOperationTrans(ADOperationTrans):
         # NOTE: this is especially needed for assignments such as x = x*x
         # otherwise the incrementations to x_adj are done sequentially,
         # which is wrong
+
+        # TODO: activity analysis
+
         first_operand = operation.children[0]
         if (
             (isinstance(operation, BinaryOperation)
