@@ -564,6 +564,8 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         | - bool 'inline_operation_adjoints': True to inline all possible \
                                             operation adjoints definitions. \
                                             Defaults to True.
+        | - bool 'activity_analysis': True to perform activity analysis on the \
+                                      input routine. Defaults to True.
 
         :param routine: routine Node to the transformed.
         :type routine: :py:class:`psyclone.psyir.nodes.Routine`
