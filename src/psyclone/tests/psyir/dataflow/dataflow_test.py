@@ -18,6 +18,7 @@ from psyclone.psyir.nodes import (
     OMPPrivateClause,
     OMPFirstprivateClause,
     ACCParallelDirective,
+    ACCDataDirective,
     ACCCopyClause,
     ACCCopyOutClause,
     ACCCopyInClause,
@@ -1362,6 +1363,7 @@ def test_data_flow_dag_last_write_before_array_case():
     assert dag.last_write_before(node_datasymbol_b) is node_ref_bi1_write
     assert len(node_datasymbol_b.backward_dependences) == 2
 
+
 def test_data_flow_dag_last_write_before_directives_and_clauses():
     datasymbol_a = DataSymbol(
         "a",
@@ -1481,7 +1483,106 @@ def test_data_flow_dag_last_write_before_directives_and_clauses():
     assert dag.last_write_before(node_arg_c_out) is node_arg_c_in
     assert node_arg_c_out.backward_dependences == [node_arg_c_in]
 
+    # OpenACC directives
+    # OpenMP directives
+    # a: copy, b: copyout, c: copyin
+    routine = build_routine()
+    parallel_directive = ACCParallelDirective()
+    data_directive = ACCDataDirective(
+        parent=routine, children=[parallel_directive]
+    )
+    copy_clause = ACCCopyClause(children=[Reference(datasymbol_a)])
+    copyout_clause = ACCCopyOutClause(children=[Reference(datasymbol_b)])
+    copyin_clause = ACCCopyInClause(children=[Reference(datasymbol_c)])
 
-    # TODO: Add tests for OpenACC directives
+    ref_a_read1 = Reference(datasymbol_a)
+    ref_b_read1 = Reference(datasymbol_b)
+    ref_c_read1 = Reference(datasymbol_c)
+    ref_a_read2 = Reference(datasymbol_a)
+    ref_b_read2 = Reference(datasymbol_b)
+    ref_c_read2 = Reference(datasymbol_c)
+    ref_a_read3 = Reference(datasymbol_a)
+    ref_b_read3 = Reference(datasymbol_b)
+    ref_c_read3 = Reference(datasymbol_c)
+    ref_a_write1 = Reference(datasymbol_a)
+    ref_b_write1 = Reference(datasymbol_b)
+    ref_c_write1 = Reference(datasymbol_c)
+    ref_a_write2 = Reference(datasymbol_a)
+    ref_b_write2 = Reference(datasymbol_b)
+    ref_c_write2 = Reference(datasymbol_c)
+    ref_a_write3 = Reference(datasymbol_a)
+    ref_b_write3 = Reference(datasymbol_b)
+    ref_c_write3 = Reference(datasymbol_c)
 
-    
+    # b = 0.0
+    assignment0 = Assignment.create(ref_b_write1, Literal("0.0", REAL_TYPE))
+
+    # a = b + c
+    operation = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, ref_b_read1, ref_c_read1
+    )
+    assignment1 = Assignment.create(ref_a_write1, operation)
+
+    # b = 3.0
+    assignment2 = Assignment.create(ref_b_write2, Literal("3.0", REAL_TYPE))
+
+    # c = 4.0
+    assignment3 = Assignment.create(ref_c_write1, Literal("4.0", REAL_TYPE))
+
+    parallel_directive.dir_body.addchild(assignment0)
+    parallel_directive.dir_body.addchild(assignment1)
+    parallel_directive.dir_body.addchild(assignment2)
+    parallel_directive.dir_body.addchild(assignment3)
+
+    # FIXME: forcibly replacing _children to circumvent internals
+    copy_clause = ACCCopyClause(children=[Reference(datasymbol_a)])
+    copyout_clause = ACCCopyOutClause(children=[Reference(datasymbol_b)])
+    copyin_clause = ACCCopyInClause(children=[Reference(datasymbol_c)])
+    data_directive._children = [
+        data_directive.children[0],
+        copy_clause,
+        copyout_clause,
+        copyin_clause,
+    ]
+
+    # subroutine test_routine(a:inout, b:inout, c:inout)
+    # !$acc data copy(a) copyout(b) copyin(c)
+    # !$acc parallel
+    # a = b + c
+    # b = 3.0
+    # c = 4.0
+    # !$acc end parallel
+    # !$acc end data
+    routine.addchild(data_directive)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+    node_ref_a_write1 = dag.get_dag_node_for(ref_a_write1, write)
+    node_ref_b_write1 = dag.get_dag_node_for(ref_b_write1, write)
+    node_ref_b_write2 = dag.get_dag_node_for(ref_b_write2, write)
+    node_ref_c_write1 = dag.get_dag_node_for(ref_c_write1, write)
+    # node_ref_b_private = dag.get_dag_node_for(ref_b_private, write)
+    # node_ref_c_firstprivate = dag.get_dag_node_for(ref_c_firstprivate, read)
+    node_ref_b_read1 = dag.get_dag_node_for(ref_b_read1, read)
+    node_ref_c_read1 = dag.get_dag_node_for(ref_c_read1, read)
+    node_arg_a_in = dag.get_dag_node_for(datasymbol_a, write)
+    node_arg_b_in = dag.get_dag_node_for(datasymbol_b, write)
+    node_arg_c_in = dag.get_dag_node_for(datasymbol_c, write)
+    node_arg_a_out = dag.get_dag_node_for(datasymbol_a, read)
+    node_arg_b_out = dag.get_dag_node_for(datasymbol_b, read)
+    node_arg_c_out = dag.get_dag_node_for(datasymbol_c, read)
+    node_operation = dag.get_dag_node_for(operation, AccessType.UNKNOWN)
+
+    # Test valid last_write_before
+    assert dag.last_write_before(node_ref_b_write1) is node_arg_b_in
+    assert dag.last_write_before(node_ref_a_write1) is node_arg_a_in
+    assert node_ref_a_write1.backward_dependences == [node_operation]
+    assert dag.last_write_before(node_ref_b_read1) is node_ref_b_write1
+    assert node_ref_b_read1.backward_dependences == [node_ref_b_write1]
+    assert dag.last_write_before(node_ref_c_read1) is node_arg_c_in
+    assert node_ref_c_read1.backward_dependences == [node_arg_c_in]
+    assert dag.last_write_before(node_arg_a_out) is node_ref_a_write1
+    assert node_arg_a_out.backward_dependences == [node_ref_a_write1]
+    assert dag.last_write_before(node_arg_b_out) is node_ref_b_write2
+    assert node_arg_b_out.backward_dependences == [node_ref_b_write2]
+    assert dag.last_write_before(node_arg_c_out) is node_arg_c_in
+    assert node_arg_c_out.backward_dependences == [node_arg_c_in]
