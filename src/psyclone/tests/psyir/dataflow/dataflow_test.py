@@ -605,102 +605,6 @@ def test_data_flow_dag_to_psyir_list():
         and operation in psyir_list
     )
 
-
-def test_data_flow_dag_dataflow_tree_from():
-    dag = DataFlowDAG()
-    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
-    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
-    reference = Reference(datasymbol)
-    reference2 = Reference(datasymbol2)
-    operation = BinaryOperation.create(
-        BinaryOperation.Operator.ADD, reference, reference2
-    )
-    read = AccessType.READ
-    write = AccessType.WRITE
-
-    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
-    assert len(node.backward_dependences) == 2
-    assert len(dag.backward_leaves) == 2
-    assert dag.get_dag_node_for(reference, read) in dag.backward_leaves
-    assert dag.get_dag_node_for(reference2, read) in dag.backward_leaves
-    assert node in dag.forward_leaves
-    assert len(dag.forward_leaves) == 1
-    assert len(dag.get_dag_node_for(reference, read).forward_dependences) == 1
-    assert len(dag.get_dag_node_for(reference2, read).forward_dependences) == 1
-
-    # Test valid dataflow_tree_from
-    tree = dag.dataflow_tree_from(reference)
-    assert len(tree.dag_nodes) == 2
-    assert reference in [dag_node.psyir for dag_node in tree.dag_nodes]
-    assert operation in [dag_node.psyir for dag_node in tree.dag_nodes]
-
-    tree2 = dag.dataflow_tree_from(reference2)
-    assert tree2 is not tree
-    assert len(tree2.dag_nodes) == 2
-    assert reference2 in [dag_node.psyir for dag_node in tree2.dag_nodes]
-    assert operation in [dag_node.psyir for dag_node in tree2.dag_nodes]
-
-    tree3 = dag.dataflow_tree_from(operation)
-    assert [operation] == [dag_node.psyir for dag_node in tree3.dag_nodes]
-
-    # Test invalid dataflow_tree_from
-    with pytest.raises(TypeError):
-        dag.dataflow_tree_from(False)
-    with pytest.raises(TypeError):
-        dag.dataflow_tree_from(None)
-    datasymbol3 = DataSymbol("c", REAL_TYPE, interface=ArgumentInterface())
-    reference3 = Reference(datasymbol3)
-    with pytest.raises(ValueError):
-        dag.dataflow_tree_from(reference3)
-
-
-def test_data_flow_dag_dataflow_tree_to():
-    dag = DataFlowDAG()
-    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
-    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
-    reference = Reference(datasymbol)
-    reference2 = Reference(datasymbol2)
-    operation = BinaryOperation.create(
-        BinaryOperation.Operator.ADD, reference, reference2
-    )
-    read = AccessType.READ
-    write = AccessType.WRITE
-
-    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
-    assert len(node.backward_dependences) == 2
-    assert len(dag.backward_leaves) == 2
-    assert dag.get_dag_node_for(reference, read) in dag.backward_leaves
-    assert dag.get_dag_node_for(reference2, read) in dag.backward_leaves
-    assert node in dag.forward_leaves
-    assert len(dag.forward_leaves) == 1
-    assert len(dag.get_dag_node_for(reference, read).forward_dependences) == 1
-    assert len(dag.get_dag_node_for(reference2, read).forward_dependences) == 1
-
-    # Test valid dataflow_tree_to
-    tree = dag.dataflow_tree_to(operation)
-    assert len(tree.dag_nodes) == 3
-    assert operation in [dag_node.psyir for dag_node in tree.dag_nodes]
-    assert reference in [dag_node.psyir for dag_node in tree.dag_nodes]
-    assert reference2 in [dag_node.psyir for dag_node in tree.dag_nodes]
-
-    tree2 = dag.dataflow_tree_to(reference)
-    assert tree2 is not tree
-    assert [reference] == [dag_node.psyir for dag_node in tree2.dag_nodes]
-
-    tree3 = dag.dataflow_tree_to(reference2)
-    assert [reference2] == [dag_node.psyir for dag_node in tree3.dag_nodes]
-
-    # Test invalid dataflow_tree_to
-    with pytest.raises(TypeError):
-        dag.dataflow_tree_to(False)
-    with pytest.raises(TypeError):
-        dag.dataflow_tree_to(None)
-    datasymbol3 = DataSymbol("c", REAL_TYPE, interface=ArgumentInterface())
-    reference3 = Reference(datasymbol3)
-    with pytest.raises(ValueError):
-        dag.dataflow_tree_to(reference3)
-
-
 def test_data_flow_dag_all_reads():
     dag = DataFlowDAG()
     datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
@@ -1586,3 +1490,267 @@ def test_data_flow_dag_last_write_before_directives_and_clauses():
     assert node_arg_b_out.backward_dependences == [node_ref_b_write2]
     assert dag.last_write_before(node_arg_c_out) is node_arg_c_in
     assert node_arg_c_out.backward_dependences == [node_arg_c_in]
+
+def test_data_flow_dag_dataflow_tree_from():
+    dag = DataFlowDAG()
+    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
+    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
+    reference = Reference(datasymbol)
+    reference2 = Reference(datasymbol2)
+    operation = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, reference, reference2
+    )
+    read = AccessType.READ
+    write = AccessType.WRITE
+
+    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
+    assert len(node.backward_dependences) == 2
+    assert len(dag.backward_leaves) == 2
+    assert dag.get_dag_node_for(reference, read) in dag.backward_leaves
+    assert dag.get_dag_node_for(reference2, read) in dag.backward_leaves
+    assert node in dag.forward_leaves
+    assert len(dag.forward_leaves) == 1
+    assert len(dag.get_dag_node_for(reference, read).forward_dependences) == 1
+    assert len(dag.get_dag_node_for(reference2, read).forward_dependences) == 1
+
+    # Test valid dataflow_tree_from
+    tree = dag.dataflow_tree_from(reference)
+    assert len(tree.dag_nodes) == 2
+    assert reference in [dag_node.psyir for dag_node in tree.dag_nodes]
+    assert operation in [dag_node.psyir for dag_node in tree.dag_nodes]
+
+    tree2 = dag.dataflow_tree_from(reference2)
+    assert tree2 is not tree
+    assert len(tree2.dag_nodes) == 2
+    assert reference2 in [dag_node.psyir for dag_node in tree2.dag_nodes]
+    assert operation in [dag_node.psyir for dag_node in tree2.dag_nodes]
+
+    tree3 = dag.dataflow_tree_from(operation)
+    assert [operation] == [dag_node.psyir for dag_node in tree3.dag_nodes]
+
+    # Test invalid dataflow_tree_from
+    with pytest.raises(TypeError):
+        dag.dataflow_tree_from(False)
+    with pytest.raises(TypeError):
+        dag.dataflow_tree_from(None)
+    datasymbol3 = DataSymbol("c", REAL_TYPE, interface=ArgumentInterface())
+    reference3 = Reference(datasymbol3)
+    with pytest.raises(ValueError):
+        dag.dataflow_tree_from(reference3)
+
+    datasymbol_a = DataSymbol(
+        "a",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    datasymbol_b = DataSymbol(
+        "b",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    datasymbol_c = DataSymbol(
+        "c",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    ref_a_read1 = Reference(datasymbol_a)
+    ref_b_read1 = Reference(datasymbol_b)
+    ref_c_read1 = Reference(datasymbol_c)
+    ref_a_read2 = Reference(datasymbol_a)
+    ref_b_read2 = Reference(datasymbol_b)
+    ref_c_read2 = Reference(datasymbol_c)
+    ref_a_read3 = Reference(datasymbol_a)
+    ref_b_read3 = Reference(datasymbol_b)
+    ref_c_read3 = Reference(datasymbol_c)
+    ref_a_write1 = Reference(datasymbol_a)
+    ref_b_write1 = Reference(datasymbol_b)
+    ref_c_write1 = Reference(datasymbol_c)
+    ref_a_write2 = Reference(datasymbol_a)
+    ref_b_write2 = Reference(datasymbol_b)
+    ref_c_write2 = Reference(datasymbol_c)
+    ref_a_write3 = Reference(datasymbol_a)
+    ref_b_write3 = Reference(datasymbol_b)
+    ref_c_write3 = Reference(datasymbol_c)
+
+    read = AccessType.READ
+    write = AccessType.WRITE
+
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table._argument_list.append(datasymbol_c)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+
+    # a = a + 1.0
+    # b = 2.0
+    # c = a + b
+    operation1 = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, ref_a_read1, Literal("1.0", REAL_TYPE)
+    )
+    assignment1 = Assignment.create(ref_a_write1, operation1)
+    assignment2 = Assignment.create(ref_b_write1, Literal("2.0", REAL_TYPE))
+    operation2 = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, ref_a_read2, ref_b_read1
+    )
+    assignment3 = Assignment.create(ref_c_write1, operation2)
+
+    routine.addchild(assignment1)
+    routine.addchild(assignment2)
+    routine.addchild(assignment3)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+
+    # Test valid dataflow_tree_from
+    tree_from_arg_a = dag.dataflow_tree_from(datasymbol_a)
+    assert tree_from_arg_a is not None
+    assert len(tree_from_arg_a.dag_nodes) == 9
+    tree_from_arg_b = dag.dataflow_tree_from(datasymbol_b)
+    assert len(tree_from_arg_b.dag_nodes) == 1
+    tree_from_arg_c = dag.dataflow_tree_from(datasymbol_c)
+    assert len(tree_from_arg_c.dag_nodes) == 1
+
+    tree_from_ref_a_read1 = dag.dataflow_tree_from(ref_a_read1)
+    assert len(tree_from_ref_a_read1.dag_nodes) == 8
+    tree_from_ref_a_write1 = dag.dataflow_tree_from(ref_a_write1)
+    assert len(tree_from_ref_a_write1.dag_nodes) == 6
+    tree_from_ref_b_write_1 = dag.dataflow_tree_from(ref_b_write1)
+    assert len(tree_from_ref_b_write_1.dag_nodes) == 6
+    tree_from_ref_a_read2 = dag.dataflow_tree_from(ref_a_read2)
+    assert len(tree_from_ref_a_read2.dag_nodes) == 4
+    tree_from_ref_b_read1 = dag.dataflow_tree_from(ref_b_read1)
+    assert len(tree_from_ref_b_read1.dag_nodes) == 4
+    tree_from_ref_c_write1 = dag.dataflow_tree_from(ref_c_write1)
+    assert len(tree_from_ref_c_write1.dag_nodes) == 2
+
+def test_data_flow_dag_dataflow_tree_to():
+    dag = DataFlowDAG()
+    datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
+    datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
+    reference = Reference(datasymbol)
+    reference2 = Reference(datasymbol2)
+    operation = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, reference, reference2
+    )
+    read = AccessType.READ
+    write = AccessType.WRITE
+
+    node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
+    assert len(node.backward_dependences) == 2
+    assert len(dag.backward_leaves) == 2
+    assert dag.get_dag_node_for(reference, read) in dag.backward_leaves
+    assert dag.get_dag_node_for(reference2, read) in dag.backward_leaves
+    assert node in dag.forward_leaves
+    assert len(dag.forward_leaves) == 1
+    assert len(dag.get_dag_node_for(reference, read).forward_dependences) == 1
+    assert len(dag.get_dag_node_for(reference2, read).forward_dependences) == 1
+
+    # Test valid dataflow_tree_to
+    tree = dag.dataflow_tree_to(operation)
+    assert len(tree.dag_nodes) == 3
+    assert operation in [dag_node.psyir for dag_node in tree.dag_nodes]
+    assert reference in [dag_node.psyir for dag_node in tree.dag_nodes]
+    assert reference2 in [dag_node.psyir for dag_node in tree.dag_nodes]
+
+    tree2 = dag.dataflow_tree_to(reference)
+    assert tree2 is not tree
+    assert [reference] == [dag_node.psyir for dag_node in tree2.dag_nodes]
+
+    tree3 = dag.dataflow_tree_to(reference2)
+    assert [reference2] == [dag_node.psyir for dag_node in tree3.dag_nodes]
+
+    # Test invalid dataflow_tree_to
+    with pytest.raises(TypeError):
+        dag.dataflow_tree_to(False)
+    with pytest.raises(TypeError):
+        dag.dataflow_tree_to(None)
+    datasymbol3 = DataSymbol("c", REAL_TYPE, interface=ArgumentInterface())
+    reference3 = Reference(datasymbol3)
+    with pytest.raises(ValueError):
+        dag.dataflow_tree_to(reference3)
+
+    datasymbol_a = DataSymbol(
+        "a",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    datasymbol_b = DataSymbol(
+        "b",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    datasymbol_c = DataSymbol(
+        "c",
+        REAL_TYPE,
+        interface=ArgumentInterface(access=ArgumentInterface.Access.READWRITE),
+    )
+    ref_a_read1 = Reference(datasymbol_a)
+    ref_b_read1 = Reference(datasymbol_b)
+    ref_c_read1 = Reference(datasymbol_c)
+    ref_a_read2 = Reference(datasymbol_a)
+    ref_b_read2 = Reference(datasymbol_b)
+    ref_c_read2 = Reference(datasymbol_c)
+    ref_a_read3 = Reference(datasymbol_a)
+    ref_b_read3 = Reference(datasymbol_b)
+    ref_c_read3 = Reference(datasymbol_c)
+    ref_a_write1 = Reference(datasymbol_a)
+    ref_b_write1 = Reference(datasymbol_b)
+    ref_c_write1 = Reference(datasymbol_c)
+    ref_a_write2 = Reference(datasymbol_a)
+    ref_b_write2 = Reference(datasymbol_b)
+    ref_c_write2 = Reference(datasymbol_c)
+    ref_a_write3 = Reference(datasymbol_a)
+    ref_b_write3 = Reference(datasymbol_b)
+    ref_c_write3 = Reference(datasymbol_c)
+
+    read = AccessType.READ
+    write = AccessType.WRITE
+
+    routine = Routine("test_routine")
+    routine.symbol_table._argument_list.append(datasymbol_a)
+    routine.symbol_table._argument_list.append(datasymbol_b)
+    routine.symbol_table._argument_list.append(datasymbol_c)
+    routine.symbol_table.add(datasymbol_a)
+    routine.symbol_table.add(datasymbol_b)
+    routine.symbol_table.add(datasymbol_c)
+
+    # a = a + 1.0
+    # b = 2.0
+    # c = a + b
+    operation1 = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, ref_a_read1, Literal("1.0", REAL_TYPE)
+    )
+    assignment1 = Assignment.create(ref_a_write1, operation1)
+    assignment2 = Assignment.create(ref_b_write1, Literal("2.0", REAL_TYPE))
+    operation2 = BinaryOperation.create(
+        BinaryOperation.Operator.ADD, ref_a_read2, ref_b_read1
+    )
+    assignment3 = Assignment.create(ref_c_write1, operation2)
+
+    routine.addchild(assignment1)
+    routine.addchild(assignment2)
+    routine.addchild(assignment3)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+
+    # Test valid dataflow_tree_to
+    tree_to_arg_a = dag.dataflow_tree_to(datasymbol_a)
+    assert len(tree_to_arg_a.dag_nodes) == 6
+    tree_to_arg_b = dag.dataflow_tree_to(datasymbol_b)
+    assert len(tree_to_arg_b.dag_nodes) == 3
+    tree_to_arg_c = dag.dataflow_tree_to(datasymbol_c)
+    assert len(tree_to_arg_c.dag_nodes) == 12
+
+    tree_to_ref_a_read1 = dag.dataflow_tree_to(ref_a_read1)
+    assert len(tree_to_ref_a_read1.dag_nodes) == 2
+    tree_to_ref_a_write1 = dag.dataflow_tree_to(ref_a_write1)
+    assert len(tree_to_ref_a_write1.dag_nodes) == 5
+    tree_to_ref_b_write1 = dag.dataflow_tree_to(ref_b_write1)
+    assert len(tree_to_ref_b_write1.dag_nodes) == 2
+    tree_to_ref_a_read2 = dag.dataflow_tree_to(ref_a_read2)
+    assert len(tree_to_ref_a_read2.dag_nodes) == 6
+    tree_to_ref_b_read1 = dag.dataflow_tree_to(ref_b_read1)
+    assert len(tree_to_ref_b_read1.dag_nodes) == 3
+    tree_to_ref_c_write1 = dag.dataflow_tree_to(ref_c_write1)
+    assert len(tree_to_ref_c_write1.dag_nodes) == 11

@@ -672,8 +672,8 @@ class DataFlowNode:
         :param dag_copy: The new DAG to copy the node to. 
                          If None, a new DAG is created. Defaults to None.
         :type dag_copy: Union[:py:class:`DataFlowDAG`, NoneType]
-        :param originals: The list of original nodes. Defaults to an empty list.
-        :type originals: List[:py:class:`DataFlowNode`]
+        :param originals: The list of original nodes. Defaults to None.
+        :type originals: Union[List[:py:class:`DataFlowNode`], NoneType]
         :param copies: The list of copied nodes. Defaults to None.
         :type copies: Union[List[:py:class:`DataFlowNode`], NoneType]
 
@@ -751,15 +751,15 @@ class DataFlowNode:
             copy.add_forward_dependence(fwd_copy)
         return copy
 
-    def copy_backward(self, dag_copy=None, originals=[], copies=[]):
+    def copy_backward(self, dag_copy=None, originals=None, copies=None):
         """Copy the current node to a new DAG, recursing along the backward \
         dependences.
 
         :param dag_copy: The new DAG to copy the node to. 
                          If None, a new DAG is created. Defaults to None.
         :type dag_copy: Union[:py:class:`DataFlowDAG`, NoneType]
-        :param originals: The list of original nodes. Defaults to an empty list.
-        :type originals: List[:py:class:`DataFlowNode`]
+        :param originals: The list of original nodes. Defaults to None.
+        :type originals: Union[List[:py:class:`DataFlowNode`], NoneType]
         :param copies: The list of copied nodes. Defaults to None.
         :type copies: Union[List[:py:class:`DataFlowNode`], NoneType]
 
@@ -1179,9 +1179,9 @@ class DataFlowDAG:
         from_node = None
         nodes = self.backward_leaves.copy()
         new_nodes = []
-        while len(nodes) != 0:
+        while from_node is None and len(nodes) != 0:
             for node in nodes:
-                if node.psyir == psyir:
+                if node.psyir is psyir:
                     from_node = node
                 else:
                     new_nodes.extend(node.forward_dependences)
@@ -1235,9 +1235,9 @@ class DataFlowDAG:
         to_node = None
         nodes = self.forward_leaves.copy()
         new_nodes = []
-        while len(nodes) != 0:
+        while to_node is None and len(nodes) != 0:
             for node in nodes:
-                if node.psyir == psyir:
+                if node.psyir is psyir:
                     to_node = node
                 else:
                     new_nodes.extend(node.backward_dependences)
@@ -1784,3 +1784,169 @@ class DataFlowDAG:
         :rtype: str
         """
         return str(self)
+
+if __name__ == "__main__":
+    from psyclone.psyir.frontend.fortran import FortranReader
+
+    reader = FortranReader()
+
+    source1 = """
+subroutine foo(a, b)
+    real, intent(inout) :: a
+    real, intent(out), dimension(10) :: b
+    real :: c, d, e, f
+    integer :: i, j
+
+    b = 3.0
+    d = 4.0
+
+    do i = 1, 9
+        b(i) = a**i
+        c = b(i)
+        b(i + 1) = d
+    end do
+
+    b(3) = 3.0
+end subroutine foo
+
+
+subroutine bar(x, y)
+    real, intent(inout) :: x
+    real, intent(inout) :: y
+
+    x = x + 1.0
+    y = exp(x**2)
+end subroutine bar
+    """
+
+    source2 = """
+subroutine foo(a, b)
+    real, intent(inout) :: a
+    real, intent(inout) :: b
+    real :: c, d, e, f
+    integer :: i, j
+    a = a + 1.0
+    c = a + 1.0
+    e = a**2
+    f = cos(e)
+    d = c + 2.0
+    c = d * a
+    b = c + d
+
+    call bar(c, b)
+    b = b + c
+end subroutine foo
+
+subroutine bar(x, y)
+    real, intent(in) :: x
+    real, intent(inout) :: y
+
+    !x = x + 1.0
+    y = exp(x**2)
+end subroutine bar"""
+
+    source3 = """
+    subroutine foo(a, b, c)
+        real, intent(inout) :: a
+        real, intent(inout) :: b
+        real, intent(inout) :: c
+
+        !$ omp parallel private(b) firstprivate(c)
+            b = 2.0
+            a = b + c
+            b = 3.0
+            c = 4.0
+        !$omp end parallel
+    end subroutine foo
+    """
+
+    source = source2
+    psyir = reader.psyir_from_source(source)
+    routine = psyir.children[0]
+
+    if source == source3:
+        datasymbol_b = routine.symbol_table.lookup("b")
+        datasymbol_c = routine.symbol_table.lookup("c")
+        directive = OMPParallelDirective.create(routine.pop_all_children())
+        private_clause = OMPPrivateClause.create([datasymbol_b])
+        ref_b_private = private_clause.children[0]
+        firstprivate_clause = OMPFirstprivateClause.create([datasymbol_c])
+        ref_c_firstprivate = firstprivate_clause.children[0]
+        directive.children[2] = private_clause
+        directive.children[3] = firstprivate_clause
+        routine.addchild(directive)
+
+    dag = DataFlowDAG.create_from_schedule(routine)
+
+    #     dag_fwd_leaves = dag.forward_leaves
+    #     dag_bwd_leaves = dag.backward_leaves
+
+    #     # print("DAG nodes:")
+    #     # for node in dag.dag_nodes:
+    #     #     print(node.psyir)
+
+    #     # print("==========\nForward leaves:")
+    #     # for leaf in dag_fwd_leaves:
+    #     #     print(leaf.psyir)
+
+    #     # print("==========\nBackward leaves:")
+    #     # for leaf in dag_bwd_leaves:
+    #     #     print(leaf.psyir)
+
+    a, b = routine.symbol_table.argument_list[:2]
+    flow_from_a = dag.dataflow_tree_from(a)
+    flow_to_b = dag.dataflow_tree_to(b)
+    list_from_a = flow_from_a.to_psyir_list()
+    list_to_b = flow_to_b.to_psyir_list()
+
+    #     bwd_leaves_from_a = flow_from_a.backward_leaves
+    #     print("==========\nBackward leaves:")
+    #     for leaf in bwd_leaves_from_a:
+    #         print(leaf.psyir)
+
+    #     fwd_leaves_to_b = flow_to_b.forward_leaves
+    #     print("==========\nForward leaves:")
+    #     for leaf in fwd_leaves_to_b:
+    #         print(leaf.psyir)
+
+    #     # print("===========\nFwd and bwd deps for b_arg")
+    #     # b_out_arg_node = DataFlowNode.create_or_get(dag, b)
+    #     # print(b_out_arg_node.forward_dependences,
+    #     #        b_out_arg_node.backward_dependences)
+
+    #     # print("=====\n from a:")
+    #     # for psyir in list_from_a:
+    #     #     print(psyir)
+    #     #     print("------------")
+    #     # print("=====\n to b:")
+    #     # for psyir in list_to_b:
+    #     #     print(psyir)
+    #     #     print("------------")
+    #     # print(flow_to_b.to_psyir_list())
+
+    dag.render_graph("dag")
+    flow_from_a.render_graph("from_a")
+    flow_to_b.render_graph("to_b")
+
+#     # print(dag)
+
+#     from psyclone.psyir.symbols import REAL_TYPE
+#     from psyclone.psyir.nodes import BinaryOperation
+
+#     dag = DataFlowDAG()
+#     datasymbol = DataSymbol("a", REAL_TYPE, interface=ArgumentInterface())
+#     datasymbol2 = DataSymbol("b", REAL_TYPE, interface=ArgumentInterface())
+#     reference = Reference(datasymbol)
+#     reference2 = Reference(datasymbol2)
+#     operation = BinaryOperation.create(
+#         BinaryOperation.Operator.ADD, reference, reference2
+#     )
+#     read = AccessType.READ
+#     write = AccessType.WRITE
+
+#     node = DataFlowNode.create(dag, operation, AccessType.UNKNOWN)
+
+#     print("===")
+#     print(dag.dataflow_tree_from(reference))
+#     print("===")
+#     print(dag.dataflow_tree_from(reference2))
