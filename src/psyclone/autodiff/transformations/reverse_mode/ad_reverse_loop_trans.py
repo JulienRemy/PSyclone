@@ -423,8 +423,8 @@ class ADReverseLoopTrans(ADLoopTrans):
                     value_do_offset_assignment.copy(), 0
                 )
 
-        if isinstance(self, ADReverseParallelLoopTrans):
-            self.transform_scatter_adjoints_to_gather_adjoints(loop, returning_loop)
+        # if isinstance(self, ADReverseParallelLoopTrans):
+        #     self.transform_scatter_adjoints_to_gather_adjoints(loop, returning_loop)
 
         recording.extend(recording_offsets_and_loop)
         returning = returning_offsets_and_loop + returning
