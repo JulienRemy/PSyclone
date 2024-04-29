@@ -43,7 +43,7 @@ from psyclone.psyir.nodes import (
     IntrinsicCall,
     Literal,
 )
-from psyclone.psyir.symbols.interfaces import ArgumentInterface
+from psyclone.psyir.symbols import ScalarType, ArgumentInterface
 
 from psyclone.autodiff.transformations import (
     ADCallTrans,
@@ -188,17 +188,22 @@ class ADForwardCallTrans(ADCallTrans):
         super().transform_reference_argument(reference, options)
 
         # Symbol and derivative symbol of the argument
-        #symbol = reference.symbol
-        #derivative_symbol = self.routine_trans.data_symbol_differential_map[
+        # symbol = reference.symbol
+        # derivative_symbol = self.routine_trans.data_symbol_differential_map[
         #    symbol
-        #]
+        # ]
 
-        # Add (var, var_d) as arguments of the transformed routine
-        # return [Reference(symbol), Reference(derivative_symbol)]
-        derivative_reference \
-            = self.routine_trans.reference_to_differential_of(reference)
+        if reference.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+            # Add (var, var_d) as arguments of the transformed routine
+            # return [Reference(symbol), Reference(derivative_symbol)]
+            derivative_reference = (
+                self.routine_trans.reference_to_differential_of(reference)
+            )
 
-        return [reference.copy(), derivative_reference]
+            return [reference.copy(), derivative_reference]
+
+        else:
+            return [reference.copy()]
 
     def transform_operation_argument(self, operation, options=None):
         """Transforms an Operation or IntrinsicCall argument of the Call.

@@ -626,9 +626,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                            transformations. Defaults to True.
         | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        | - bool 'inline_operation_adjoints': True to inline all possible \
-                                            operation adjoints definitions. \
-                                            Defaults to True.
         | - bool 'activity_analysis': True to perform activity analysis on the \
                                       input routine. Defaults to True.
 
@@ -1402,68 +1399,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         return adjoint
 
-    def inline_operation_adjoints(self, routine, options=None):
-        """Inline the definitions of operations adjoints, ie. the RHS of 
-        Assignment nodes with LHS being an operation adjoint, 
-        everywhere it's possible in the 'routine', ie. except 
-        for those used as Call arguments.
-
-        :param routine: routine to simplify.
-        :type routine: py:class:`psyclone.psyir.nodes.Routine`
-        :param options: a dictionary with options for transformations, \
-                        defaults to None.
-        :type options: Optional[Dict[Str, Any]]
-        """
-        # pylint: disable=protected-access, too-many-locals
-
-        # NOTE: must NOT be done for independent adjoints...
-        all_assignments = routine.walk(Assignment)
-        all_calls = routine.walk(Call)
-        # Only assignments to operation adjoints
-        op_adj_assignments = [
-            assignment
-            for assignment in all_assignments
-            if assignment.lhs.name.startswith(self._operation_adjoint_name)
-        ]
-        for assignment in op_adj_assignments:
-            call_args = []
-            for call in all_calls:
-                call_args.extend(call.children)
-            if assignment.lhs in call_args:
-                continue
-
-            # Used to look at other assignments after this one only
-            i = all_assignments.index(assignment)
-            # Get the occurences of this operation adjoint on the rhs of
-            # other assignments
-            rhs_occurences = []
-            for other_assignment in all_assignments[i + 1 :]:
-                refs_in_rhs = other_assignment.rhs.walk(Reference)
-                for ref in refs_in_rhs:
-                    if ref == assignment.lhs:
-                        rhs_occurences.append(ref)
-                        # If already 1 occurence, we won't inline unless rhs
-                        # is a Reference or Literal
-                        # so stop there
-                        if (
-                            not isinstance(assignment.rhs, (Reference, Literal))
-                        ) and (len(rhs_occurences) == 2):
-                            break
-
-            # Substitute if the RHS is a Reference or Literal
-            # (to avoid unnecessary declarations of operation adjoints)
-            # or if it only occurs once in a RHS.
-            if len(rhs_occurences) == 1 or isinstance(
-                assignment.rhs, (Reference, Literal)
-            ):
-                substitute = assignment.rhs.detach()
-                assignment.detach()
-                all_assignments.remove(assignment)
-                # TODO: this might not be right for vectors...
-                routine.symbol_table._symbols.pop(assignment.lhs.name)
-                for rhs_occurence in rhs_occurences:
-                    rhs_occurence.replace_with(substitute.copy())
-
     def postprocess(self, routine, options=None):
         """Apply postprocessing steps (simplification, operation adjoints 
         substitution) to the 'routine' argument.
@@ -1472,9 +1407,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         | - bool 'simplify': True to apply simplifications. Defaults to True.
         | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        | - bool 'inline_operation_adjoints': True to inline all possible \
-                                            operation adjoints definitions. \
-                                            Defaults to True.
 
         :param routine: routine to postprocess.
         :type routine: py:class:`psyclone.psyir.nodes.Routine`
@@ -1482,27 +1414,11 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
         """
-
-        # Inline the operation adjoints definitions
-        # (rhs of Assignment nodes whose LHS is an operation adjoint)
-        # if only used once (unecessary declaration)
-        inline_operation_adjoints = self.unpack_option(
-            "inline_operation_adjoints", options
-        )
-        if inline_operation_adjoints:
-            self.inline_operation_adjoints(routine, options)
-
         # Simplify the BinaryOperation and Assignment nodes
         # in the returning routine
         simplify = self.unpack_option("simplify", options)
         if simplify:
             self.simplify(routine, options)
-
-        # Inline the operation adjoints again (in case the RHS simplified to a
-        # Reference)
-        # eg. 'op_adj = x_adj' should be substituted.
-        if inline_operation_adjoints:
-            self.inline_operation_adjoints(routine, options)
 
     def value_tape_non_written_values(self, options):
         """Record and restore the last values of non-argument REAL variables \
@@ -1607,23 +1523,24 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                 var, scope_limit=self.returning
             )
 
-            # Use the original symbol (not the copy) to get its adjoint
-            adjoint_symbol = self.data_symbol_differential_map[symbol]
-            adjoint_symbol.interface = ArgumentInterface(
-                ArgumentInterface.Access.READWRITE
-            )
+            if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                # Use the original symbol (not the copy) to get its adjoint
+                adjoint_symbol = self.data_symbol_differential_map[symbol]
+                adjoint_symbol.interface = ArgumentInterface(
+                    ArgumentInterface.Access.READWRITE
+                )
 
-            # Insert the adjoint in the returning argument list
-            # After the argument
-            self.add_to_argument_list(
-                self.returning_table, adjoint_symbol, after=symbol
-            )
+                # Insert the adjoint in the returning argument list
+                # After the argument
+                self.add_to_argument_list(
+                    self.returning_table, adjoint_symbol, after=symbol
+                )
 
-            # Insert the adjoint in the reverting argument list
-            self.reversing_table.add(adjoint_symbol)
-            self.add_to_argument_list(
-                self.reversing_table, adjoint_symbol, after=symbol
-            )
+                # Insert the adjoint in the reverting argument list
+                self.reversing_table.add(adjoint_symbol)
+                self.add_to_argument_list(
+                    self.reversing_table, adjoint_symbol, after=symbol
+                )
 
     def add_tape_argument(self, tape, options=None):
         """Add a tape as argument of both the transformed routines.

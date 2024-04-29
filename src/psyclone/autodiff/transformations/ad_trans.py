@@ -53,7 +53,6 @@ class ADTrans(Transformation, metaclass=ABCMeta):
         "jacobian": False,
         "simplify": True,
         "simplify_n_times": 5,
-        "inline_operation_adjoints": True,
         "use_sympy": True,
         "tape_outside_loops": True,
         "post_process_tbr": False,

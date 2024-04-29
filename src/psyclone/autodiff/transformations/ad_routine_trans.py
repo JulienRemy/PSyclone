@@ -343,9 +343,9 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         self._variables_info = variables_info
 
     def process_data_symbols(self, options=None):
-        """Process all the data symbols of the symbol table, \
-        generating their derivative/adjoint symbols in the transformed table \
-        and adding them to the data_symbol_differential_map.
+        """Process all the data symbols of the symbol table, generating their \
+        their derivative/adjoint symbols in the transformed table if they are \
+        real valued and adding them to the data_symbol_differential_map.
 
         :param options: a dictionary with options for transformations, \
                         defaults to None.
@@ -353,16 +353,7 @@ class ADRoutineTrans(ADTrans, metaclass=ABCMeta):
         """
 
         for symbol in self.routine_table.datasymbols:
-            # if (
-                # isinstance(symbol.datatype, ScalarType)
-                # and (symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL)
-            # ) or (
-                # isinstance(symbol.datatype, ArrayType)
-                # and (
-                    # symbol.datatype.datatype.intrinsic
-                    # is ScalarType.Intrinsic.REAL
-                # )
-            # ):
+            if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
                 self.create_differential_symbol(symbol, options)
 
     def create_differential_symbol(self, datasymbol, options=None):

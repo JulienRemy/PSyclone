@@ -43,6 +43,7 @@ from psyclone.psyir.nodes import (
     IfBlock,
     Loop
 )
+from psyclone.psyir.symbols import ScalarType
 
 from psyclone.autodiff.transformations import ADRoutineTrans
 
@@ -491,17 +492,17 @@ class ADForwardRoutineTrans(ADRoutineTrans):
             symbol = self.transformed_tables[0].lookup(
                 var, scope_limit=self.transformed[0]
             )
+            if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                # Use the original symbol (not the copy) to get its derivative
+                derivative_symbol = self.data_symbol_differential_map[symbol]
+                # Same intent as the argument
+                derivative_symbol.interface = symbol.interface
 
-            # Use the original symbol (not the copy) to get its derivative
-            derivative_symbol = self.data_symbol_differential_map[symbol]
-            # Same intent as the argument
-            derivative_symbol.interface = symbol.interface
-
-            # Insert the adjoint in the argument list
-            # After the argument
-            self.add_to_argument_list(
-                self.transformed_tables[0], derivative_symbol, after=symbol
-            )
+                # Insert the adjoint in the argument list
+                # After the argument
+                self.add_to_argument_list(
+                    self.transformed_tables[0], derivative_symbol, after=symbol
+                )
 
     def postprocess(self, routine, options=None):
         """Apply postprocessing steps (simplification) to the 
