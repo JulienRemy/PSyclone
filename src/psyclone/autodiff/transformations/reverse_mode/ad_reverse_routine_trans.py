@@ -529,12 +529,12 @@ class ADReverseRoutineTrans(ADRoutineTrans):
                     f"a list with elements of type 'Statement' but found "
                     f"'{type(statement).__name__}'."
                 )
-        if statement not in self.routine.children:
-            raise ValueError(
-                f"'active_statements' argument should be a list of "
-                f"statements of the Routine but found a statement "
-                f"{statement.debug_string()} that is not in the Routine."
-            )
+            if statement not in self.routine.walk(Statement):
+                raise ValueError(
+                    f"'active_statements' argument should be a list of "
+                    f"statements of the Routine but found a statement "
+                    f"{statement.debug_string()} that is not in the Routine."
+                )
         self._active_statements = active_statements
 
     def validate(
@@ -985,13 +985,22 @@ class ADReverseRoutineTrans(ADRoutineTrans):
 
         active_statements = []
         for datanode in active_datanodes:
-            statement = datanode.ancestor(Statement)
+            statement = datanode.ancestor(Statement, include_self=True)
             if statement not in active_statements:
                 active_statements.append(statement)
-                while statement not in self.routine.children:
-                    statement = statement.parent
+                while (
+                    statement.ancestor(Statement, include_self=False)
+                    is not None
+                ):
+                    statement = statement.ancestor(
+                        Statement, include_self=False
+                    )
                     if statement not in active_statements:
                         active_statements.append(statement)
+
+        # for statement in self.routine.children:
+        #     if statement not in active_statements:
+        #         print("Statement not active:", statement.view())
 
         return active_statements
 
@@ -1332,8 +1341,6 @@ class ADReverseRoutineTrans(ADRoutineTrans):
         """
         # Go line by line through the Routine
         for child in self.routine.children:
-            if child not in self.active_statements:
-                continue
 
             if isinstance(child, Assignment):
                 (recording, returning) = self.transform_assignment(
