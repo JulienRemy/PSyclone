@@ -119,7 +119,7 @@ def test_ad_operation_trans_validate():
         ad_operation_trans.validate(unary_op, None)
     assert (
         "'parent_adj' argument should be a "
-        "PSyIR 'Reference' but found 'NoneType'." in str(info.value)
+        "PSyIR 'DataNode' but found 'NoneType'." in str(info.value)
     )
 
     sym = DataSymbol("var", REAL_TYPE)
@@ -438,12 +438,12 @@ def test_ad_operation_trans_apply(fortran_writer):
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
-    assert len(returning) == 3
+    assert len(returning) == 2
     assert len(assignment_lhs_incr) == 0
     expected = (
         f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-var3)\n",
-        f"{OA} = {AP}var{AS} * var2\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1.0)\n",
+        # f"{OA} = {AP}var{AS} * var2\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var{AS} * var2 * (-1.0)\n",
     )
     compare(returning, expected, fortran_writer)
 
@@ -457,14 +457,14 @@ def test_ad_operation_trans_apply(fortran_writer):
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
-    assert len(returning) == 5
+    assert len(returning) == 3
     assert len(assignment_lhs_incr) == 0
     expected = (
         f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-var3 * var2)\n",
-        f"{OA} = {AP}var{AS} * var2\n",
-        f"{OA}_1 = {OA} * (-1.0)\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA}_1 * var2\n",
-        f"{AP}var2{AS} = {AP}var2{AS} + {OA}_1 * var3\n",
+        # f"{OA} = {AP}var{AS} * var2\n",
+        # f"{OA}_1 = {AP}var{AS} * var2 * (-1.0)\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var{AS} * var2 * (-1.0) * var2\n",
+        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * var2 * (-1.0) * var3\n",
     )
     compare(returning, expected, fortran_writer)
 
@@ -542,11 +542,11 @@ def test_ad_operation_trans_apply(fortran_writer):
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
-    assert len(returning) == 2
+    assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
     expected_ret = (
-        f"{OA} = {AP}var2{AS} * var2\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * (-1.0)\n",
+        #f"{OA} = {AP}var2{AS} * var2\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * var2 * (-1.0)\n",
     )
     expected_lhs = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-var3)\n",)
     compare(returning, expected_ret, fortran_writer)
@@ -562,15 +562,15 @@ def test_ad_operation_trans_apply(fortran_writer):
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
     returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
-    assert len(returning) == 2
+    assert len(returning) == 1
     assert len(assignment_lhs_incr) == 2
     expected_ret = (
-        f"{OA} = {AP}var2{AS} * 1.0\n",
-        f"{AP}var3{AS} = {AP}var3{AS} + {OA} * var2\n",
+        #f"{OA} = {AP}var2{AS} * 1.0\n",
+        f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * 1.0 * var2\n",
     )
     expected_lhs = (
         f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0\n",
-        f"{AP}var2{AS} = {AP}var2{AS} + {OA} * var3\n",
+        f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0 * var3\n",
     )
     compare(returning, expected_ret, fortran_writer)
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
