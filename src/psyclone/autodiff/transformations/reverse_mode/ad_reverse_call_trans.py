@@ -256,7 +256,7 @@ class ADReverseCallTrans(ADCallTrans):
             else:
                 do_loop = False
 
-            for value_tape in self.value_tapes:
+            for value_tape in self.value_tapes.values():
                 # If the value_tape has null length, it's unused
                 if len(value_tape.recorded_nodes) != 0:
 
