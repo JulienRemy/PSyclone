@@ -93,6 +93,9 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         """
         self.validate(assignment, options)
 
+        if assignment.lhs.datatype.intrinsic is not ScalarType.Intrinsic.REAL:
+            return [assignment.copy()], []
+
         # verbose option adds comments to the first and last returning
         # statements
         verbose = self.unpack_option("verbose", options)

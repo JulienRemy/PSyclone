@@ -219,9 +219,6 @@ class ADReverseContainerTrans(ADContainerTrans):
                            transformations. Defaults to True.
         | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        | - bool 'inline_operation_adjoints': True to inline all possible \
-                                            operation adjoints definitions. \
-                                            Defaults to True.
 
         :param container: Container Node to the transformed.
         :type container: :py:class:`psyclone.psyir.nodes.Container`

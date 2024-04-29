@@ -37,6 +37,7 @@
 differentiation of PSyIR Assignment nodes."""
 
 from psyclone.psyir.nodes import Literal, Reference, Operation, IntrinsicCall
+from psyclone.psyir.symbols import ScalarType
 
 from psyclone.autodiff import assign_zero, assign
 from psyclone.autodiff.transformations import ADAssignmentTrans
@@ -77,6 +78,9 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         # DataNodes on both sides
         lhs = assignment.lhs
         rhs = assignment.rhs
+
+        if lhs.datatype.intrinsic is not ScalarType.Intrinsic.REAL:
+            return [assignment.copy()]
 
         # Returned list
         transformed = []

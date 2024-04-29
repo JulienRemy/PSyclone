@@ -46,7 +46,7 @@ from psyclone.psyir.nodes import (
     Assignment,
     ArrayReference,
 )
-from psyclone.psyir.symbols import DataSymbol, ArrayType
+from psyclone.psyir.symbols import DataSymbol, ArrayType, ScalarType
 from psyclone.psyir.symbols.interfaces import ArgumentInterface
 
 from psyclone.autodiff.transformations import (
@@ -164,9 +164,6 @@ class ADReverseCallTrans(ADCallTrans):
                            transformations. Defaults to True.
         | - int 'simplify_n_times': number of time to apply simplification \
                                   rules to BinaryOperation nodes. Defaults to 5.
-        | - bool 'inline_operation_adjoints': True to inline all possible \
-                                            operation adjoints definitions. \
-                                            Defaults to True.
 
         :param assignment: node to be transformed.
         :type assignment: :py:class:`psyclone.psyir.nodes.Call`
@@ -259,7 +256,7 @@ class ADReverseCallTrans(ADCallTrans):
             else:
                 do_loop = False
 
-            for value_tape in self.value_tapes:
+            for value_tape in self.value_tapes.values():
                 # If the value_tape has null length, it's unused
                 if len(value_tape.recorded_nodes) != 0:
 
@@ -421,18 +418,21 @@ class ADReverseCallTrans(ADCallTrans):
         # adjoint_symbol = self.routine_trans.data_symbol_differential_map[
         #     symbol
         # ]
-        adjoint = self.routine_trans.reference_to_differential_of(reference)
+        if reference.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+            adjoint = self.routine_trans.reference_to_differential_of(reference)
 
-        # Add (var, var_adj) as arguments of the returning/reversing routines
-        # returning_args = [Reference(symbol), Reference(adjoint_symbol)]
-        returning_args = [reference.copy(), adjoint]
-        # No temporary assignments
-        # TODO: functions would potentially have some eg y = f(y)
-        temp_assignments = []
+            # Add (var, var_adj) as arguments of the returning/reversing routines
+            # returning_args = [Reference(symbol), Reference(adjoint_symbol)]
+            returning_args = [reference.copy(), adjoint]
+            # No temporary assignments
+            # TODO: functions would potentially have some eg y = f(y)
+            temp_assignments = []
 
-        adjoint_assignments = []
+            adjoint_assignments = []
 
-        return returning_args, temp_assignments, adjoint_assignments
+            return returning_args, temp_assignments, adjoint_assignments
+        else:
+            return [reference.copy()], [], []
 
     def transform_operation_argument(self, operation, options=None):
         """Transforms an Operation or IntrinsicCall argument of the Call.

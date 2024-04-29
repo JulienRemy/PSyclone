@@ -43,10 +43,15 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Operation,
-    IntrinsicCall
+    IntrinsicCall,
+    DataNode,
 )
-from psyclone.psyir.symbols import (INTEGER_TYPE, REAL_TYPE,
-                                    ScalarType, ArrayType)
+from psyclone.psyir.symbols import (
+    INTEGER_TYPE,
+    REAL_TYPE,
+    ScalarType,
+    ArrayType,
+)
 from psyclone.psyir.transformations import TransformationError
 
 from psyclone.autodiff.transformations import ADOperationTrans
@@ -84,17 +89,18 @@ class ADReverseOperationTrans(ADOperationTrans):
         :param operation: operation Node to be transformed.
         :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
                                :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
-        :param parent_adj: reference of the adjoint of the parent Node, where \
+        :param parent_adj: datanode of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, 
                            an enclosing Operation, etc.
-        :type parent_adj: :py:class:`psyclone.psyir.symbols.Reference`
+        :type parent_adj: :py:class:`psyclone.psyir.nodes.DataNode`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
 
         :raises TransformationError: if operation is of the wrong type.
         :raises TransformationError: if parent_adj is of the wrong type.
-        :raises TransformationError: if parent_adj.symbol is not found among \
+        :raises TransformationError: if parent_adj is a Reference and \
+                                     its symbol is not found among \
                                      the adjoint symbols of the contextual \
                                      `ADReverseRoutineTrans`.
         """
@@ -102,13 +108,16 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         super().validate(operation, options)
 
-        if not isinstance(parent_adj, Reference):
+        if not isinstance(parent_adj, DataNode):
             raise TransformationError(
                 f"'parent_adj' argument should be a "
-                f"PSyIR 'Reference' but found '{type(parent_adj).__name__}'."
+                f"PSyIR 'DataNode' but found '{type(parent_adj).__name__}'."
             )
 
-        if parent_adj.symbol not in self.routine_trans.adjoint_symbols:
+        if (
+            isinstance(parent_adj, Reference)
+            and parent_adj.symbol not in self.routine_trans.adjoint_symbols
+        ):
             raise TransformationError(
                 f"'parent_adj.symbol' DataSymbol "
                 f"'{parent_adj.name}' cannot be found "
@@ -120,7 +129,7 @@ class ADReverseOperationTrans(ADOperationTrans):
         statements that increment adjoints as required for reverse-mode \
         automatic differentiation.
 
-        The `parent_adj` argument is the `DataSymbol` of the adjoint of the \
+        The `parent_adj` argument is the `DataNode` of the adjoint of the \
         parent node of the `operation` node, to use in incrementing the \
         adjoints of the operands of `operation`: 
         - if the parent node is an `Assignment`, this is its LHS adjoint,
@@ -155,10 +164,10 @@ class ADReverseOperationTrans(ADOperationTrans):
         :param operation: operation Node to be transformed.
         :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
                                :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
-        :param parent_adj: reference of the adjoint of the parent Node, where \
+        :param parent_adj: datanode of the adjoint of the parent Node, where \
                            the parent node can be the LHS of an Assignment, \
                            an enclosing Operation or IntrinsicCall, etc.
-        :type parent_adj: :py:class:`psyclone.psyir.symbols.Reference`
+        :type parent_adj: :py:class:`psyclone.psyir.nodes.DataNode`
         :param options: a dictionary with options for transformations, \
                         defaults to None.
         :type options: Optional[Dict[Str, Any]]
@@ -174,7 +183,8 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         self.validate(operation, parent_adj, options)
 
-        # verbose option adds comments to the first and last returning statements
+        # verbose option adds comments to the first and last returning 
+        # statements
         verbose = self.unpack_option("verbose", options)
 
         # List of Node corresponding to the returning motion
@@ -195,11 +205,19 @@ class ADReverseOperationTrans(ADOperationTrans):
         # NOTE: this is especially needed for assignments such as x = x*x
         # otherwise the incrementations to x_adj are done sequentially,
         # which is wrong
+
+        # TODO: activity analysis
+
         first_operand = operation.children[0]
-        if (
-            (isinstance(operation, BinaryOperation)
-             or (isinstance(operation, IntrinsicCall)
-                 and len(operation.children) == 2))
+        if (first_operand.datatype.intrinsic is ScalarType.Intrinsic.REAL
+            and
+            (
+                isinstance(operation, BinaryOperation)
+                or (
+                    isinstance(operation, IntrinsicCall)
+                    and len(operation.children) == 2
+                )
+            )
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
@@ -229,15 +247,20 @@ class ADReverseOperationTrans(ADOperationTrans):
                     # to increment
                     pass
                 elif isinstance(operand, Reference):
+                    # Non real values have no adjoints
+                    if operand.datatype.intrinsic is not ScalarType.Intrinsic.REAL:
+                        continue
                     # If the operand is a Reference, increment its adjoint
-                    adj = self.routine_trans.\
-                        reference_to_differential_of(operand)
+                    adj = self.routine_trans.reference_to_differential_of(
+                        operand
+                    )
                     parent_adj_mul = mul(parent_adj, partial)
-                    if (isinstance(adj.datatype, ScalarType)
-                            and isinstance(parent_adj.datatype, ArrayType)):
+                    if isinstance(adj.datatype, ScalarType) and isinstance(
+                        parent_adj.datatype, ArrayType
+                    ):
                         parent_adj_mul = IntrinsicCall.create(
-                                            IntrinsicCall.Intrinsic.SUM,
-                                            [parent_adj_mul])
+                            IntrinsicCall.Intrinsic.SUM, [parent_adj_mul]
+                        )
                     adj_incr = increment(adj, parent_adj_mul)
 
                     # If this operand is the LHS of an Assignment of which this
@@ -253,20 +276,15 @@ class ADReverseOperationTrans(ADOperationTrans):
                         returning.append(adj_incr)
 
                 elif isinstance(operand, (Operation, IntrinsicCall)):
-                    # If the operand is an Operation, create and assign its
-                    # adjoint
-                    # TODO: correct datatype
-                    op_adj = self.routine_trans.new_operation_adjoint(
-                        operation)
+                    # If the operand is an Operation, its adjoints get passed
+                    # as parent_adj of the recursive call
 
                     parent_adj_mul = mul(parent_adj, partial)
-                    adj_assign = assign(op_adj, parent_adj_mul)
-                    returning.append(adj_assign)
 
                     # then recursively apply the transformation and collect the
                     # statements
                     op_returning, op_lhs_adj_incr = self.apply(
-                        operand, Reference(op_adj), options
+                        operand, parent_adj_mul.copy(), options
                     )
                     returning.extend(op_returning)
                     assignment_lhs_adj_incr.extend(op_lhs_adj_incr)
@@ -315,7 +333,7 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         if isinstance(operation, BinaryOperation):
             return self.differentiate_binary(operation)
-        
+
         if isinstance(operation, IntrinsicCall):
             return self.differentiate_intrinsic(operation)
 
@@ -415,7 +433,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             "AND",
             "OR",
             "EQV",
-            "NEQV"
+            "NEQV",
         ]
         raise NotImplementedError(
             f"Differentiating BinaryOperation with "
@@ -451,7 +469,9 @@ class ADReverseOperationTrans(ADOperationTrans):
             if intrinsic == IntrinsicCall.Intrinsic.SQRT:
                 # TODO: x=0 should print something,
                 # raise an exception or something?
-                return [inverse(mul(Literal("2", INTEGER_TYPE), intrinsic_call))]
+                return [
+                    inverse(mul(Literal("2", INTEGER_TYPE), intrinsic_call))
+                ]
             if intrinsic == IntrinsicCall.Intrinsic.EXP:
                 return [intrinsic_call.copy()]
             if intrinsic == IntrinsicCall.Intrinsic.LOG:
@@ -466,8 +486,9 @@ class ADReverseOperationTrans(ADOperationTrans):
                 return [add(one(REAL_TYPE), square(intrinsic_call))]
                 # return inverse(square(cos(argument)))
             if intrinsic == IntrinsicCall.Intrinsic.ACOS:
-                return [minus(inverse(sqrt(sub(one(REAL_TYPE),
-                                              square(argument)))))]
+                return [
+                    minus(inverse(sqrt(sub(one(REAL_TYPE), square(argument)))))
+                ]
             if intrinsic == IntrinsicCall.Intrinsic.ASIN:
                 return [inverse(sqrt(sub(one(REAL_TYPE), square(argument))))]
             if intrinsic == IntrinsicCall.Intrinsic.ATAN:
@@ -519,7 +540,7 @@ class ADReverseOperationTrans(ADOperationTrans):
             )
 
         raise NotImplementedError(
-                f"Differentiating IntrinsicCall with "
-                f"intrinsic '{intrinsic.name}' is not implemented yet. "
-                f"No intrinsics with arity larger than 2 have been implemented."
-            )
+            f"Differentiating IntrinsicCall with "
+            f"intrinsic '{intrinsic.name}' is not implemented yet. "
+            f"No intrinsics with arity larger than 2 have been implemented."
+        )

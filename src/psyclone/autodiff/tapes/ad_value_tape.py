@@ -147,7 +147,12 @@ class ADValueTape(ADTape):
         else:
             # to a vector
             if len(reference.datatype.shape) == 1:
-                index = [i.copy() for i in reference.indices]
+                # ArrayReference with indices (single or slices)
+                if isinstance(reference, ArrayReference):
+                    index = [i.copy() for i in reference.indices]
+                # Reference to a whole array
+                else:
+                    index = [":" for _ in reference.datatype.shape]
                 assignment = Assignment.create(
                     value_tape_ref,
                     ArrayReference.create(reference.symbol, index),
@@ -219,7 +224,12 @@ class ADValueTape(ADTape):
         else:
             # to a vector
             if len(reference.datatype.shape) == 1:
-                index = [i.copy() for i in reference.indices]
+                # ArrayReference with indices (single or slices)
+                if isinstance(reference, ArrayReference):
+                    index = [i.copy() for i in reference.indices]
+                # Reference to a whole array
+                else:
+                    index = [":" for _ in reference.datatype.shape]
                 assignment = Assignment.create(
                     ArrayReference.create(reference.symbol, index),
                     value_tape_ref,
@@ -227,7 +237,7 @@ class ADValueTape(ADTape):
 
             # to a >1D array
             else:
-                # Create an IntrinsicCall to RESHAPE to reshape the 
+                # Create an IntrinsicCall to RESHAPE to reshape the
                 # value_tape_ref slice to the dimensions of the reference array
                 fortran_writer = FortranWriter()
                 dimensions = self._array_dimensions(reference)

@@ -42,9 +42,9 @@ from psyclone.psyir.nodes import (
     UnaryOperation,
     BinaryOperation,
     Operation,
-    IntrinsicCall
+    IntrinsicCall,
 )
-from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE
+from psyclone.psyir.symbols import INTEGER_TYPE, REAL_TYPE, ScalarType
 
 from psyclone.autodiff.transformations import ADOperationTrans
 from psyclone.autodiff import (
@@ -149,7 +149,10 @@ class ADForwardOperationTrans(ADOperationTrans):
             #     operand.symbol
             # ]
             # operand_d = Reference(operand_d_sym)
-            operand_d = self.routine_trans.reference_to_differential_of(operand)
+            if operand.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                operand_d = self.routine_trans.reference_to_differential_of(operand)
+            else:
+                operand_d = zero()
 
         if isinstance(operand, (Operation, IntrinsicCall)):
             operand_d = self.apply(operand)
@@ -194,8 +197,11 @@ class ADForwardOperationTrans(ADOperationTrans):
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
-                operand_d \
-                    = self.routine_trans.reference_to_differential_of(operand)
+                if operand.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                    operand_d \
+                        = self.routine_trans.reference_to_differential_of(operand)
+                else:
+                    operand_d = zero()
                 operands_d.append(operand_d)
             else:  # Operation or IntrinsicCall
                 operands_d.append(self.apply(operand))
@@ -283,8 +289,11 @@ class ADForwardOperationTrans(ADOperationTrans):
                 #     argument.symbol
                 # ]
                 # argument_d = Reference(argument_d_sym)
-                argument_d = self.routine_trans.\
-                                reference_to_differential_of(argument)
+                if argument.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                    argument_d = self.routine_trans.\
+                                    reference_to_differential_of(argument)
+                else:
+                    return [zero()]
 
             if isinstance(argument, (Operation, IntrinsicCall)):
                 argument_d = self.apply(argument)
@@ -349,8 +358,11 @@ class ADForwardOperationTrans(ADOperationTrans):
                 if isinstance(argument, Literal):
                     arguments_d.append(zero())
                 elif isinstance(argument, Reference):
-                    argument_d = self.routine_trans.\
-                                    reference_to_differential_of(argument)
+                    if argument.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                        argument_d = self.routine_trans.\
+                                        reference_to_differential_of(argument)
+                    else:
+                        argument_d = zero()
                     arguments_d.append(argument_d)
                 else:  # Operation or IntrinsicCall
                     arguments_d.append(self.apply(argument))
