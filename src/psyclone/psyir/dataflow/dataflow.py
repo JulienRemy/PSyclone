@@ -1678,8 +1678,12 @@ class DataFlowDAG:
             else:
                 raise NotImplementedError("")
 
-    def to_dot_format(self):
+    def to_dot_format(self, colored_nodes = None):
         """Build a string representation of the data flow graph in DOT format.
+
+        :param colored_nodes: a dictionary mapping colors to lists of psyir \
+                              nodes, defaults to None.
+        :type colored_nodes: dict, optional
 
         :returns: The string representation of the data flow graph in DOT format.
         :rtype: str
@@ -1707,6 +1711,14 @@ class DataFlowDAG:
             else:
                 color = "black"
 
+            if colored_nodes is not None:
+                for color_key, psyir_nodes in colored_nodes.items():
+                    if dag_node.psyir in psyir_nodes:
+                        fillcolor = color_key
+                        break
+            else:
+                fillcolor = "white"
+
             if isinstance(dag_node.psyir, DataSymbol):
                 label = (
                     f"{dag_node.psyir.name} "
@@ -1714,17 +1726,21 @@ class DataFlowDAG:
                 )
                 lines.append(
                     f'{id} [label="{label}", shape="invtriangle", '
-                    f'color="{color}"]'
+                    f'style="filled", fillcolor="{fillcolor}", color="{color}"]'
                 )
             else:
                 label = dag_node.psyir.debug_string()
                 if isinstance(dag_node.psyir, Call):
                     lines.append(
-                        f'{id} [label="{label}", shape="box", color="{color}"]'
+                        f'{id} [label="{label}", shape="box", '
+                        f'style="filled", fillcolor="{fillcolor}", '
+                        f'color="{color}"]'
                     )
                 elif isinstance(dag_node.psyir, Operation):
                     lines.append(
-                        f'{id} [label="{label}", shape="oval", color="{color}"]'
+                        f'{id} [label="{label}", shape="oval", '
+                        f'style="filled", fillcolor="{fillcolor}", '
+                        f'color="{color}"]'
                     )
                 elif isinstance(dag_node.psyir, (Reference, Literal)):
                     if isinstance(
@@ -1742,10 +1758,13 @@ class DataFlowDAG:
                         label += f"({type(dag_node.psyir.parent).__name__})"
                         lines.append(
                             f'{id} [label="{label}", shape="diamond", '
+                            f'style="filled", fillcolor="{fillcolor}", '
                             f'color="{color}"]'
                         )
                     else:
-                        lines.append(f'{id} [label="{label}", color="{color}"]')
+                        lines.append(f'{id} [label="{label}", '
+                                    f'style="filled", fillcolor="{fillcolor}", '
+                                    f'color="{color}"]')
                 else:
                     raise ValueError(type(dag_node.psyir).__name__)
 
@@ -1768,15 +1787,19 @@ class DataFlowDAG:
 
         return "\n".join(lines)
 
-    def render_graph(self, filename="graph"):
+    def render_graph(self, filename="graph", colored_nodes = None):
         """Render the data flow graph as a PNG image using pydot.
 
         :param filename: name of output PNG file, defaults to "graph".
         :type filename: str, optional
+
+        :param colored_nodes: a dictionary mapping colors to lists of psyir \
+                              nodes, defaults to None.
+        :type colored_nodes: dict, optional
         """
         import pydot
 
-        dot_graph = self.to_dot_format()
+        dot_graph = self.to_dot_format(colored_nodes)
         (graph,) = pydot.graph_from_dot_data(dot_graph)
         graph.write_png(f"{filename}.png")
 
