@@ -836,14 +836,27 @@ class DataFlowNode:
             copy.add_backward_dependence(bwd_copy)
         return copy
 
-    def to_psyir_list_forward(self):
+    def to_psyir_list_forward(self, stop_before_dag_node = None):
         """Recursively get the PSyIR nodes of the forward dependences of the \
         current node and output them as a list.
+
+        :param stop_before_dag_node: The DataFlowNode to stop before, optional,
+                                     defaults to None.
+        :type stop_before_dag_node: Union[:py:class:`DataFlowNode`, NoneType]
 
         :returns: list of all recursively found PSyIR nodes along the forward \
                   dependences.
         :rtype: List[:py:class:`DataNode`]
         """
+        if not isinstance(stop_before_dag_node, (DataFlowNode, NoneType)):
+            raise TypeError(
+                f"'stop_before_dag_node' argument must be of type "
+                f"'DataFlowNode' or 'NoneType' but found "
+                f"'{type(stop_before_dag_node).__name__}'."
+            )
+        if self is stop_before_dag_node:
+            return []
+        
         psyir_list = [self.psyir]
         for dep in self.forward_dependences:
             dep_psyir_list = dep.to_psyir_list_forward()
