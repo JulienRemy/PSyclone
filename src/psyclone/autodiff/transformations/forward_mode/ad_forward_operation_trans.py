@@ -141,6 +141,10 @@ class ADForwardOperationTrans(ADOperationTrans):
         operator = operation.operator
         operand = operation.children[0].copy()
 
+        if operand not in self.routine_trans.active_datanodes:
+            print(f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}.")
+            return zero()
+
         if isinstance(operand, Literal):
             return zero()
 
@@ -194,6 +198,11 @@ class ADForwardOperationTrans(ADOperationTrans):
 
         operands_d = []
         for operand in operands:
+            if operand not in self.routine_trans.active_datanodes:
+                print(f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}.")
+                operands_d.append(zero())
+                continue
+
             if isinstance(operand, Literal):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
@@ -280,6 +289,10 @@ class ADForwardOperationTrans(ADOperationTrans):
         if len(arguments) == 1:
             argument = arguments[0]
 
+            if argument not in self.routine_trans.active_datanodes:
+                print(f"Found passive {argument.debug_string()} in unary intrisic call {intrinsic_call.debug_string()}.")
+                return [zero()]
+
             if isinstance(argument, Literal):
                 return [zero()]
 
@@ -355,6 +368,11 @@ class ADForwardOperationTrans(ADOperationTrans):
 
             arguments_d = []
             for argument in arguments:
+                if argument not in self.routine_trans.active_datanodes:
+                    print(f"Found passive {argument.debug_string()} in binary intrinsic call {intrinsic_call.debug_string()}.")
+                    argument_d.append(zero())
+                    continue
+
                 if isinstance(argument, Literal):
                     arguments_d.append(zero())
                 elif isinstance(argument, Reference):

@@ -221,27 +221,32 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            adj = self.routine_trans.reference_to_differential_of(first_operand)
+            if first_operand in self.routine_trans.active_datanodes:
+                adj = self.routine_trans.reference_to_differential_of(first_operand)
 
-            parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
-            adj_incr = increment(adj, parent_adj_mul)
+                parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
+                adj_incr = increment(adj, parent_adj_mul)
 
-            # If this operand is the LHS of an Assignment of which this
-            # operation node is a descendant, the incrementation to the adjoint
-            # will be done last
-            if (ancestor_assignment is not None) and (
-                ancestor_assignment.lhs == first_operand
-            ):
-                assignment_lhs_adj_incr.append(adj_incr)
+                # If this operand is the LHS of an Assignment of which this
+                # operation node is a descendant, the incrementation to the adjoint
+                # will be done last
+                if (ancestor_assignment is not None) and (
+                    ancestor_assignment.lhs == first_operand
+                ):
+                    assignment_lhs_adj_incr.append(adj_incr)
 
-            # Otherwise incrementation can be done now
-            else:
-                returning.append(adj_incr)
+                # Otherwise incrementation can be done now
+                else:
+                    returning.append(adj_incr)
 
         # General case, go through the operands
         else:
             # Increment the adjoints of the operands where needed
             for operand, partial in zip(operation.children, partials):
+                if operand not in self.routine_trans.active_datanodes:
+                    print(f"Found passive operand {operand.debug_string()} in {operation.debug_string()}, skipping it.")
+                    continue
+
                 if isinstance(operand, Literal):
                     # If the operand is a Literal, it has no adjoint
                     # to increment

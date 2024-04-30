@@ -88,6 +88,17 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         # Derivative symbol of LHS
         lhs_d = self.routine_trans.reference_to_differential_of(lhs)
 
+        # If the RHS is passive:
+        # - RHS derivative is 0, so assign 0 to the derivative of the LHS,
+        # - copy the original assignment,
+        # and we're done.
+        if rhs not in self.routine_trans.active_datanodes:
+            print(f"Found passive rhs {rhs.debug_string()} in {assignment.debug_string()}.")
+            lhs_d_zero = assign_zero(lhs_d)
+            transformed.append(lhs_d_zero)
+            transformed.append(assignment.copy())
+            return transformed
+
         if isinstance(rhs, Literal):
             # RHS is a constant:
             #   LHS derivative is set to 0

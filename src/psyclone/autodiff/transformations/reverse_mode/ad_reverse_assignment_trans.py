@@ -119,6 +119,12 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         # List of statements for the returning routine
         returning = []
 
+        # Only increment RHS adjoints if they are active
+        if rhs not in self.routine_trans.active_datanodes:
+            # print(f"Found passive rhs {rhs.debug_string()}, skipping it")
+            returning.append(lhs_adj_zero)
+            return recording, returning
+
         if isinstance(rhs, Literal):
             # RHS is a constant:
             #   LHS is restored from value_tape (in the ADReverseRoutineTrans)
