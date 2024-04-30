@@ -1711,13 +1711,12 @@ class DataFlowDAG:
             else:
                 color = "black"
 
+            fillcolor = "white"
             if colored_nodes is not None:
                 for color_key, psyir_nodes in colored_nodes.items():
                     if dag_node.psyir in psyir_nodes:
                         fillcolor = color_key
                         break
-            else:
-                fillcolor = "white"
 
             if isinstance(dag_node.psyir, DataSymbol):
                 label = (
