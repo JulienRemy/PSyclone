@@ -183,7 +183,7 @@ class ADReverseOperationTrans(ADOperationTrans):
 
         self.validate(operation, parent_adj, options)
 
-        # verbose option adds comments to the first and last returning 
+        # verbose option adds comments to the first and last returning
         # statements
         verbose = self.unpack_option("verbose", options)
 
@@ -206,12 +206,12 @@ class ADReverseOperationTrans(ADOperationTrans):
         # otherwise the incrementations to x_adj are done sequentially,
         # which is wrong
 
-        # TODO: activity analysis
+        activity_analysis = self.unpack_option("activity_analysis", options)
 
         first_operand = operation.children[0]
-        if (first_operand.datatype.intrinsic is ScalarType.Intrinsic.REAL
-            and
-            (
+        if (
+            first_operand.datatype.intrinsic is ScalarType.Intrinsic.REAL
+            and (
                 isinstance(operation, BinaryOperation)
                 or (
                     isinstance(operation, IntrinsicCall)
@@ -221,8 +221,13 @@ class ADReverseOperationTrans(ADOperationTrans):
             and isinstance(first_operand, Reference)
             and operation.children[1] == first_operand
         ):
-            if first_operand in self.routine_trans.active_datanodes:
-                adj = self.routine_trans.reference_to_differential_of(first_operand)
+            if (
+                first_operand in self.routine_trans.active_datanodes
+                or not activity_analysis
+            ):
+                adj = self.routine_trans.reference_to_differential_of(
+                    first_operand
+                )
 
                 parent_adj_mul = mul(parent_adj, add(partials[0], partials[1]))
                 adj_incr = increment(adj, parent_adj_mul)
@@ -243,8 +248,13 @@ class ADReverseOperationTrans(ADOperationTrans):
         else:
             # Increment the adjoints of the operands where needed
             for operand, partial in zip(operation.children, partials):
-                if operand not in self.routine_trans.active_datanodes:
-                    print(f"Found passive operand {operand.debug_string()} in {operation.debug_string()}, skipping it.")
+                if (
+                    activity_analysis
+                    and operand not in self.routine_trans.active_datanodes
+                ):
+                    print(
+                        f"Found passive operand {operand.debug_string()} in {operation.debug_string()}, skipping it."
+                    )
                     continue
 
                 if isinstance(operand, Literal):
@@ -253,7 +263,10 @@ class ADReverseOperationTrans(ADOperationTrans):
                     pass
                 elif isinstance(operand, Reference):
                     # Non real values have no adjoints
-                    if operand.datatype.intrinsic is not ScalarType.Intrinsic.REAL:
+                    if (
+                        operand.datatype.intrinsic
+                        is not ScalarType.Intrinsic.REAL
+                    ):
                         continue
                     # If the operand is a Reference, increment its adjoint
                     adj = self.routine_trans.reference_to_differential_of(

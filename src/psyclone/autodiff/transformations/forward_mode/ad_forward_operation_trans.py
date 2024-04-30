@@ -92,14 +92,17 @@ class ADForwardOperationTrans(ADOperationTrans):
         """
         self.validate(operation, options)
 
-        return self.differentiate(operation)
+        return self.differentiate(operation, options)
 
-    def differentiate(self, operation):
+    def differentiate(self, operation, options=None):
         """Compute the derivative of the operation argument.
 
         :param operation: operation Node to be differentiated.
         :type operation: :Union[:py:class:`psyclone.psyir.nodes.Operation`, \
                                :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
 
@@ -109,22 +112,25 @@ class ADForwardOperationTrans(ADOperationTrans):
                       :py:class:`psyclone.psyir.nodes.Operation`,
                       :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
-        super().differentiate(operation)
+        super().differentiate(operation, options)
 
         if isinstance(operation, UnaryOperation):
-            return self.differentiate_unary(operation)
+            return self.differentiate_unary(operation, options)
 
         if isinstance(operation, BinaryOperation):
-            return self.differentiate_binary(operation)
+            return self.differentiate_binary(operation, options)
 
         if isinstance(operation, IntrinsicCall):
-            return self.differentiate_intrinsic(operation)
+            return self.differentiate_intrinsic(operation, options)
 
-    def differentiate_unary(self, operation):
+    def differentiate_unary(self, operation, options=None):
         """Compute the derivative of unary operation.
 
         :param operation: unary operation Node to be differentiated.
         :type operation: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
@@ -136,13 +142,19 @@ class ADForwardOperationTrans(ADOperationTrans):
                       :py:class:`psyclone.psyir.nodes.Operation`,
                       :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
         """
-        super().differentiate_unary(operation)
+        super().differentiate_unary(operation, options)
 
         operator = operation.operator
         operand = operation.children[0].copy()
 
-        if operand not in self.routine_trans.active_datanodes:
-            print(f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}.")
+        activity_analysis = self.unpack_option("activity_analysis", options)
+        if (
+            activity_analysis
+            and operand not in self.routine_trans.active_datanodes
+        ):
+            print(
+                f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}."
+            )
             return zero()
 
         if isinstance(operand, Literal):
@@ -154,12 +166,14 @@ class ADForwardOperationTrans(ADOperationTrans):
             # ]
             # operand_d = Reference(operand_d_sym)
             if operand.datatype.intrinsic is ScalarType.Intrinsic.REAL:
-                operand_d = self.routine_trans.reference_to_differential_of(operand)
+                operand_d = self.routine_trans.reference_to_differential_of(
+                    operand
+                )
             else:
                 operand_d = zero()
 
         if isinstance(operand, (Operation, IntrinsicCall)):
-            operand_d = self.apply(operand)
+            operand_d = self.apply(operand, options)
 
         if operator == UnaryOperation.Operator.PLUS:
             return operand_d
@@ -174,12 +188,15 @@ class ADForwardOperationTrans(ADOperationTrans):
             f"{_not_implemented}."
         )
 
-    def differentiate_binary(self, operation):
+    def differentiate_binary(self, operation, options=None):
         """Compute the local partial derivatives of both operands of the \
         operation argument.
 
         :param operation: binary operation Node to be differentiated.
         :type operation: :py:class:`psyclone.psyir.nodes.BinarOperation`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         :raises NotImplementedError: if the operator derivative hasn't been \
@@ -191,15 +208,22 @@ class ADForwardOperationTrans(ADOperationTrans):
         """
         # pylint: disable=too-many-locals, unbalanced-tuple-unpacking
 
-        super().differentiate_binary(operation)
+        super().differentiate_binary(operation, options)
 
         operator = operation.operator
         operands = [child.copy() for child in operation.children]
 
+        activity_analysis = self.unpack_option("activity_analysis", options)
+
         operands_d = []
         for operand in operands:
-            if operand not in self.routine_trans.active_datanodes:
-                print(f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}.")
+            if (
+                activity_analysis
+                and operand not in self.routine_trans.active_datanodes
+            ):
+                print(
+                    f"Found passive {operand.debug_string()} in unary operation {operation.debug_string()}."
+                )
                 operands_d.append(zero())
                 continue
 
@@ -207,13 +231,14 @@ class ADForwardOperationTrans(ADOperationTrans):
                 operands_d.append(zero())
             elif isinstance(operand, Reference):
                 if operand.datatype.intrinsic is ScalarType.Intrinsic.REAL:
-                    operand_d \
-                        = self.routine_trans.reference_to_differential_of(operand)
+                    operand_d = self.routine_trans.reference_to_differential_of(
+                        operand
+                    )
                 else:
                     operand_d = zero()
                 operands_d.append(operand_d)
             else:  # Operation or IntrinsicCall
-                operands_d.append(self.apply(operand))
+                operands_d.append(self.apply(operand, options))
 
         lhs, rhs = operands
         lhs_d, rhs_d = operands_d
@@ -251,8 +276,8 @@ class ADForwardOperationTrans(ADOperationTrans):
             "LE",
             "AND",
             "OR",
-            "EQV", 
-            "NEQV"
+            "EQV",
+            "NEQV",
         ]
         raise NotImplementedError(
             f"Differentiating BinaryOperation with "
@@ -261,12 +286,14 @@ class ADForwardOperationTrans(ADOperationTrans):
             f"{_not_implemented}."
         )
 
-
-    def differentiate_intrinsic(self, intrinsic_call):
+    def differentiate_intrinsic(self, intrinsic_call, options=None):
         """Compute the derivative of an intrinsic call.
 
         :param intrinsic_call: intrinsic call Node to be differentiated.
         :type intrinsic_call: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if intrinsic is of the wrong type.
         :raises NotImplementedError: if the intrinsic derivative hasn't been \
@@ -280,17 +307,24 @@ class ADForwardOperationTrans(ADOperationTrans):
         """
         # pylint: disable=unbalanced-tuple-unpacking
         # pylint: disable=too-many-return-statements, too-many-branches
-        super().differentiate_intrinsic(intrinsic_call)
+        super().differentiate_intrinsic(intrinsic_call, options)
 
         intrinsic = intrinsic_call.intrinsic
         arguments = [child.copy() for child in intrinsic_call.children]
+
+        activity_analysis = self.unpack_option("activity_analysis", options)
 
         # Unary intrinsics
         if len(arguments) == 1:
             argument = arguments[0]
 
-            if argument not in self.routine_trans.active_datanodes:
-                print(f"Found passive {argument.debug_string()} in unary intrisic call {intrinsic_call.debug_string()}.")
+            if (
+                activity_analysis
+                and argument not in self.routine_trans.active_datanodes
+            ):
+                print(
+                    f"Found passive {argument.debug_string()} in unary intrisic call {intrinsic_call.debug_string()}."
+                )
                 return [zero()]
 
             if isinstance(argument, Literal):
@@ -303,19 +337,23 @@ class ADForwardOperationTrans(ADOperationTrans):
                 # ]
                 # argument_d = Reference(argument_d_sym)
                 if argument.datatype.intrinsic is ScalarType.Intrinsic.REAL:
-                    argument_d = self.routine_trans.\
-                                    reference_to_differential_of(argument)
+                    argument_d = (
+                        self.routine_trans.reference_to_differential_of(
+                            argument
+                        )
+                    )
                 else:
                     return [zero()]
 
             if isinstance(argument, (Operation, IntrinsicCall)):
-                argument_d = self.apply(argument)
+                argument_d = self.apply(argument, options)
 
             if intrinsic == IntrinsicCall.Intrinsic.SQRT:
                 # TODO: x=0 should print something,
                 # raise an exception or something?
-                return div(argument_d,
-                           mul(Literal("2", INTEGER_TYPE), intrinsic_call))
+                return div(
+                    argument_d, mul(Literal("2", INTEGER_TYPE), intrinsic_call)
+                )
             if intrinsic == IntrinsicCall.Intrinsic.EXP:
                 return mul(intrinsic_call, argument_d)
             if intrinsic == IntrinsicCall.Intrinsic.LOG:
@@ -329,18 +367,18 @@ class ADForwardOperationTrans(ADOperationTrans):
             if intrinsic == IntrinsicCall.Intrinsic.SIN:
                 return mul(cos(argument), argument_d)
             if intrinsic == IntrinsicCall.Intrinsic.TAN:
-                return mul(add(one(REAL_TYPE),
-                               square(intrinsic_call)),
-                               argument_d)
+                return mul(
+                    add(one(REAL_TYPE), square(intrinsic_call)), argument_d
+                )
                 # return div(argument_d, square(cos(argument)))
             if intrinsic == IntrinsicCall.Intrinsic.ACOS:
                 return minus(
-                    div(argument_d, sqrt(sub(one(REAL_TYPE),
-                                             square(argument))))
+                    div(argument_d, sqrt(sub(one(REAL_TYPE), square(argument))))
                 )
             if intrinsic == IntrinsicCall.Intrinsic.ASIN:
-                return div(argument_d, sqrt(sub(one(REAL_TYPE),
-                                                square(argument))))
+                return div(
+                    argument_d, sqrt(sub(one(REAL_TYPE), square(argument)))
+                )
             if intrinsic == IntrinsicCall.Intrinsic.ATAN:
                 return div(argument_d, add(one(REAL_TYPE), square(argument)))
             if intrinsic == IntrinsicCall.Intrinsic.ABS:
@@ -357,9 +395,9 @@ class ADForwardOperationTrans(ADOperationTrans):
             #    could return 0 but that's error prone
 
             raise NotImplementedError(
-            f"Differentiating unary IntrinsicCall with "
-            f"intrinsic '{intrinsic.name}' is not implemented yet."
-        )
+                f"Differentiating unary IntrinsicCall with "
+                f"intrinsic '{intrinsic.name}' is not implemented yet."
+            )
 
         # Binary intrinsics
         if len(arguments) == 2:
@@ -368,35 +406,48 @@ class ADForwardOperationTrans(ADOperationTrans):
 
             arguments_d = []
             for argument in arguments:
-                if argument not in self.routine_trans.active_datanodes:
-                    print(f"Found passive {argument.debug_string()} in binary intrinsic call {intrinsic_call.debug_string()}.")
-                    argument_d.append(zero())
+                if (
+                    activity_analysis
+                    and argument not in self.routine_trans.active_datanodes
+                ):
+                    print(
+                        f"Found passive {argument.debug_string()} in binary intrinsic call {intrinsic_call.debug_string()}."
+                    )
+                    arguments_d.append(zero())
                     continue
 
                 if isinstance(argument, Literal):
                     arguments_d.append(zero())
                 elif isinstance(argument, Reference):
                     if argument.datatype.intrinsic is ScalarType.Intrinsic.REAL:
-                        argument_d = self.routine_trans.\
-                                        reference_to_differential_of(argument)
+                        argument_d = (
+                            self.routine_trans.reference_to_differential_of(
+                                argument
+                            )
+                        )
                     else:
                         argument_d = zero()
                     arguments_d.append(argument_d)
                 else:  # Operation or IntrinsicCall
-                    arguments_d.append(self.apply(argument))
+                    arguments_d.append(self.apply(argument, options))
 
             lhs, rhs = arguments
             lhs_d, rhs_d = arguments_d
 
             if intrinsic == IntrinsicCall.Intrinsic.DOT_PRODUCT:
-                return IntrinsicCall.create(IntrinsicCall.Intrinsic.SUM,
-                                            [add(mul(rhs, lhs_d),
-                                                 mul(lhs, rhs_d))])
+                return IntrinsicCall.create(
+                    IntrinsicCall.Intrinsic.SUM,
+                    [add(mul(rhs, lhs_d), mul(lhs, rhs_d))],
+                )
             if intrinsic == IntrinsicCall.Intrinsic.MATMUL:
-                return add(IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
-                                                [lhs_d, rhs]),
-                        IntrinsicCall.create(IntrinsicCall.Intrinsic.MATMUL,
-                                                [lhs, rhs_d]))
+                return add(
+                    IntrinsicCall.create(
+                        IntrinsicCall.Intrinsic.MATMUL, [lhs_d, rhs]
+                    ),
+                    IntrinsicCall.create(
+                        IntrinsicCall.Intrinsic.MATMUL, [lhs, rhs_d]
+                    ),
+                )
 
                 # TODO: should POW, SQRT, etc. take into account non-derivability ?
                 # like Tapenade does?
@@ -451,12 +502,12 @@ class ADForwardOperationTrans(ADOperationTrans):
             # MAX if block
 
             raise NotImplementedError(
-            f"Differentiating binary IntrinsicCall with "
-            f"intrinsic '{intrinsic.name}' is not implemented yet."
+                f"Differentiating binary IntrinsicCall with "
+                f"intrinsic '{intrinsic.name}' is not implemented yet."
             )
 
         raise NotImplementedError(
-        f"Differentiating IntrinsicCall with "
-        f"intrinsic '{intrinsic.name}' is not implemented yet. "
-        f"No intrinsics or arity larger than 2 have been implemented."
+            f"Differentiating IntrinsicCall with "
+            f"intrinsic '{intrinsic.name}' is not implemented yet. "
+            f"No intrinsics or arity larger than 2 have been implemented."
         )

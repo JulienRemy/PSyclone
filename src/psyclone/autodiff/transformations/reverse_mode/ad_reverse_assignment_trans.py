@@ -120,7 +120,8 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
         returning = []
 
         # Only increment RHS adjoints if they are active
-        if rhs not in self.routine_trans.active_datanodes:
+        activity_analysis = self.unpack_option("activity_analysis", options)
+        if activity_analysis and rhs not in self.routine_trans.active_datanodes:
             # print(f"Found passive rhs {rhs.debug_string()}, skipping it")
             returning.append(lhs_adj_zero)
             return recording, returning
@@ -238,17 +239,17 @@ class ADReverseAssignmentTrans(ADAssignmentTrans):
                 # Now increment the LHS adjoint as needed for its RHS occurences
                 returning.extend(lhs_adj_incrementations)
 
-                # TODO: this should always pass, is_iterative method is
-                # not actually needed
-                # TODO: drop these once it's certain
-                if len(lhs_adj_incrementations) != 0 and not self.is_iterative(
-                    assignment
-                ):
-                    raise TransformationError("Iterative but also not?")
-                if len(lhs_adj_incrementations) == 0 and self.is_iterative(
-                    assignment
-                ):
-                    raise TransformationError("Iterative but also not?")
+                # # TODO: this should always pass, is_iterative method is
+                # # not actually needed
+                # # TODO: drop these once it's certain
+                # if len(lhs_adj_incrementations) != 0 and not self.is_iterative(
+                #     assignment
+                # ):
+                #     raise TransformationError("Iterative but also not?")
+                # if len(lhs_adj_incrementations) == 0 and self.is_iterative(
+                #     assignment
+                # ):
+                #     raise TransformationError("Iterative but also not?")
 
         # TODO: rhs is Call to function
         # elif isinstance(rhs, Call):

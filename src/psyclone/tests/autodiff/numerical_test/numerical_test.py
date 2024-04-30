@@ -189,7 +189,7 @@ def test_if_block(mode):
         ["x"],
         {"x": x_val.tolist()},
         "Linf_error",
-        {"verbose": True},
+        {"verbose": True, "activity_analysis": False},
         mode,
         rev_schedule,
     )
@@ -279,7 +279,7 @@ def test_unary(mode, iterative, vector, op):
         ["x"],
         {"x": x_val.tolist()},
         "Linf_error",
-        {"verbose": True},
+        {"verbose": True, "activity_analysis": False}, #TODO: activity analysis
         mode,
         rev_schedule,
     )
@@ -359,7 +359,7 @@ def test_binary(mode, iterative, vector, op):
         ["x", "y"],
         {"x": x_val.tolist(), "y": y_val.tolist()},
         "Linf_error",
-        {"verbose": True},
+        {"verbose": True, "activity_analysis": False},
         mode,
         rev_schedule,
     )
@@ -452,7 +452,7 @@ def test_unary_composition(mode, iterative, inline, vector, unaries):
         ["x"],
         {"x": x_val.tolist()},
         "Linf_error",
-        {"verbose": True, "inline_operation_adjoints": inline},
+        {"verbose": True, "inline_operation_adjoints": inline, "activity_analysis": False},
         mode,
         rev_schedule,
     )
@@ -555,7 +555,7 @@ def test_binary_composition(mode, iterative, inline, vector, binaries):
                 ["x", "y"],
                 {"x": x_val.tolist(), "y": y_val.tolist(), "z": z_val.tolist()},
                 "Linf_error",
-                {"verbose": True, "inline_operation_adjoints": inline},
+                {"verbose": True, "inline_operation_adjoints": inline, "activity_analysis": False},
                 mode,
                 rev_schedule,
             )
@@ -699,7 +699,7 @@ def test_taping(vector, inline):
         ["x"],
         {"x": x_val},
         "Linf_error",
-        {"verbose": True, "inline_operation_adjoints": inline},
+        {"verbose": True, "inline_operation_adjoints": inline, "activity_analysis": False},
         "reverse",
         rev_schedule,
     )
@@ -797,7 +797,7 @@ def test_nested_calls(vector, schedule):
             ["x"],
             {"x": [[0.1] * 5] if vector else [0.1]},
             "Linf_error",
-            {"verbose": True, "inline_operation_adjoints": False},
+            {"verbose": True, "inline_operation_adjoints": False, "activity_analysis": False},
             "reverse",
             schedule,
         )
@@ -810,7 +810,7 @@ def test_nested_calls(vector, schedule):
             ["x"],
             {"x": [[0.1] * 5] if vector else [0.1]},
             "Linf_error",
-            {"verbose": True, "inline_operation_adjoints": False},
+            {"verbose": True, "inline_operation_adjoints": False, "activity_analysis": False},
             "forward",
             schedule,
         )
@@ -951,7 +951,7 @@ def test_many_arguments(mode, vector):
         independent_names,
         values,
         "Linf_error",
-        {"verbose": True, "inline_operation_adjoints": False},
+        {"verbose": True, "inline_operation_adjoints": False, "activity_analysis": False},
         mode,
         rev_schedule,
     )

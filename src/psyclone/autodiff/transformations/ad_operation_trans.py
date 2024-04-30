@@ -93,12 +93,15 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def differentiate(self, operation):
+    def differentiate(self, operation, options=None):
         """Compute the derivative(s) of the 'operation' argument.
 
         :param operation: operation Node to be differentiated.
         :type operation: Union[:py:class:`psyclone.psyir.nodes.Operation`, \
                                :py:class:`psyclone.psyir.nodes.IntrinsicCall`]
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         """
@@ -108,13 +111,17 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
                 f"PSyIR 'Operation' or 'IntrinsicCall' but found "
                 f"'{type(operation).__name__}'."
             )
+        self.typecheck_options(options)
 
     @abstractmethod
-    def differentiate_unary(self, operation):
+    def differentiate_unary(self, operation, options=None):
         """Compute the derivative of the operation argument.
 
         :param operation: unary operation Node to be differentiated.
         :type operation: :py:class:`psyclone.psyir.nodes.UnaryOperation`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         """
@@ -123,13 +130,17 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
                 f"Argument in differentiate_unary should be a "
                 f"PSyIR UnaryOperation but found '{type(operation).__name__}'."
             )
+        self.typecheck_options(options)
 
     @abstractmethod
-    def differentiate_binary(self, operation):
+    def differentiate_binary(self, operation, options=None):
         """Compute the derivative(s) of the operation argument.
 
         :param operation: binary operation Node to be differentiated.
         :type operation: :py:class:`psyclone.psyir.nodes.BinarOperation`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if operation is of the wrong type.
         """
@@ -138,13 +149,17 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
                 f"Argument in differentiate_binary should be a "
                 f"PSyIR BinaryOperation but found '{type(operation).__name__}'."
             )
+        self.typecheck_options(options)
 
     @abstractmethod
-    def differentiate_intrinsic(self, intrinsic_call):
+    def differentiate_intrinsic(self, intrinsic_call, options=None):
         """Compute the derivative(s) of the operation argument.
 
         :param intrinsic_call: intrinsic call Node to be differentiated.
         :type intrinsic_call: :py:class:`psyclone.psyir.nodes.IntrinsicCall`
+        :param options: a dictionary with options for transformations, \
+                        defaults to None.
+        :type options: Optional[Dict[Str, Any]]
 
         :raises TypeError: if intrinsic_call is of the wrong type.
         """
@@ -153,3 +168,4 @@ class ADOperationTrans(ADElementTrans, metaclass=ABCMeta):
                 f"Argument in differentiate_intrinsic should be a "
                 f"PSyIR IntrinsicCall but found '{type(intrinsic_call).__name__}'."
             )
+        self.typecheck_options(options)

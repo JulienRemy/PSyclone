@@ -92,7 +92,8 @@ class ADForwardAssignmentTrans(ADAssignmentTrans):
         # - RHS derivative is 0, so assign 0 to the derivative of the LHS,
         # - copy the original assignment,
         # and we're done.
-        if rhs not in self.routine_trans.active_datanodes:
+        activity_analysis = self.unpack_option("activity_analysis", options)
+        if activity_analysis and rhs not in self.routine_trans.active_datanodes:
             print(f"Found passive rhs {rhs.debug_string()} in {assignment.debug_string()}.")
             lhs_d_zero = assign_zero(lhs_d)
             transformed.append(lhs_d_zero)

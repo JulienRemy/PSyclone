@@ -66,7 +66,7 @@ def compare(nodes, strings, fortran_writer):
         assert line == expected_line
 
 
-def initialize_transformations():
+def initialize_transformations(options=None):
     freader = FortranReader()
 
     src = """subroutine foo()
@@ -75,7 +75,7 @@ def initialize_transformations():
     container = psy.walk(Container)[0]
 
     ad_container_trans = ADForwardContainerTrans()
-    ad_container_trans.apply(container, "foo", [], [])
+    ad_container_trans.apply(container, "foo", [], [], options)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
     return ad_container_trans, ad_routine_trans, ad_routine_trans.assignment_trans
@@ -145,8 +145,8 @@ def test_ad_assignment_trans_is_iterative():
 
 
 def test_ad_assignment_trans_apply(fortran_writer):
-    def initialize():
-        _, ad_routine_trans, ad_assignment_trans = initialize_transformations()
+    def initialize(options=None):
+        _, ad_routine_trans, ad_assignment_trans = initialize_transformations(options)
 
         sym = DataSymbol("var", REAL_TYPE)
         d_sym = ad_routine_trans.create_differential_symbol(sym)
@@ -158,14 +158,16 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
         return ad_assignment_trans, sym, d_sym, sym2, d_sym2
 
-    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
+    # No activity analysis
+    options  = {"activity_analysis": False}
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize(options)
 
     ###############
     # Literal assignment
     one = Literal("1.0", REAL_TYPE)
     literal_assignment = assign(sym, one)
 
-    transformed = ad_assignment_trans.apply(literal_assignment)
+    transformed = ad_assignment_trans.apply(literal_assignment, options)
     assert isinstance(transformed, list)
     assert len(transformed) == 2
 
@@ -175,10 +177,10 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     ##################
     # Reference assignment
-    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize(options)
     reference_assignment = assign(sym, sym2)
 
-    transformed = ad_assignment_trans.apply(reference_assignment)
+    transformed = ad_assignment_trans.apply(reference_assignment, options)
     assert isinstance(transformed, list)
     assert len(transformed) == 2
 
@@ -188,10 +190,10 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     #######################
     # Operation assignment, unary
-    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize(options)
     operation = minus(sym2)
     operation_assignment = assign(sym, operation)
-    transformed = ad_assignment_trans.apply(operation_assignment)
+    transformed = ad_assignment_trans.apply(operation_assignment, options)
 
     assert isinstance(transformed, list)
     assert len(transformed) == 2
@@ -201,11 +203,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(transformed, expected, fortran_writer)
 
     # Operation assignment, binary
-    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize()
+    ad_assignment_trans, sym, d_sym, sym2, d_sym2 = initialize(options)
     operation = add(sym, sym2)
     operation_assignment = assign(sym, operation)
 
-    transformed = ad_assignment_trans.apply(operation_assignment)
+    transformed = ad_assignment_trans.apply(operation_assignment, options)
 
     assert isinstance(transformed, list)
     assert len(transformed) == 2
@@ -216,3 +218,8 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     #######################
     # Call assignment is not implemented yet
+
+    #######################
+    #######################
+    # With activity analysis
+    # TODO: add tests with activity analysis

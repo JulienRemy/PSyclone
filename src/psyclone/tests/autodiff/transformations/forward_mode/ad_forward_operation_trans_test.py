@@ -73,7 +73,7 @@ def compare(nodes, strings, fortran_writer):
         assert line == expected_line
 
 
-def initialize_transformations():
+def initialize_transformations(options=None):
     freader = FortranReader()
 
     src = """subroutine foo()
@@ -82,7 +82,7 @@ def initialize_transformations():
     container = psy.walk(Container)[0]
 
     ad_container_trans = ADForwardContainerTrans()
-    ad_container_trans.apply(container, "foo", [], [])
+    ad_container_trans.apply(container, "foo", [], [], options)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
     return ad_container_trans, ad_routine_trans, ad_routine_trans.operation_trans
@@ -140,10 +140,12 @@ def test_ad_operation_trans_differentiate():
 
 
 def test_ad_operation_trans_differentiate_unary(fortran_writer):
-    _, ad_routine_trans, ad_operation_trans = initialize_transformations()
+    # Without activity analysis
+    options = {"activity_analysis": False}
+    _, ad_routine_trans, ad_operation_trans = initialize_transformations(options)
 
     with pytest.raises(TypeError) as info:
-        ad_operation_trans.differentiate_unary(None)
+        ad_operation_trans.differentiate_unary(None, options)
     assert (
         "Argument in differentiate_unary should be a "
         "PSyIR UnaryOperation but found 'NoneType'." in str(info.value)
@@ -157,27 +159,29 @@ def test_ad_operation_trans_differentiate_unary(fortran_writer):
     minus = UnaryOperation.create(UnaryOperation.Operator.MINUS, ref.copy())
 
     assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(plus))
+        fortran_writer(ad_operation_trans.differentiate_unary(plus, options))
         == f"{PRE}var{POST}"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_unary(minus))
+        fortran_writer(ad_operation_trans.differentiate_unary(minus, options))
         == f"-{PRE}var{POST}"
     )
 
     not_ = UnaryOperation.create(UnaryOperation.Operator.NOT, ref)
     with pytest.raises(NotImplementedError) as info:
-        ad_operation_trans.differentiate_unary(not_)
+        ad_operation_trans.differentiate_unary(not_, options)
     assert (
         "Differentiating UnaryOperation with "
         "operator 'Operator.NOT' is not implemented yet." in str(info.value)
     )
 
+    # TODO: with activity analysis
+
 
 def test_ad_operation_trans_differentiate_binary(fortran_writer):
-    # ad_container_trans = ADForwardContainerTrans()
-    # ad_routine_trans = ADForwardRoutineTrans(ad_container_trans)
-    _, ad_routine_trans, ad_operation_trans = initialize_transformations()
+    # Witout activity analysis
+    options = {"activity_analysis": False}
+    _, ad_routine_trans, ad_operation_trans = initialize_transformations(options)
 
     with pytest.raises(TypeError) as info:
         ad_operation_trans.differentiate_binary(None)
@@ -222,7 +226,7 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
         f"{PRE}var1{POST} * (1.35 * var1 ** 0.35) + 0 * (var1 ** 1.35 * LOG(var1))"
     )
 
-    transformed = [ad_operation_trans.differentiate_binary(op) for op in ops]
+    transformed = [ad_operation_trans.differentiate_binary(op, options) for op in ops]
 
     compare(transformed, expected, fortran_writer)
 
@@ -234,11 +238,15 @@ def test_ad_operation_trans_differentiate_binary(fortran_writer):
         "operator 'Operator.EQ' is not implemented yet." in str(info.value)
     )
 
+    # TODO: with activy analysis
+
 def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
-    _, ad_routine_trans, ad_operation_trans = initialize_transformations()
+    # Without activity analysis
+    options = {"activity_analysis": False}
+    _, ad_routine_trans, ad_operation_trans = initialize_transformations(options)
 
     with pytest.raises(TypeError) as info:
-        ad_operation_trans.differentiate_intrinsic(None)
+        ad_operation_trans.differentiate_intrinsic(None, options)
     assert (
         "Argument in differentiate_intrinsic should be a "
         "PSyIR IntrinsicCall but found 'NoneType'." in str(info.value)
@@ -261,53 +269,53 @@ def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
     abs_val = IntrinsicCall.create(IntrinsicCall.Intrinsic.ABS, [ref.copy()])
 
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(sqrt))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(sqrt, options))
         == f"{PRE}var{POST} / (2 * SQRT(var))"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(exp))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(exp, options))
         == f"EXP(var) * {PRE}var{POST}"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(log))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(log, options))
         == f"{PRE}var{POST} / var"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(log10))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(log10, options))
         == f"{PRE}var{POST} / (var * LOG(10.0))"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(cos))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(cos, options))
         == f"-SIN(var) * {PRE}var{POST}"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(sin))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(sin, options))
         == f"COS(var) * {PRE}var{POST}"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(tan))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(tan, options))
         == f"(1.0 + TAN(var) ** 2) * {PRE}var{POST}"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(acos))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(acos, options))
         == f"-{PRE}var{POST} / SQRT(1.0 - var ** 2)"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(asin))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(asin, options))
         == f"{PRE}var{POST} / SQRT(1.0 - var ** 2)"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(atan))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(atan, options))
         == f"{PRE}var{POST} / (1.0 + var ** 2)"
     )
     assert (
-        fortran_writer(ad_operation_trans.differentiate_intrinsic(abs_val))
+        fortran_writer(ad_operation_trans.differentiate_intrinsic(abs_val, options))
         == f"var / ABS(var) * {PRE}var{POST}"
     )
 
     ceil = IntrinsicCall.create(IntrinsicCall.Intrinsic.CEILING, [ref])
     with pytest.raises(NotImplementedError) as info:
-        ad_operation_trans.differentiate_intrinsic(ceil)
+        ad_operation_trans.differentiate_intrinsic(ceil, options)
     assert (
         "Differentiating unary IntrinsicCall with "
         "intrinsic 'CEILING' is not implemented yet." in str(info.value)
@@ -342,7 +350,7 @@ def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
         f"MATMUL({PRE}mat1{POST}, vec1) + MATMUL(mat1, {PRE}vec1{POST})"
     )
 
-    transformed = [ad_operation_trans.differentiate_intrinsic(op) for op in ops]
+    transformed = [ad_operation_trans.differentiate_intrinsic(op, options) for op in ops]
 
     compare(transformed, expected, fortran_writer)
 
@@ -354,13 +362,15 @@ def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
         "intrinsic 'DPROD' is not implemented yet." in str(info.value)
     )
 
+    # TODO: with activity analysis
+
 def test_ad_operation_trans_apply(fortran_writer):
-    def initialize():
+    def initialize(options=None):
         (
             _,
             ad_routine_trans,
             ad_operation_trans,
-        ) = initialize_transformations()
+        ) = initialize_transformations(options)
 
         sym = DataSymbol("var", REAL_TYPE)
         d_sym = ad_routine_trans.create_differential_symbol(sym)
@@ -376,38 +386,41 @@ def test_ad_operation_trans_apply(fortran_writer):
 
         return ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3
 
-    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize()
+    # Without activity analysis
+    options = {"activity_analysis": False}
+
+    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize(options)
 
     ##########
     # Literals
     unary = UnaryOperation.create(UnaryOperation.Operator.MINUS, one())
-    transformed = ad_operation_trans.apply(unary)
+    transformed = ad_operation_trans.apply(unary, options)
     assert isinstance(transformed, Literal)
     assert fortran_writer(transformed) == "0"
 
     binary = BinaryOperation.create(BinaryOperation.Operator.ADD, one(), one())
-    transformed = ad_operation_trans.apply(binary)
+    transformed = ad_operation_trans.apply(binary, options)
     assert isinstance(transformed, BinaryOperation)
     assert fortran_writer(transformed) == "0 + 0"
 
     ############
     # References
     unary = UnaryOperation.create(UnaryOperation.Operator.MINUS, Reference(sym2))
-    transformed = ad_operation_trans.apply(unary)
+    transformed = ad_operation_trans.apply(unary, options)
     assert isinstance(transformed, UnaryOperation)
     assert fortran_writer(transformed) == f"-{PRE}var2{POST}"
 
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB, Reference(sym2), Reference(sym3)
     )
-    transformed = ad_operation_trans.apply(binary)
+    transformed = ad_operation_trans.apply(binary, options)
     assert isinstance(transformed, BinaryOperation)
     assert fortran_writer(transformed) == f"{PRE}var2{POST} - {PRE}var3{POST}"
 
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), Reference(sym3)
     )
-    transformed = ad_operation_trans.apply(binary)
+    transformed = ad_operation_trans.apply(binary, options)
     assert isinstance(transformed, BinaryOperation)
     assert (
         fortran_writer(transformed)
@@ -417,20 +430,20 @@ def test_ad_operation_trans_apply(fortran_writer):
     ###########
     # Operations
 
-    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize(options)
     # create sym2 * -sym3
     minus = UnaryOperation.create(UnaryOperation.Operator.MINUS, Reference(sym3))
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
-    transformed = ad_operation_trans.apply(binary)
+    transformed = ad_operation_trans.apply(binary, options)
     assert isinstance(transformed, BinaryOperation)
     assert (
         fortran_writer(transformed)
         == f"{PRE}var2{POST} * (-var3) + (-{PRE}var3{POST}) * var2"
     )
 
-    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, d_sym, d_sym2, d_sym3 = initialize(options)
     # create sym2 * -(sym3*sym2)
     bin1 = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym3), Reference(sym2)
@@ -439,9 +452,11 @@ def test_ad_operation_trans_apply(fortran_writer):
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
-    transformed = ad_operation_trans.apply(binary)
+    transformed = ad_operation_trans.apply(binary, options)
     assert isinstance(transformed, BinaryOperation)
     assert (
         fortran_writer(transformed)
         == f"{PRE}var2{POST} * (-var3 * var2) + (-({PRE}var3{POST} * var2 + {PRE}var2{POST} * var3)) * var2"
     )
+
+    # TODO: with activity analysis

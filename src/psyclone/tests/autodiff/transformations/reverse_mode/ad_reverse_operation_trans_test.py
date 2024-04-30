@@ -73,7 +73,7 @@ def compare(nodes, strings, fortran_writer):
         assert line == expected_line
 
 
-def initialize_transformations():
+def initialize_transformations(options=None):
     freader = FortranReader()
     reversal_schedule = ADSplitReversalSchedule()
 
@@ -83,7 +83,7 @@ def initialize_transformations():
     container = psy.walk(Container)[0]
 
     ad_container_trans = ADReverseContainerTrans()
-    ad_container_trans.apply(container, "foo", [], [], reversal_schedule)
+    ad_container_trans.apply(container, "foo", [], [], reversal_schedule, options)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
     return ad_container_trans, ad_routine_trans, ad_routine_trans.operation_trans
@@ -347,12 +347,12 @@ def test_ad_operation_trans_differentiate_intrinsic(fortran_writer):
     )
 
 def test_ad_operation_trans_apply(fortran_writer):
-    def initialize():
+    def initialize(options=None):
         (
             _,
             ad_routine_trans,
             ad_operation_trans,
-        ) = initialize_transformations()
+        ) = initialize_transformations(options)
 
         sym = DataSymbol("var", REAL_TYPE)
         adj_sym = ad_routine_trans.create_differential_symbol(sym)
@@ -368,24 +368,27 @@ def test_ad_operation_trans_apply(fortran_writer):
 
         return ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3
 
-    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize()
+    # Without activity analysis
+    options = {"activity_analysis": False}
+
+    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize(options)
 
     ##########
     # Literals
     unary = UnaryOperation.create(UnaryOperation.Operator.MINUS, one())
-    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym), options)
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 0
 
     binary = BinaryOperation.create(BinaryOperation.Operator.ADD, one(), one())
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 0
 
     ############
     # References, non-iterative
     unary = UnaryOperation.create(UnaryOperation.Operator.MINUS, Reference(sym2))
-    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 0
     expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var{AS} * (-1.0)\n"  # , "{AP}var{AS} = 0.0\n")
@@ -394,7 +397,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     binary = BinaryOperation.create(
         BinaryOperation.Operator.SUB, Reference(sym2), Reference(sym3)
     )
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 2
     assert len(assignment_lhs_incr) == 0
     expected = (
@@ -406,7 +409,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), Reference(sym3)
     )
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 2
     assert len(assignment_lhs_incr) == 0
     expected = (
@@ -419,7 +422,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), Reference(sym2)
     )
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 0
     expected = (
@@ -431,13 +434,13 @@ def test_ad_operation_trans_apply(fortran_writer):
     ###########
     # Operations, non-iterative
 
-    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize(options)
     # create sym2 * -sym3
     minus = UnaryOperation.create(UnaryOperation.Operator.MINUS, Reference(sym3))
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 2
     assert len(assignment_lhs_incr) == 0
     expected = (
@@ -447,7 +450,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     )
     compare(returning, expected, fortran_writer)
 
-    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize(options)
     # create sym2 * -(sym3*sym2)
     bin1 = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym3), Reference(sym2)
@@ -456,7 +459,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     binary = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym2), minus
     )
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym), options)
     assert len(returning) == 3
     assert len(assignment_lhs_incr) == 0
     expected = (
@@ -478,7 +481,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym2), unary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(unary, Reference(adj_sym2), options)
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 1
     expected = f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * (-1.0)\n"  # , "{AP}var{AS} = 0.0\n")
@@ -490,7 +493,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
     expected_ret = (f"{AP}var3{AS} = {AP}var3{AS} + {AP}var2{AS} * (-1.0)\n",)
@@ -505,7 +508,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym3), binary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
     expected_ret = (f"{AP}var2{AS} = {AP}var2{AS} + {AP}var2{AS} * 1.0\n",)
@@ -520,7 +523,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2), options)
     assert len(returning) == 0
     assert len(assignment_lhs_incr) == 1
     expected_lhs = (
@@ -532,7 +535,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     ###########
     # Operations, iterative
 
-    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize(options)
     # create var2 = var2 * -var3
     minus = UnaryOperation.create(UnaryOperation.Operator.MINUS, Reference(sym3))
     binary = BinaryOperation.create(
@@ -541,7 +544,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 1
     expected_ret = (
@@ -552,7 +555,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
     compare(assignment_lhs_incr, expected_lhs, fortran_writer)
 
-    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize()
+    ad_operation_trans, sym, sym2, sym3, adj_sym, adj_sym2, adj_sym3 = initialize(options)
     # create var2 = var2 + var3*var2
     bin1 = BinaryOperation.create(
         BinaryOperation.Operator.MUL, Reference(sym3), Reference(sym2)
@@ -561,7 +564,7 @@ def test_ad_operation_trans_apply(fortran_writer):
     Assignment.create(
         Reference(sym2), binary
     )  # Attaches the operation as rhs of an assignment to var2
-    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2))
+    returning, assignment_lhs_incr = ad_operation_trans.apply(binary, Reference(adj_sym2), options)
     assert len(returning) == 1
     assert len(assignment_lhs_incr) == 2
     expected_ret = (

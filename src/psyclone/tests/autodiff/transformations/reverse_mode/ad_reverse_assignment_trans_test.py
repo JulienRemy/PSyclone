@@ -68,7 +68,7 @@ def compare(nodes, strings, fortran_writer):
         assert line == expected_line
 
 
-def initialize_transformations():
+def initialize_transformations(options=None):
     freader = FortranReader()
     reversal_schedule = ADSplitReversalSchedule()
 
@@ -78,7 +78,7 @@ def initialize_transformations():
     container = psy.walk(Container)[0]
 
     ad_container_trans = ADReverseContainerTrans()
-    ad_container_trans.apply(container, "foo", [], [], reversal_schedule)
+    ad_container_trans.apply(container, "foo", [], [], reversal_schedule, options)
     ad_routine_trans = ad_container_trans.routine_transformations[0]
 
     return ad_container_trans, ad_routine_trans, ad_routine_trans.assignment_trans
@@ -148,8 +148,8 @@ def test_ad_assignment_trans_is_iterative():
 
 
 def test_ad_assignment_trans_apply(fortran_writer):
-    def initialize():
-        _, ad_routine_trans, ad_assignment_trans = initialize_transformations()
+    def initialize(options=None):
+        _, ad_routine_trans, ad_assignment_trans = initialize_transformations(options)
 
         sym = DataSymbol("var", REAL_TYPE)
         adj_sym = ad_routine_trans.create_differential_symbol(sym)
@@ -161,7 +161,10 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
         return ad_assignment_trans, sym, adj_sym, sym2, adj_sym2
 
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    # Without activity analysis
+    options = {"activity_analysis": False}
+
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
 
     ###############
     # Literal assignment
@@ -169,7 +172,7 @@ def test_ad_assignment_trans_apply(fortran_writer):
     literal_assignment = assign(sym, one)
 
     # Literal assignment, with overwriting (taping)
-    literal_overwriting = ad_assignment_trans.apply(literal_assignment)
+    literal_overwriting = ad_assignment_trans.apply(literal_assignment, options)
     recording, returning = literal_overwriting
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -180,17 +183,17 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(recording, expected_rec, fortran_writer)
     compare(returning, expected_ret, fortran_writer)
 
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     literal_assignment = assign(sym, one)
 
     ##################
     # Reference assignment
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     reference_assignment = assign(sym, sym2)
 
     # Reference assignment, without overwriting, without iterative assignment
     recording, returning = ad_assignment_trans.apply(
-        reference_assignment
+        reference_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -205,11 +208,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
 
     # Reference assignment, with iterative statement
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     reference_assignment = assign(sym, sym)
 
     recording, returning = ad_assignment_trans.apply(
-        reference_assignment
+        reference_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -222,11 +225,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     #######################
     # Operation assignment, not iterative
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     operation = minus(sym2)
     operation_assignment = assign(sym, operation)
     recording, returning = ad_assignment_trans.apply(
-        operation_assignment,
+        operation_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -241,11 +244,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
 
     # Operation assignment, iterative unary
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     operation = minus(sym)
     operation_assignment = assign(sym, operation)
     recording, returning = ad_assignment_trans.apply(
-        operation_assignment
+        operation_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -259,11 +262,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
 
     # Operation assignment, iterative binary
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     operation = add(sym, sym2)
     operation_assignment = assign(sym, operation)
     recording, returning = ad_assignment_trans.apply(
-        operation_assignment
+        operation_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -278,11 +281,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
 
     # Operation assignment, iterative binary, other way
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     operation = add(sym2, sym)
     operation_assignment = assign(sym, operation)
     recording, returning = ad_assignment_trans.apply(
-        operation_assignment
+        operation_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -297,11 +300,11 @@ def test_ad_assignment_trans_apply(fortran_writer):
     compare(returning, expected_ret, fortran_writer)
 
     # Operation assignment, iterative binary, both
-    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize()
+    ad_assignment_trans, sym, adj_sym, sym2, adj_sym2 = initialize(options)
     operation = add(sym, sym)
     operation_assignment = assign(sym, operation)
     recording, returning = ad_assignment_trans.apply(
-        operation_assignment
+        operation_assignment, options
     )
     assert isinstance(recording, list)
     assert isinstance(returning, list)
@@ -319,3 +322,5 @@ def test_ad_assignment_trans_apply(fortran_writer):
 
     #######################
     # Call assignment is not implemented yet
+
+    # TODO: activity analysis
