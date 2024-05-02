@@ -266,16 +266,18 @@ class DataFlowNode:
                     called_routine_dag = DataFlowDAG.create_from_schedule(
                         called_routine
                     )
+
+                    arg_nodes_in_called_routine = []
+                    for arg_node in called_routine_dag.arguments_nodes:
+                        self.dag.dag_nodes.append(arg_node)
+                        arg_node._dag = self.dag
+                        arg_nodes_in_called_routine.append(arg_node)
+
                     for node in called_routine_dag.dag_nodes:
+                        if node in called_routine_dag.arguments_nodes:
+                            continue
                         self.dag.dag_nodes.append(node)
                         node._dag = self.dag
-
-                    arg_nodes_in_called_routine = [
-                        self.dag.get_dag_node_for(
-                            dag_node.psyir, dag_node.access_type
-                        )
-                        for dag_node in called_routine_dag.arguments_nodes
-                    ]
 
                     del called_routine_dag
 
