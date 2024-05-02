@@ -160,6 +160,14 @@ class DataFlowNode:
         self._backward_dependences = []
         self._access_type = access_type
 
+        # Get the enclosing routine
+        self._enclosing_routine = None
+        if isinstance(psyir, DataNode):
+            self._enclosing_routine = psyir.ancestor(Routine)
+        elif isinstance(psyir, DataSymbol):
+            if isinstance(self.dag.schedule, Routine):
+                self._enclosing_routine = self.dag.schedule
+
         # Add the new node to the DAG
         self.dag.dag_nodes.append(self)
 
@@ -254,6 +262,23 @@ class DataFlowNode:
                     symbol.interface.access for symbol in args_symbols
                 ]
 
+                if self.dag.explore_called_routines:
+                    called_routine_dag = DataFlowDAG.create_from_schedule(
+                        called_routine
+                    )
+                    for node in called_routine_dag.dag_nodes:
+                        self.dag.dag_nodes.append(node)
+                        node._dag = self.dag
+
+                    arg_nodes_in_called_routine = [
+                        self.dag.get_dag_node_for(
+                            dag_node.psyir, dag_node.access_type
+                        )
+                        for dag_node in called_routine_dag.arguments_nodes
+                    ]
+
+                    del called_routine_dag
+
                 in_arg_nodes = []
                 out_arg_nodes = []
                 for i, (arg, intent) in enumerate(
@@ -269,7 +294,15 @@ class DataFlowNode:
                                 else AccessType.UNKNOWN
                             ),
                         )
-                        in_arg_node.add_forward_dependence(self)
+                        if self.dag.explore_called_routines:
+                            in_arg_node_in_called_routine = (
+                                arg_nodes_in_called_routine[i]
+                            )
+                            in_arg_node.add_forward_dependence(
+                                in_arg_node_in_called_routine
+                            )
+                        else:
+                            in_arg_node.add_forward_dependence(self)
 
                     if intent is not ArgumentInterface.Access.READ:
                         # NOTE: create to allow for duplicate DAG nodes
@@ -283,9 +316,21 @@ class DataFlowNode:
                                 else AccessType.UNKNOWN
                             ),
                         )
-                        out_arg_node.add_backward_dependence(self)
+                        if self.dag.explore_called_routines:
+                            out_arg_node_in_called_routine = (
+                                arg_nodes_in_called_routine[i]
+                            )
+                            out_arg_node.add_backward_dependence(
+                                out_arg_node_in_called_routine
+                            )
+                        else:
+                            out_arg_node.add_backward_dependence(self)
 
-            # We don't know the intents of the arguments
+                if self.dag.explore_called_routines:
+                    self.dag.dag_nodes.remove(self)
+                    del self
+
+            # We don't know the definition nor the intents of the arguments
             # so treat everything as inout
             else:
 
@@ -608,6 +653,17 @@ class DataFlowNode:
         # print("")
 
     @property
+    def enclosing_routine(self):
+        """The Routine that encloses the PSyIR node wrapped by the data flow \
+        node.
+
+        :returns: The Routine that encloses the PSyIR node wrapped by the \
+                  data flow node.
+        :rtype: :py:class:`Routine`
+        """
+        return self._enclosing_routine
+
+    @property
     def dag(self):
         """The DataFlowDAG that the node belongs to.
 
@@ -836,7 +892,7 @@ class DataFlowNode:
             copy.add_backward_dependence(bwd_copy)
         return copy
 
-    def to_psyir_list_forward(self, stop_before_dag_node = None):
+    def to_psyir_list_forward(self, stop_before_dag_node=None):
         """Recursively get the PSyIR nodes of the forward dependences of the \
         current node and output them as a list.
 
@@ -856,7 +912,7 @@ class DataFlowNode:
             )
         if self is stop_before_dag_node:
             return []
-        
+
         psyir_list = [self.psyir]
         for dep in self.forward_dependences:
             dep_psyir_list = dep.to_psyir_list_forward()
@@ -914,11 +970,23 @@ class DataFlowNode:
 class DataFlowDAG:
     """A data flow graph representing the data dependencies between PSyIR \
     nodes.
+
+    :param explore_called_routines: If True, the data flow graph will explore \
+                                    called routines. Defaults to True.
+    :type explore_called_routines: bool
+
+    :raises TypeError: If explore_called_routines is not a bool.
     """
 
-    def __init__(self):
+    def __init__(self, explore_called_routines=True):
+        if not isinstance(explore_called_routines, bool):
+            raise TypeError(
+                f"'explore_called_routines' argument must be of type 'bool' "
+                f"but found '{type(explore_called_routines).__name__}'."
+            )
         self._schedule = None
         self._dag_nodes = []
+        self._explore_called_routines = explore_called_routines
 
     @property
     def schedule(self):
@@ -941,40 +1009,118 @@ class DataFlowDAG:
         return self._dag_nodes
 
     @property
+    def explore_called_routines(self):
+        """If the data flow graph will explore called routines.
+
+        :returns: If the data flow graph will explore called routines.
+        :rtype: bool
+        """
+        return self._explore_called_routines
+
+    @property
+    def arguments_nodes(self):
+        """The list of nodes in the data flow graph that are arguments.
+
+        :returns: The list of nodes in the data flow graph that are arguments.
+        :rtype: List[:py:class:`DataFlowNode`]
+        """
+        if not isinstance(self.schedule, Routine):
+            raise TypeError("arguments_nodes can only be called on a Routine")
+
+        arguments_nodes = []
+        for dag_node in self.dag_nodes:
+            if (
+                isinstance(dag_node.psyir, DataSymbol)
+                and dag_node.psyir in self.schedule.symbol_table.argument_list
+            ):
+                arguments_nodes.append(dag_node)
+
+        # Sort them as in the argument list
+        arguments_nodes.sort(
+            key=lambda node: self.schedule.symbol_table.argument_list.index(
+                node.psyir
+            )
+        )
+
+        return arguments_nodes
+
+    @property
     def in_arguments_nodes(self):
         """The list of nodes in the data flow graph that are intent(in[out]) \
         arguments.
+
+        :raises TypeError: If the schedule is not an instance of Routine.
 
         :returns: The list of nodes in the data flow graph that are \
                   intent(in[out]) arguments.
         :rtype: List[:py:class:`DataFlowNode`]
         """
-        in_arguments_nodes = []
-        for dag_node in self.dag_nodes:
-            if (
-                isinstance(dag_node.psyir, DataSymbol)
-                and dag_node.access_type is AccessType.WRITE
-            ):
-                in_arguments_nodes.append(dag_node)
-        return in_arguments_nodes
+        if not isinstance(self.schedule, Routine):
+            raise TypeError(
+                "in_arguments_nodes can only be called on a Routine"
+            )
+
+        return [
+            node
+            for node in self.arguments_nodes
+            if node.access_type is AccessType.WRITE
+        ]
+
+        # in_arguments_nodes = []
+        # for dag_node in self.dag_nodes:
+        #     if (
+        #         isinstance(dag_node.psyir, DataSymbol)
+        #         and dag_node.access_type is AccessType.WRITE
+        #     ):
+        #         in_arguments_nodes.append(dag_node)
+
+        # # Sort them as in the argument list
+        # in_arguments_nodes.sort(
+        #     key=lambda node: self.schedule.symbol_table.argument_list.index(
+        #         node.psyir
+        #     )
+        # )
+
+        # return in_arguments_nodes
 
     @property
     def out_arguments_nodes(self):
         """The list of nodes in the data flow graph that are intent([in]out) \
         arguments.
 
+        :raises TypeError: If the schedule is not an instance of Routine.
+
         :returns: The list of nodes in the data flow graph that are \
                   intent([in]out) arguments.
         :rtype: List[:py:class:`DataFlowNode`]
         """
-        out_arguments_nodes = []
-        for dag_node in self.dag_nodes:
-            if (
-                isinstance(dag_node.psyir, DataSymbol)
-                and dag_node.access_type is AccessType.READ
-            ):
-                out_arguments_nodes.append(dag_node)
-        return out_arguments_nodes
+        if not isinstance(self.schedule, Routine):
+            raise TypeError(
+                "in_arguments_nodes can only be called on a Routine"
+            )
+
+        return [
+            node
+            for node in self.arguments_nodes
+            if node.access_type is AccessType.READ
+        ]
+
+        # out_arguments_nodes = []
+        # for dag_node in self.dag_nodes:
+        #     if (
+        #         isinstance(dag_node.psyir, DataSymbol)
+        #         and dag_node.access_type is AccessType.READ
+        #     ):
+        #         out_arguments_nodes.append(dag_node)
+
+        # # Sort them as in the argument list
+        # out_arguments_nodes.sort(
+        #     key=lambda node: self.schedule.symbol_table.argument_list.index(
+        #         node.psyir
+        #     )
+        # )
+
+        # return out_arguments_nodes
 
     @property
     def forward_leaves(self):
@@ -1013,13 +1159,18 @@ class DataFlowDAG:
         return backward_leaves
 
     @classmethod
-    def create_from_schedule(cls, schedule):
+    def create_from_schedule(cls, schedule, explore_called_routines=True):
         """Create a DataFlowDAG from a PSyIR schedule (Schedule or Routine).
 
         :param schedule: The PSyIR schedule to create the data flow graph from.
         :type schedule: :py:class:`Schedule`
+        :param explore_called_routines: If True, the data flow graph will \
+                                        explore called routines. \
+                                        Defaults to True.
+        :type explore_called_routines: bool
 
         :raises TypeError: If the schedule is not an instance of Schedule.
+        :raises TypeError: If explore_called_routines is not a bool.
 
         :returns: The created DataFlowDAG.
         :rtype: :py:class:`DataFlowDAG`
@@ -1029,8 +1180,13 @@ class DataFlowDAG:
                 f"'schedule' argument must be of type 'Schedule' but "
                 f"found '{type(schedule).__name__}'."
             )
+        if not isinstance(explore_called_routines, bool):
+            raise TypeError(
+                f"'explore_called_routines' argument must be of type 'bool' "
+                f"but found '{type(explore_called_routines).__name__}'."
+            )
 
-        dag = cls()
+        dag = cls(explore_called_routines)
         dag._schedule = schedule
 
         # Add nodes for the intent(in[out]) arguments of the routine (if any)
@@ -1645,22 +1801,22 @@ class DataFlowDAG:
 
             elif isinstance(statement, Directive):
                 # for clause in statement.clauses:
-                    # # TODO: OMPReductionClause once implemented
-                    # if isinstance(clause, (OMPPrivateClause, ACCCopyOutClause)):
-                    #     for ref in clause.children:
-                    #         DataFlowNode.create(self, ref, AccessType.WRITE)
-                    # elif isinstance(
-                    #     clause,
-                    #     (
-                    #         OMPFirstprivateClause,
-                    #         OMPSharedClause,
-                    #         ACCCopyClause,
-                    #         ACCCopyInClause,
-                    #         OMPDependClause,
-                    #     ),
-                    # ):
-                    #     for ref in clause.children:
-                    #         DataFlowNode.create(self, ref, AccessType.READ)
+                # # TODO: OMPReductionClause once implemented
+                # if isinstance(clause, (OMPPrivateClause, ACCCopyOutClause)):
+                #     for ref in clause.children:
+                #         DataFlowNode.create(self, ref, AccessType.WRITE)
+                # elif isinstance(
+                #     clause,
+                #     (
+                #         OMPFirstprivateClause,
+                #         OMPSharedClause,
+                #         ACCCopyClause,
+                #         ACCCopyInClause,
+                #         OMPDependClause,
+                #     ),
+                # ):
+                #     for ref in clause.children:
+                #         DataFlowNode.create(self, ref, AccessType.READ)
                 if isinstance(statement, RegionDirective):
                     self._statement_list_to_dag_nodes(
                         statement.dir_body.children
@@ -1678,7 +1834,7 @@ class DataFlowDAG:
             else:
                 raise NotImplementedError("")
 
-    def to_dot_format(self, colored_nodes = None):
+    def to_dot_format(self, colored_nodes=None):
         """Build a string representation of the data flow graph in DOT format.
 
         :param colored_nodes: a dictionary mapping colors to lists of psyir \
@@ -1694,7 +1850,31 @@ class DataFlowDAG:
             digraph_name = "G"
         lines = [f"digraph {digraph_name}", "{"]
 
-        # TODO: subgraphs?
+        enclosing_routines = []
+        for dag_node in self.dag_nodes:
+            enclosing_routine = dag_node.enclosing_routine
+            if (
+                enclosing_routine is not None
+                and enclosing_routine not in enclosing_routines
+            ):
+                enclosing_routines.append(enclosing_routine)
+
+        subgraph_id_to_routine = dict()
+        for id, routine in enumerate(enclosing_routines):
+            subgraph_id_to_routine[id] = routine
+
+        subgraph_id_to_lines = dict()
+        for subgraph_id, routine in subgraph_id_to_routine.items():
+            args_and_intents = [
+                arg.name + ":" + arg.interface.access.name
+                for arg in routine.symbol_table.argument_list
+            ]
+            args_and_intents = ", ".join(args_and_intents)
+            subgraph_id_to_lines[subgraph_id] = [
+                f"subgraph cluster_{routine.name}",
+                "{",
+                f'label="{routine.name}({args_and_intents})"',
+            ]
 
         # Add the nodes
         id_counter = 0
@@ -1718,25 +1898,35 @@ class DataFlowDAG:
                         fillcolor = color_key
                         break
 
+            this_subgraph_id = None
+            for subgraph_id, routine in subgraph_id_to_routine.items():
+                if dag_node.enclosing_routine is routine:
+                    this_subgraph_id = subgraph_id
+                    break
+            if this_subgraph_id is not None:
+                subgraph_lines = subgraph_id_to_lines[this_subgraph_id]
+            else:
+                subgraph_lines = lines
+
             if isinstance(dag_node.psyir, DataSymbol):
                 label = (
                     f"{dag_node.psyir.name} "
                     f"({dag_node.psyir.interface.access.name})"
                 )
-                lines.append(
+                subgraph_lines.append(
                     f'{id} [label="{label}", shape="invtriangle", '
                     f'style="filled", fillcolor="{fillcolor}", color="{color}"]'
                 )
             else:
                 label = dag_node.psyir.debug_string()
                 if isinstance(dag_node.psyir, Call):
-                    lines.append(
+                    subgraph_lines.append(
                         f'{id} [label="{label}", shape="box", '
                         f'style="filled", fillcolor="{fillcolor}", '
                         f'color="{color}"]'
                     )
                 elif isinstance(dag_node.psyir, Operation):
-                    lines.append(
+                    subgraph_lines.append(
                         f'{id} [label="{label}", shape="oval", '
                         f'style="filled", fillcolor="{fillcolor}", '
                         f'color="{color}"]'
@@ -1755,17 +1945,25 @@ class DataFlowDAG:
                         ),
                     ):
                         label += f"({type(dag_node.psyir.parent).__name__})"
-                        lines.append(
+                        subgraph_lines.append(
                             f'{id} [label="{label}", shape="diamond", '
                             f'style="filled", fillcolor="{fillcolor}", '
                             f'color="{color}"]'
                         )
                     else:
-                        lines.append(f'{id} [label="{label}", '
-                                    f'style="filled", fillcolor="{fillcolor}", '
-                                    f'color="{color}"]')
+                        subgraph_lines.append(
+                            f'{id} [label="{label}", '
+                            f'style="filled", fillcolor="{fillcolor}", '
+                            f'color="{color}"]'
+                        )
                 else:
                     raise ValueError(type(dag_node.psyir).__name__)
+
+        for subgraph_lines in subgraph_id_to_lines.values():
+            subgraph_lines.append("}")
+            for subgraph_line in subgraph_lines:
+                subgraph_line = "\t" + subgraph_line
+            lines.extend(subgraph_lines)
 
         # Add the edges
         for this_node in self.dag_nodes:
@@ -1786,7 +1984,7 @@ class DataFlowDAG:
 
         return "\n".join(lines)
 
-    def render_graph(self, filename="graph", colored_nodes = None):
+    def render_graph(self, filename="graph", colored_nodes=None):
         """Render the data flow graph as a PNG image using pydot.
 
         :param filename: name of output PNG file, defaults to "graph".
@@ -1819,6 +2017,7 @@ class DataFlowDAG:
         :rtype: str
         """
         return str(self)
+
 
 if __name__ == "__main__":
     from psyclone.psyir.frontend.fortran import FortranReader
@@ -1959,7 +2158,7 @@ end subroutine bar"""
     #     #     print("------------")
     #     # print(flow_to_b.to_psyir_list())
 
-    dag.render_graph("dag")
+    dag.render_graph("dag", {"green": list_from_a})
     flow_from_a.render_graph("from_a")
     flow_to_b.render_graph("to_b")
 
