@@ -171,12 +171,6 @@ class DataFlowNode:
         # Add the new node to the DAG
         self.dag.dag_nodes.append(self)
 
-        # # Check this is still a DAG
-        # if not self.dag.is_acyclic:
-        #     raise RuntimeError(f"The data flow graph obtained by adding "
-        #                        f"the node '{self}' "
-        #                        f"is not a DAG.")
-
     def add_backward_dependence_to_last_write(self):
         """
         Adds backward dependences to the last write of the symbol referenced \
@@ -272,23 +266,21 @@ class DataFlowNode:
                     called_routine_dag = DataFlowDAG.create_from_schedule(
                         called_routine
                     )
-                    self.dag.subgraphs.append(called_routine_dag)
+                    for node in called_routine_dag.dag_nodes:
+                        self.dag.dag_nodes.append(node)
+                        node._dag = self.dag
 
-                    in_arg_nodes_in_called_routine = called_routine_dag.in_arguments_nodes
-                    out_arg_nodes_in_called_routine = called_routine_dag.out_arguments_nodes
+                    arg_nodes_in_called_routine = [
+                        self.dag.get_dag_node_for(
+                            dag_node.psyir, dag_node.access_type
+                        )
+                        for dag_node in called_routine_dag.arguments_nodes
+                    ]
 
-                    # for node in called_routine_dag.dag_nodes:
-                    #     if node in called_routine_dag.arguments_nodes:
-                    #         continue
-                    #     self.dag.dag_nodes.append(node)
-                    #     node._dag = self.dag
-
-                    # del called_routine_dag
+                    del called_routine_dag
 
                 in_arg_nodes = []
                 out_arg_nodes = []
-                in_arg_node_counter = 0
-                out_arg_node_counter = 0
                 for i, (arg, intent) in enumerate(
                     zip(psyir.children, args_intents)
                 ):
@@ -304,9 +296,8 @@ class DataFlowNode:
                         )
                         if self.dag.explore_called_routines:
                             in_arg_node_in_called_routine = (
-                                in_arg_nodes_in_called_routine[in_arg_node_counter]
+                                arg_nodes_in_called_routine[i]
                             )
-                            in_arg_node_counter += 1
                             in_arg_node.add_forward_dependence(
                                 in_arg_node_in_called_routine
                             )
@@ -327,9 +318,8 @@ class DataFlowNode:
                         )
                         if self.dag.explore_called_routines:
                             out_arg_node_in_called_routine = (
-                                out_arg_nodes_in_called_routine[out_arg_node_counter]
+                                arg_nodes_in_called_routine[i]
                             )
-                            out_arg_node_counter += 1
                             out_arg_node.add_backward_dependence(
                                 out_arg_node_in_called_routine
                             )
@@ -933,22 +923,22 @@ class DataFlowNode:
 
         return psyir_list
 
-    # def to_psyir_list_backward(self):
-    #     """Recursively get the PSyIR nodes of the backward dependences of the \
-    #     current node and output them as a list.
+    def to_psyir_list_backward(self):
+        """Recursively get the PSyIR nodes of the backward dependences of the \
+        current node and output them as a list.
 
-    #     :returns: list of all recursively found PSyIR nodes along the backward \
-    #               dependences.
-    #     :rtype: List[:py:class:`DataNode`]
-    #     """
-    #     psyir_list = [self.psyir]
-    #     for dep in self.backward_dependences:
-    #         dep_psyir_list = dep.to_psyir_list_backward()
-    #         for psyir in dep_psyir_list:
-    #             if psyir not in psyir_list:
-    #                 psyir_list.append(psyir)
+        :returns: list of all recursively found PSyIR nodes along the backward \
+                  dependences.
+        :rtype: List[:py:class:`DataNode`]
+        """
+        psyir_list = [self.psyir]
+        for dep in self.backward_dependences:
+            dep_psyir_list = dep.to_psyir_list_backward()
+            for psyir in dep_psyir_list:
+                if psyir not in psyir_list:
+                    psyir_list.append(psyir)
 
-    #     return psyir_list
+        return psyir_list
 
     def __str__(self):
         """Write a string representation of the DataFlowNode.
@@ -997,7 +987,6 @@ class DataFlowDAG:
         self._schedule = None
         self._dag_nodes = []
         self._explore_called_routines = explore_called_routines
-        self._subgraphs = []
 
     @property
     def schedule(self):
@@ -1009,15 +998,6 @@ class DataFlowDAG:
         :rtype: Union[:py:class:`Schedule`, NoneType]
         """
         return self._schedule
-    
-    @property
-    def subgraphs(self):
-        """The list of subgraphs in the data flow graph.
-
-        :returns: The list of subgraphs in the data flow graph.
-        :rtype: List[:py:class:`DataFlowDAG`]
-        """
-        return self._subgraphs
 
     @property
     def dag_nodes(self):
@@ -1049,11 +1029,15 @@ class DataFlowDAG:
 
         arguments_nodes = []
         for dag_node in self.dag_nodes:
-            if (
-                isinstance(dag_node.psyir, DataSymbol)
-                and dag_node.psyir in self.schedule.symbol_table.argument_list
-            ):
+            if isinstance(dag_node.psyir, DataSymbol):
                 arguments_nodes.append(dag_node)
+
+        # Sort them as in the argument list
+        arguments_nodes.sort(
+            key=lambda node: self.schedule.symbol_table.argument_list.index(
+                node.psyir
+            )
+        )
 
         return arguments_nodes
 
@@ -1073,20 +1057,28 @@ class DataFlowDAG:
                 "in_arguments_nodes can only be called on a Routine"
             )
 
-        in_arguments_nodes = [
+        return [
             node
             for node in self.arguments_nodes
-            if node.psyir.interface.access is not ArgumentInterface.Access.WRITE
+            if node.access_type is AccessType.WRITE
         ]
 
-        # Sort them as in the argument list
-        in_arguments_nodes.sort(
-            key=lambda node: self.schedule.symbol_table.argument_list.index(
-                node.psyir
-            )
-        )
+        # in_arguments_nodes = []
+        # for dag_node in self.dag_nodes:
+        #     if (
+        #         isinstance(dag_node.psyir, DataSymbol)
+        #         and dag_node.access_type is AccessType.WRITE
+        #     ):
+        #         in_arguments_nodes.append(dag_node)
 
-        return in_arguments_nodes
+        # # Sort them as in the argument list
+        # in_arguments_nodes.sort(
+        #     key=lambda node: self.schedule.symbol_table.argument_list.index(
+        #         node.psyir
+        #     )
+        # )
+
+        # return in_arguments_nodes
 
     @property
     def out_arguments_nodes(self):
@@ -1104,20 +1096,28 @@ class DataFlowDAG:
                 "in_arguments_nodes can only be called on a Routine"
             )
 
-        out_arguments_nodes = [
+        return [
             node
             for node in self.arguments_nodes
-            if node.psyir.interface.access is not ArgumentInterface.Access.READ
+            if node.access_type is AccessType.READ
         ]
 
-        # Sort them as in the argument list
-        out_arguments_nodes.sort(
-            key=lambda node: self.schedule.symbol_table.argument_list.index(
-                node.psyir
-            )
-        )
+        # out_arguments_nodes = []
+        # for dag_node in self.dag_nodes:
+        #     if (
+        #         isinstance(dag_node.psyir, DataSymbol)
+        #         and dag_node.access_type is AccessType.READ
+        #     ):
+        #         out_arguments_nodes.append(dag_node)
 
-        return out_arguments_nodes
+        # # Sort them as in the argument list
+        # out_arguments_nodes.sort(
+        #     key=lambda node: self.schedule.symbol_table.argument_list.index(
+        #         node.psyir
+        #     )
+        # )
+
+        # return out_arguments_nodes
 
     @property
     def forward_leaves(self):
@@ -1213,24 +1213,7 @@ class DataFlowDAG:
         # for out_arg_node in dag.out_arguments_nodes:
         #     out_arg_node.add_backward_dependence_to_last_write()
 
-        dag.include_subgraphs()
-
-        # if not dag.is_acyclic:
-        #     raise ValueError("The data flow graph is not acyclic anymore after "
-        #                      "including subgraphs.")
-
         return dag
-    
-    def include_subgraphs(self):
-        """Include the subgraphs of the data flow graph in the DAG nodes.
-
-        """
-        for subgraph in self.subgraphs:
-            for dag_node in subgraph.dag_nodes:
-                dag_node._dag = self
-                self.dag_nodes.append(dag_node)
-
-        self._subgraphs = []
 
     def get_all_last_writes_to_array_symbol(self, array_symbol):
         """Get all last writes to the array symbol in the data flow graph.
@@ -1328,14 +1311,13 @@ class DataFlowDAG:
         :returns: The list of all PSyIR nodes in the data flow graph.
         :rtype: List[Union[:py:class:`DataNode`, :py:class:`DataSymbol`]
         """
-        return [dag_node.psyir for dag_node in self.dag_nodes]
-        # psyir_list = []
-        # for leaf in self.backward_leaves:
-        #     leaf_psyir_list = leaf.to_psyir_list_forward()
-        #     for psyir in leaf_psyir_list:
-        #         if psyir not in psyir_list:
-        #             psyir_list.append(psyir)
-        # return psyir_list
+        psyir_list = []
+        for leaf in self.backward_leaves:
+            leaf_psyir_list = leaf.to_psyir_list_forward()
+            for psyir in leaf_psyir_list:
+                if psyir not in psyir_list:
+                    psyir_list.append(psyir)
+        return psyir_list
 
     def dataflow_tree_from(self, psyir):
         """Extract a data flow tree starting from the given PSyIR node and \
@@ -1880,15 +1862,12 @@ class DataFlowDAG:
 
         subgraph_id_to_lines = dict()
         for subgraph_id, routine in subgraph_id_to_routine.items():
-            args_and_intents = [
-                arg.name + ":" + arg.interface.access.name
-                for arg in routine.symbol_table.argument_list
-            ]
+            args_and_intents = [arg.name + ":" + arg.interface.access.name for arg in routine.symbol_table.argument_list]
             args_and_intents = ", ".join(args_and_intents)
             subgraph_id_to_lines[subgraph_id] = [
-                f"subgraph cluster_{routine.name}",
-                "{",
-                f'label="{routine.name}({args_and_intents})"',
+                f'subgraph cluster_{routine.name}',
+                '{',
+                f'label="{routine.name}({args_and_intents})"'
             ]
 
         # Add the nodes
@@ -2032,38 +2011,6 @@ class DataFlowDAG:
         :rtype: str
         """
         return str(self)
-    
-    @property
-    def is_acyclic(self):
-        """Check if the data flow graph is acyclic.
-
-        :returns: True if the data flow graph is acyclic, False otherwise.
-        :rtype: bool
-        """
-        def is_cyclic_internal(node, visited, stack):
-            node_id = self.dag_nodes.index(node)
-            visited[node_id] = True
-            stack[node_id] = True
-    
-            for neighbour in node.forward_dependences:
-                neighbour_id = self.dag_nodes.index(neighbour)
-                if not visited[neighbour_id]:
-                    if is_cyclic_internal(neighbour, visited, stack):
-                        return True
-                elif stack[neighbour_id]:
-                    return True
-
-            stack[node_id] = False
-            return False
-    
-        visited = [False] * (len(self.dag_nodes) + 1)
-        stack = [False] * (len(self.dag_nodes) + 1)
-        for node in self.dag_nodes:
-            node_id = self.dag_nodes.index(node)
-            if not visited[node_id]:
-                if is_cyclic_internal(node, visited, stack):
-                    return False
-        return True
 
 
 if __name__ == "__main__":
