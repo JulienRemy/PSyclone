@@ -53,6 +53,8 @@ from psyclone.psyir.nodes import (
     Schedule,
 )
 
+from psyclone.psyir.symbols import ScalarType
+
 from psyclone.autodiff.transformations import ADOMPRegionDirectiveTrans
 
 # TODO: FirstPrivate, Reduction, Atomic, Barrier, etc.
@@ -88,7 +90,7 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
 
         clauses = omp_region.clauses
         recording_clauses = [clause.copy() for clause in clauses]
-        returning_clauses = self.transform_clauses(clauses, options)
+        returning_clauses, new_private_adjoints = self.transform_clauses(clauses, options)
 
         body = omp_region.dir_body
         # Transform the if body to get both motions
@@ -137,6 +139,9 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 collapse=omp_region.collapse,
                 reprod=omp_region.reprod,
             )
+            returning_region = self.assign_zero_to_new_private_differentials(
+                returning_region, new_private_adjoints
+            )
             for i, clause in enumerate(returning_clauses):
                 returning_region.children[i + 1] = clause
             returning = (
@@ -146,14 +151,17 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
             return recording, returning
 
         # or an OMPParallelDirective
-        # if type(omp_region) is OMPParallelDirective:
-        recording = OMPParallelDirective(children=returning_body)
-        returning = OMPParallelDirective(children=recording_body)
-        for i, clause in enumerate(recording_clauses):
-            recording.children[i + 1] = clause
-        for i, clause in enumerate(returning_clauses):
-            returning.children[i + 1] = clause
-        return [recording], [returning]
+        elif type(omp_region) is OMPParallelDirective:
+            recording = OMPParallelDirective(children=recording_body)
+            returning = OMPParallelDirective(children=returning_body)
+            returning = self.assign_zero_to_new_private_differentials(
+                returning, new_private_adjoints
+            )
+            for i, clause in enumerate(recording_clauses):
+                recording.children[i + 1] = clause
+            for i, clause in enumerate(returning_clauses):
+                returning.children[i + 1] = clause
+            return [recording], [returning]
 
     def transform_clauses(self, clauses, options=None):
         """Transforms all OpenMP clauses of this OMPRegionDirective.
@@ -174,12 +182,14 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         :raises TypeError: if an item of clauses is of the wrong type.
         :raises NotImplementedError: if an unsupported clause is included.
 
-        :return: list of transformed clauses.
+        :return: list of transformed clauses and list of new private adjoints
+                 symbols.
         :rtype: List[Union[\
                         :py:class:`psyclone.psyir.nodes.OMPPrivateClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPFirstPrivateClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPSharedClause`,\
-                        :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]]
+                        :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]], \
+                List[:py:class:`psyclone.psyir.nodes.DataSymbol`]
         """
         if not isinstance(clauses, list):
             raise TypeError(
@@ -202,29 +212,35 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 )
 
         transformed_clauses = []
+        new_private_adjoints = []
         for clause in clauses:
             if isinstance(clause, OMPPrivateClause):
                 symbols = []
                 for reference in clause.children:
                     symbol = reference.symbol
-                    diff_symbol = (
-                        self.routine_trans.data_symbol_differential_map[symbol]
-                    )
                     symbols.append(symbol)
-                    symbols.append(diff_symbol)
+                    if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                        diff_symbol = (
+                            self.routine_trans.data_symbol_differential_map[symbol]
+                        )
+                        symbols.append(diff_symbol)
+                        new_private_adjoints.append(diff_symbol)
                 transformed_clause = OMPPrivateClause.create(symbols)
                 transformed_clauses.append(transformed_clause)
             elif isinstance(clause, OMPSharedClause):
-                references = []
-                for reference in clause.children:
-                    symbol = reference.symbol
-                    diff_symbol = (
-                        self.routine_trans.data_symbol_differential_map[symbol]
-                    )
-                    references.append(reference.copy())
-                    references.append(Reference(diff_symbol))
-                transformed_clause = OMPSharedClause(children=references)
-                transformed_clauses.append(transformed_clause)
+                raise NotImplementedError(
+                    "OMPSharedClause is unused for now."
+                )
+                # references = []
+                # for reference in clause.children:
+                #     symbol = reference.symbol
+                #     diff_symbol = (
+                #         self.routine_trans.data_symbol_differential_map[symbol]
+                #     )
+                #     references.append(reference.copy())
+                #     references.append(Reference(diff_symbol))
+                # transformed_clause = OMPSharedClause(children=references)
+                # transformed_clauses.append(transformed_clause)
             elif isinstance(clause, OMPDefaultClause):
                 transformed_clauses.append(clause.copy())
             elif isinstance(clause, OMPFirstprivateClause):
@@ -245,7 +261,7 @@ class ADReverseOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                     f"{type(clause).__name__}."
                 )
 
-        return transformed_clauses
+        return transformed_clauses, new_private_adjoints
 
     def transform_body(self, body, options=None):
         """Transforms all statements found in the OMPRegionDirective body.

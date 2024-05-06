@@ -57,6 +57,7 @@ from psyclone.psyir.nodes import (
 from psyclone.psyir.symbols import ArgumentInterface, ArrayType, ScalarType
 from psyclone.psyir.symbols import ArgumentInterface, ArrayType, ScalarType
 from psyclone.psyir.transformations import TransformationError
+from psyclone.psyir.dataflow import DataFlowDAG
 
 from psyclone.autodiff.transformations import ADReverseLoopTrans
 
@@ -99,7 +100,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         scalar_adjoint_symbols_to_increment_atomically = []
         for assignment in loop.walk(Assignment):
             for ref in assignment.rhs.walk(Reference):
-                if not isinstance(ref, ArrayReference):
+                if not isinstance(ref, ArrayReference) and ref.datatype.intrinsic is ScalarType.Intrinsic.REAL:
                     primal_symbol = ref.symbol
                     adjoint_symbol = (
                         self.routine_trans.data_symbol_differential_map[
@@ -122,7 +123,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
 
         for assignment in loop.walk(Assignment):
             for ref in assignment.rhs.walk(Reference):
-                if isinstance(ref, ArrayReference):
+                if isinstance(ref, ArrayReference) and ref.datatype.intrinsic is ScalarType.Intrinsic.REAL:
                     if ref.symbol in primal_array_symbol_to_read_indices_map:
                         primal_array_symbol_to_read_indices_map[
                             ref.symbol
@@ -589,7 +590,6 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         print("Intersection to bounds:", self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_intersection))
         print("Union to bounds: ", self.sympy_product_set_to_nested_loops_bounds_list(product_intervals_union))
 
-
         original_inner_loop = original_outer_loop
         while isinstance(original_inner_loop.loop_body.children[0], Loop):
             original_inner_loop = original_inner_loop.loop_body.children[0]
@@ -614,7 +614,7 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         for scatter_and_subst in product_interval_to_scatters_and_index_substitutions_map.values():
             scatter_and_subst.sort(key = (lambda scatter_and_gather: scatter_and_gather[0].abs_position))
        
-        mode = "branches"
+        mode = "no_branches"
 
         all_scatters = [elem[0] for elem in scatters_index_subtitution_maps_and_product_intervals_list]
         scalar_adjoint_symbols_to_increment_atomically = self.list_scalar_adjoint_symbols_to_increment_atomically(advancing_outer_loop, options)
@@ -628,6 +628,8 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
         while isinstance(new_main_inner_loop.loop_body.children[0], Loop):
             new_main_inner_loop = new_main_inner_loop.loop_body.children[0]
 
+        loop_dag = DataFlowDAG.create_from_schedule(new_main_inner_loop.loop_body)
+
         for statement in new_main_inner_loop.loop_body.children:
             if not isinstance(statement, Assignment):
                 raise NotImplementedError("")
@@ -636,10 +638,14 @@ class ADReverseParallelLoopTrans(ADReverseLoopTrans):
                 index = all_scatters.index(statement)
                 _, substitution_map, _ = scatters_index_subtitution_maps_and_product_intervals_list[index]
 
+                impacted_nodes = loop_dag.dataflow_tree_from(statement.lhs).to_psyir_list()
+                impacted_nodes += loop_dag.dataflow_tree_to(statement.rhs).to_psyir_list()
+
                 # TODO: method
-                for ref in statement.walk(Reference):
-                    if ref.symbol in substitution_map:
-                        ref.replace_with(substitution_map[ref.symbol].copy())
+                for node in impacted_nodes:
+                    for ref in node.walk(Reference):
+                        if ref.symbol in substitution_map:
+                            ref.replace_with(substitution_map[ref.symbol].copy())
 
         old_loops_vars_and_bounds = self.nested_loops_variables_and_bounds(new_main_outer_loop)
 

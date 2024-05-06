@@ -52,10 +52,13 @@ from psyclone.psyir.nodes import (
     Reference,
     Schedule,
 )
+from psyclone.psyir.symbols import ScalarType
 
+from psyclone.autodiff import zero
 from psyclone.autodiff.transformations import ADOMPRegionDirectiveTrans
 
 # TODO: Reduction, Atomic, Barrier, etc.
+
 
 class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
     """A class for automatic differentation transformations of \
@@ -86,11 +89,12 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         self.validate(omp_region, options)
 
         clauses = omp_region.clauses
-        transformed_clauses = self.transform_clauses(clauses, options)
+        transformed_clauses, new_private_derivatives = self.transform_clauses(
+            clauses, options
+        )
 
         body = omp_region.dir_body
         transformed_body = self.transform_body(body, options)
-
 
         # This is either an OMPDoDirective or OMPParallelDoDirective
         if isinstance(omp_region, (OMPDoDirective, OMPParallelDoDirective)):
@@ -101,14 +105,22 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 reprod=omp_region.reprod,
             )
             for i, clause in enumerate(transformed_clauses):
-                transformed.children[i+1] = (clause)
-            return transformed
+                transformed.children[i + 1] = clause
 
-        # or an OMPParallelDirective
-        # if isinstance(omp_region, OMPParallelDirective):
-        transformed = OMPParallelDirective(children=transformed_body)
-        for i, clause in enumerate(transformed_clauses):
-            transformed.children[i+1] = (clause)
+        elif isinstance(omp_region, OMPParallelDirective):
+            transformed = OMPParallelDirective(children=transformed_body)
+            for i, clause in enumerate(transformed_clauses):
+                transformed.children[i + 1] = clause
+
+        else:
+            raise NotImplementedError(
+                f"Unsupported OMPRegionDirective type '{type(omp_region).__name__}'."
+            )
+        
+        transformed = self.assign_zero_to_new_private_differentials(
+            transformed, new_private_derivatives
+        )
+    
         return transformed
 
     def transform_clauses(self, clauses, options=None):
@@ -130,12 +142,14 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
         :raises TypeError: if an item of clauses is of the wrong type.
         :raises NotImplementedError: if an unsupported clause is included.
 
-        :return: list of transformed clauses.
+        :return: list of transformed clauses and list of new private derivatives
+                 to which to assign 0.0 at the beginning of the parallel region.
         :rtype: List[Union[\
                         :py:class:`psyclone.psyir.nodes.OMPPrivateClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPFirstPrivateClause`,\
                         :py:class:`psyclone.psyir.nodes.OMPSharedClause`,\
-                        :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]]
+                        :py:class:`psyclone.psyir.nodes.OMPDefaultClause`]], \
+                List[:py:class:`psyclone.psyir.nodes.DataSymbol`]
         """
         if not isinstance(clauses, list):
             raise TypeError(
@@ -158,19 +172,39 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                 )
 
         transformed_clauses = []
+        new_private_derivatives = []
         for clause in clauses:
             if isinstance(clause, (OMPPrivateClause, OMPFirstprivateClause)):
                 symbols = []
                 for reference in clause.children:
                     symbol = reference.symbol
-                    diff_symbol = (
-                        self.routine_trans.data_symbol_differential_map[symbol]
-                    )
                     symbols.append(symbol)
-                    symbols.append(diff_symbol)
+                    if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                        diff_symbol = (
+                            self.routine_trans.data_symbol_differential_map[
+                                symbol
+                            ]
+                        )
+                        symbols.append(diff_symbol)
+                        new_private_derivatives.append(diff_symbol)
+                transformed_clause = type(clause).create(symbols)
+                transformed_clauses.append(transformed_clause)
+            elif isinstance(clause, OMPFirstprivateClause):
+                symbols = []
+                for reference in clause.children:
+                    symbol = reference.symbol
+                    symbols.append(symbol)
+                    if symbol.datatype.intrinsic is ScalarType.Intrinsic.REAL:
+                        diff_symbol = (
+                            self.routine_trans.data_symbol_differential_map[
+                                symbol
+                            ]
+                        )
+                        symbols.append(diff_symbol)
                 transformed_clause = type(clause).create(symbols)
                 transformed_clauses.append(transformed_clause)
             elif isinstance(clause, OMPSharedClause):
+                raise NotImplementedError("OMPSharedClause are unused for now.")
                 references = []
                 for reference in clause.children:
                     symbol = reference.symbol
@@ -193,7 +227,7 @@ class ADForwardOMPRegionDirectiveTrans(ADOMPRegionDirectiveTrans):
                     f"{type(clause).__name__}."
                 )
 
-        return transformed_clauses
+        return transformed_clauses, new_private_derivatives
 
     def transform_body(self, body, options=None):
         """Transforms all statements found in the OMPRegionDirective body.

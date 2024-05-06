@@ -44,9 +44,13 @@ from psyclone.psyir.nodes import (
     OMPParallelDirective,
     OMPParallelDoDirective,
     OMPDoDirective,
+    Assignment,
+    Loop,
+    Reference,
 )
 from psyclone.psyir.transformations import TransformationError
 
+from psyclone.autodiff import zero
 from psyclone.autodiff.transformations import ADElementTrans
 
 
@@ -101,3 +105,39 @@ class ADOMPRegionDirectiveTrans(ADElementTrans, metaclass=ABCMeta):
         """
         # pylint: disable=arguments-renamed, unnecessary-pass
         pass
+
+    def assign_zero_to_new_private_differentials(self, omp_region, new_private_differentials):
+        """Creates an assignment statement to assign 0.0 to the
+        new private differentials at the beginning of the parallel region.
+
+        :param omp_region: transformed parallel region directive.
+        :type omp_region: :py:class:`psyclone.psyir.nodes.OMPRegionDirective`
+        :param new_private_differentials: list of new private differentials.
+        :type new_private_differentials: List[:py:class:`psyclone.psyir.nodes.DataSymbol`]
+
+        :return: transformed parallel region directive.
+        :rtype: :py:class:`psyclone.psyir.nodes.OMPRegionDirective`
+        """
+        zero_assignments = []
+        for symbol in new_private_differentials:
+            assignment = Assignment.create(
+                Reference(symbol),
+                zero()
+            )
+            zero_assignments.append(assignment)
+
+        if isinstance(omp_region, (OMPDoDirective, OMPParallelDoDirective)):
+            inner_loop = omp_region.dir_body.children[0]
+            while isinstance(inner_loop.loop_body.children[0], Loop):
+                inner_loop = inner_loop.loop_body.children[0]
+            for assignment in zero_assignments:
+                inner_loop.loop_body.addchild(assignment, index=0)
+            return omp_region
+        elif isinstance(omp_region, OMPParallelDirective):
+            for assignment in zero_assignments:
+                omp_region.dir_body.addchild(assignment, index=0)
+            return omp_region
+        else:
+            raise NotImplementedError(
+                f"Unsupported OMPRegionDirective type '{type(omp_region).__name__}'."
+            )
