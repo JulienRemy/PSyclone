@@ -54,9 +54,9 @@ class ADTrans(Transformation, metaclass=ABCMeta):
         "simplify": True,
         "simplify_n_times": 5,
         "use_sympy": True,
-        "tape_outside_loops": True,
+        "tape_outside_loops": False,
         "post_process_tbr": False,
-        "activity_analysis": True,
+        "activity_analysis": False,
     }
 
     @property

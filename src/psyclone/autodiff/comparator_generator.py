@@ -665,6 +665,7 @@ class ComparatorGenerator(object):
                 module_name,
                 comparator_file_path,
                 tapenade_path + "/ADFirstAidKit/adStack.c",
+                "-I" + tapenade_path + "/ADFirstAidKit",
             ],
             check=True,
             capture_output=True,
