@@ -15,26 +15,25 @@ For PSyclone itself, see [GitHub](https://github.com/stfc/PSyclone) and [ReadThe
 # Description #
 
 This implements forward- and reverse-mode automatic differentiation using source-to-source transformations.  
-Compared to other tools, it uses a static array as a tape to record and restore values rather than a LIFO stack.
+Compared to other tools, it uses a static or dynamic array as a tape to record and restore values rather than a LIFO stack.
 
 What has been implemented (but **not** necessarily tested):  
 - transforming subroutines containing:
     - assignments,
     - calls to subroutines,
     - (some) unary and binary operations,
-- scalar variables and arguments (no arrays),
+- scalar and array variables and arguments,
 - nested calls to subroutines,
 - simplification of the transformed subroutines as a postprocessing step,
 - in reverse-mode:
     - three different types of reversal schedules,
     - recording and restoring values from a tape.
+- conditional branches, including taping the condition and restoring it in reverse-mode.
+- loops, with explicit tape indexing in reverse-mode.
 
 What has *not* been implemented:
 - functions and programs,
 - nary operations,
-- loops,
-- control flow,
-- array variables and arguments,
 - activity analysis (dependence DAG),
 - to-be-recorded (TBR) analysis,
 - and much more.
